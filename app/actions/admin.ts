@@ -183,3 +183,17 @@ export async function toggleTemplate(templateId: string, isActive: boolean) {
 
   revalidatePath('/admin/templates');
 }
+
+export async function toggleActivity(activityId: string, enabled: boolean) {
+  await requireAdmin();
+
+  const supabase = await createServerClient();
+  const { error } = await supabase
+    .from('dynamic_types')
+    .update({ is_enabled: !enabled })
+    .eq('id', activityId);
+
+  if (error) throw new Error(`Error al cambiar estado: ${error.message}`);
+
+  revalidatePath('/admin/activities');
+}

@@ -133,6 +133,16 @@ error: ${JSON.stringify(allProfiles.error)}
                 <span className="text-zinc-200">{creator.bio}</span>
               </p>
             )}
+            {creator.status === 'approved' && (
+              <div className="mt-2">
+                <Link
+                  href="/creator"
+                  className="rounded-md bg-zinc-200 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-white"
+                >
+                  Panel de creador
+                </Link>
+              </div>
+            )}
           </div>
         ) : (
           <div className="mt-4 flex flex-col items-center gap-4 border-t border-zinc-700 pt-4">
@@ -142,6 +152,17 @@ error: ${JSON.stringify(allProfiles.error)}
               className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
             >
               Convertirme en creador
+            </Link>
+          </div>
+        )}
+
+        {profile.role === 'admin' && (
+          <div className="mt-4 border-t border-zinc-700 pt-4">
+            <Link
+              href="/admin"
+              className="rounded-md bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-700"
+            >
+              Panel admin
             </Link>
           </div>
         )}

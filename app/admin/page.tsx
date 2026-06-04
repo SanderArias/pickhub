@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { createServerClient } from '@/services/supabase';
 import { requireAdmin } from '@/lib/auth';
 import { approveCreator, rejectCreator, suspendCreator } from '@/app/actions/admin';
@@ -139,6 +140,15 @@ export default async function AdminPage() {
           </p>
           <p className="mt-1 text-3xl font-bold text-green-400">{approvedCreators}</p>
         </div>
+      </div>
+
+      <div className="flex gap-4">
+        <Link
+          href="/admin/activities"
+          className="rounded-md bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-700"
+        >
+          Gestionar actividades
+        </Link>
       </div>
 
       <div>
