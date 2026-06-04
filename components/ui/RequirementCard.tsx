@@ -1,27 +1,32 @@
 const STATE_STYLES = {
   configured: {
-    border: 'border-emerald-800/40',
+    variant: 'success' as const,
     label: 'Completo',
-    labelClass: 'text-emerald-400',
   },
   missing: {
-    border: 'border-red-800/40',
+    variant: 'error' as const,
     label: 'Pendiente',
-    labelClass: 'text-red-400',
   },
   optional: {
-    border: 'border-amber-800/40',
+    variant: 'warning' as const,
     label: 'Opcional',
-    labelClass: 'text-amber-400',
   },
-} as const;
+};
+
+const LABEL_COLORS: Record<string, string> = {
+  success: 'text-purple-primary',
+  error: 'text-danger',
+  warning: 'text-warning',
+};
+
+import { Card } from './Card';
 
 export function RequirementCard({
   title,
   state,
   description,
-  requirement,
   current,
+  requirement,
 }: {
   title: string;
   state: 'configured' | 'missing' | 'optional';
@@ -29,25 +34,25 @@ export function RequirementCard({
   requirement: string;
   current: string;
 }) {
+  void requirement;
   const styles = STATE_STYLES[state];
 
   return (
-    <div className={`rounded-lg border bg-[#111] p-4 text-sm ${styles.border}`}>
-      <div className="flex items-center justify-between gap-4">
-        <h4 className="font-medium text-[#e8e8e8]">{title}</h4>
-        <span className={`shrink-0 text-xs font-medium ${styles.labelClass}`}>
-          {styles.label}
+    <Card variant={styles.variant} className="flex flex-col justify-between">
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="text-sm font-medium text-text-primary">{title}</h4>
+          <span className={`shrink-0 text-xs font-medium ${LABEL_COLORS[styles.variant]}`}>
+            {styles.label}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-text-secondary">{description}</p>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+        <span className="text-text-muted">
+          <span className="text-text-secondary">{current}</span>
         </span>
       </div>
-      <p className="mt-1.5 text-xs text-[#888]">{description}</p>
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
-        <span className="text-[#555]">
-          Requerido: <span className="text-[#888]">{requirement}</span>
-        </span>
-        <span className="text-[#555]">
-          Actual: <span className="text-[#888]">{current}</span>
-        </span>
-      </div>
-    </div>
+    </Card>
   );
 }

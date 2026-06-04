@@ -37,7 +37,7 @@ export async function signInWithEmail(_prev: unknown, formData: FormData) {
     return { error: error.message };
   }
 
-  redirect('/dashboard');
+  redirect('/inicio');
 }
 
 export async function signOut() {

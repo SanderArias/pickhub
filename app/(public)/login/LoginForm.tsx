@@ -11,7 +11,7 @@ export function LoginForm() {
   return (
     <form action={formAction} className="flex flex-col gap-4">
       <div>
-        <label htmlFor="email" className="mb-1 block text-sm font-medium text-[#888]">
+        <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-text-secondary">
           Email
         </label>
         <input
@@ -20,12 +20,12 @@ export function LoginForm() {
           type="email"
           required
           autoComplete="email"
-          className="w-full rounded border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-2 text-sm text-[#e8e8e8] outline-none focus:border-[#2a2a2a]"
+          className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
         />
       </div>
 
       <div>
-        <label htmlFor="password" className="mb-1 block text-sm font-medium text-[#888]">
+        <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-text-secondary">
           Contraseña
         </label>
         <input
@@ -34,18 +34,18 @@ export function LoginForm() {
           type="password"
           required
           autoComplete="current-password"
-          className="w-full rounded border border-[#1f1f1f] bg-[#0a0a0a] px-3 py-2 text-sm text-[#e8e8e8] outline-none focus:border-[#2a2a2a]"
+          className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
         />
       </div>
 
       {state?.error && (
-        <p className="text-sm text-red-400">{state.error}</p>
+        <p className="text-sm text-danger">{state.error}</p>
       )}
 
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md bg-[#e8e8e8] px-4 py-2 text-sm font-medium text-[#0a0a0a] transition-colors hover:bg-white disabled:opacity-50"
+        className="rounded-lg border border-purple-primary px-4 py-2.5 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white disabled:opacity-50"
       >
         {pending ? 'Iniciando sesión…' : 'Iniciar sesión'}
       </button>

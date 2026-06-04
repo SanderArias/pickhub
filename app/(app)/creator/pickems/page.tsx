@@ -14,12 +14,12 @@ export default async function PickemsPage() {
   const pickems = await getCreatorPickems();
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-10">
+    <div className="flex flex-col gap-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-[#e8e8e8]">Mis Pick&apos;ems</h1>
+        <h1 className="text-2xl font-bold text-text-primary">Mis Pick&apos;ems</h1>
         <Link
           href="/creator/pickems/new"
-          className="rounded-md bg-[#e8e8e8] px-4 py-2 text-sm font-medium text-[#0a0a0a] transition-colors hover:bg-white"
+          className="rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
         >
           Nuevo Pick&apos;em
         </Link>
@@ -32,7 +32,7 @@ export default async function PickemsPage() {
           action={
             <Link
               href="/creator/pickems/new"
-              className="rounded-md bg-[#181818] px-4 py-2 text-sm font-medium text-[#e8e8e8] transition-colors hover:bg-[#1f1f1f]"
+              className="rounded-lg bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover"
             >
               Crear Pick&apos;em
             </Link>
@@ -44,19 +44,19 @@ export default async function PickemsPage() {
             <Link
               key={p.id}
               href={`/creator/pickems/${p.id}`}
-              className="rounded-lg border border-[#1f1f1f] bg-[#111] p-4 transition-colors hover:border-[#2a2a2a]"
+              className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-hover"
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <h3 className="truncate font-semibold text-[#e8e8e8]">
+                  <h3 className="truncate font-semibold text-text-primary">
                     {p.title}
                   </h3>
                   {p.description && (
-                    <p className="mt-0.5 line-clamp-2 text-sm text-[#888]">
+                    <p className="mt-0.5 line-clamp-2 text-sm text-text-secondary">
                       {p.description}
                     </p>
                   )}
-                  <p className="mt-1 text-xs text-[#555]">
+                  <p className="mt-1 text-xs text-text-muted">
                     Creado: {new Date(p.created_at).toLocaleDateString()}
                   </p>
                 </div>

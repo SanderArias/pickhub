@@ -1,0 +1,22 @@
+-- ============================================================================
+-- PickHub – Grant SELECT on event_participants for authenticated role
+-- Migration: 00012_grant_event_participants_select
+-- ============================================================================
+-- Grants base-level SELECT privilege on public.event_participants to the
+-- authenticated role. This is required because many RLS policies across
+-- multiple tables (event_prizes, prize_winners, official_results,
+-- scoring_rules, leaderboards, raffles, pickem_options, submissions)
+-- reference event_participants in subqueries / LEFT JOINs.
+--
+-- Without this GRANT, PostgreSQL rejects those policy evaluations even
+-- though the policies themselves are correctly defined. The combination
+-- of this GRANT + existing RLS on event_participants ensures that only
+-- the rows the user is authorized to see are exposed.
+--
+-- See also:
+--   - 00001_initial_schema.sql (RLS policy on event_participants)
+--   - 00002_pickem_twitch_rewards.sql (policies referencing event_participants)
+--   - 00011_creator_pickem_grants.sql (previous grants for pickem flow)
+-- ============================================================================
+
+grant select on public.event_participants to authenticated;

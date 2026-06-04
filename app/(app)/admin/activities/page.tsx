@@ -13,19 +13,21 @@ export default async function ActivitiesPage() {
     .order('created_at', { ascending: true });
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-10">
-      <h1 className="text-2xl font-bold text-[#e8e8e8]">Actividades</h1>
-      <p className="text-sm text-[#555]">
-        Activa o desactiva las actividades disponibles para los creadores.
-      </p>
+    <div className="flex flex-col gap-8">
+      <div>
+        <h1 className="text-2xl font-bold text-text-primary">Actividades</h1>
+        <p className="mt-1 text-sm text-text-secondary">
+          Activa o desactiva las actividades disponibles para los creadores.
+        </p>
+      </div>
 
       {!activities || activities.length === 0 ? (
-        <p className="text-sm text-[#555]">No hay actividades registradas.</p>
+        <p className="text-sm text-text-muted">No hay actividades registradas.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-[#1f1f1f]">
+        <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-[#1f1f1f] bg-[#0a0a0a] text-xs font-semibold uppercase tracking-wider text-[#555]">
+              <tr className="border-b border-border bg-surface-elevated text-xs font-semibold tracking-wider text-text-muted">
                 <th className="px-4 py-3">Nombre</th>
                 <th className="px-4 py-3">Slug</th>
                 <th className="px-4 py-3">Descripción</th>
@@ -36,10 +38,10 @@ export default async function ActivitiesPage() {
             </thead>
             <tbody>
               {activities.map((a) => (
-                <tr key={a.id} className="border-b border-[#1f1f1f] text-sm">
-                  <td className="px-4 py-3 font-medium text-[#e8e8e8]">{a.name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-[#555]">{a.slug}</td>
-                  <td className="px-4 py-3 text-[#888]">
+                <tr key={a.id} className="border-b border-border text-sm">
+                  <td className="px-4 py-3 font-medium text-text-primary">{a.name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-text-muted">{a.slug}</td>
+                  <td className="px-4 py-3 text-text-secondary">
                     {a.description ?? '—'}
                   </td>
                   <td className="px-4 py-3">
@@ -48,17 +50,17 @@ export default async function ActivitiesPage() {
                       label={a.is_enabled ? 'Activa' : 'Inactiva'}
                     />
                   </td>
-                  <td className="px-4 py-3 text-[#555]">
+                  <td className="px-4 py-3 text-text-muted">
                     {new Date(a.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
                     <form action={toggleActivity.bind(null, a.id, a.is_enabled)}>
                       <button
                         type="submit"
-                        className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                        className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                           a.is_enabled
-                            ? 'bg-[#111] text-orange-400 hover:bg-[#1a1a1a]'
-                            : 'bg-[#111] text-emerald-400 hover:bg-[#1a1a1a]'
+                            ? 'bg-surface text-orange-400 hover:bg-surface-hover'
+                            : 'bg-surface text-success hover:bg-surface-hover'
                         }`}
                       >
                         {a.is_enabled ? 'Desactivar' : 'Activar'}

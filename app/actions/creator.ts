@@ -59,7 +59,7 @@ export async function createCreatorProfile(formData: FormData) {
     throw new Error(`Error al crear el perfil: ${rpcError.message} (código: ${rpcError.code})`);
   }
 
-  redirect('/dashboard');
+  redirect('/inicio');
 }
 
 function slugify(text: string): string {
@@ -153,6 +153,10 @@ export async function createPickem(formData: FormData) {
 
   const description = (formData.get('description') as string)?.trim() || null;
 
+  const closureMode = formData.get('closure_mode') as string;
+  const endsAtRaw = formData.get('ends_at') as string;
+  const endsAt = closureMode === 'auto' && endsAtRaw ? new Date(endsAtRaw).toISOString() : null;
+
   const slug = slugify(title);
   if (!slug) throw new Error('El título no puede generar un slug válido.');
 
@@ -175,6 +179,7 @@ export async function createPickem(formData: FormData) {
       title,
       slug,
       description,
+      ends_at: endsAt,
       status: 'draft',
     })
     .select('id')
@@ -365,4 +370,361 @@ export async function deleteEventPlayer(eventId: string, playerId: string) {
   if (error) throw new Error(`Error al eliminar jugador: ${error.message}`);
 
   revalidatePath(`/creator/pickems/${eventId}`);
+}
+
+export async function deletePredictionQuestion(questionId: string): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: question, error: fetchErr } = await supabase
+    .from('prediction_questions')
+    .select('event_id')
+    .eq('id', questionId)
+    .single();
+
+  if (fetchErr || !question) return { error: 'Predicción no encontrada.' };
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('status')
+    .eq('id', question.event_id)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+
+  if (event.status !== 'draft') {
+    return { error: 'Solo se pueden eliminar predicciones en estado draft.' };
+  }
+
+  const { error: delErr } = await supabase
+    .from('prediction_questions')
+    .delete()
+    .eq('id', questionId);
+
+  if (delErr) return { error: `Error al eliminar predicción: ${delErr.message}` };
+
+  revalidatePath(`/creator/pickems/${question.event_id}`);
+  return { error: null };
+}
+
+export async function updatePredictionQuestion(questionId: string, eventId: string, _prev: unknown, formData: FormData): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id, status, creator_id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+  if (event.status !== 'draft') return { error: 'Solo se pueden editar predicciones en estado draft.' };
+
+  const { data: question } = await supabase
+    .from('prediction_questions')
+    .select('id, pick_type')
+    .eq('id', questionId)
+    .eq('event_id', eventId)
+    .single();
+
+  if (!question) return { error: 'Predicción no encontrada.' };
+
+  const title = (formData.get('title') as string)?.trim();
+  if (!title) return { error: 'El título de la predicción es obligatorio.' };
+
+  const description = (formData.get('description') as string)?.trim() || null;
+  const questionType = formData.get('question_type') as string;
+  const pickType = formData.get('pick_type') as string;
+
+  if (!['single', 'multiple'].includes(questionType)) return { error: 'Tipo de pregunta inválido.' };
+  if (!['player', 'custom'].includes(pickType)) return { error: 'Tipo de selección inválido.' };
+
+  const maxSelections = parseInt(formData.get('max_selections') as string, 10);
+  if (isNaN(maxSelections) || maxSelections < 1) return { error: 'El número máximo de selecciones debe ser al menos 1.' };
+  if (questionType === 'single' && maxSelections !== 1) return { error: 'Para preguntas de tipo single, max_selections debe ser 1.' };
+  if (questionType === 'multiple' && maxSelections < 2) return { error: 'Para preguntas de tipo multiple, max_selections debe ser mayor a 1.' };
+
+  const pointsPerCorrect = parseInt(formData.get('points_per_correct') as string, 10);
+  if (isNaN(pointsPerCorrect) || pointsPerCorrect < 1) return { error: 'Los puntos por acierto deben ser al menos 1.' };
+
+  const { error: uErr } = await supabase
+    .from('prediction_questions')
+    .update({
+      title,
+      description,
+      question_type: questionType,
+      pick_type: pickType,
+      max_selections: maxSelections,
+      points_per_correct: pointsPerCorrect,
+    })
+    .eq('id', questionId);
+
+  if (uErr) return { error: `Error al actualizar predicción: ${uErr.message}` };
+
+  const pickChanged = pickType !== question.pick_type;
+  if (pickChanged) {
+    await supabase.from('prediction_options').delete().eq('question_id', questionId);
+  }
+
+  if (pickType === 'player') {
+    const { data: activePlayers } = await supabase
+      .from('event_players')
+      .select('id, name')
+      .eq('event_id', eventId)
+      .eq('is_active', true);
+
+    if (!activePlayers || activePlayers.length === 0) {
+      return { error: 'Debe existir al menos un jugador activo en el evento.' };
+    }
+
+    if (pickChanged) {
+      const { error: oErr } = await supabase.from('prediction_options').insert(
+        activePlayers.map((p) => ({
+          question_id: questionId,
+          player_id: p.id,
+          label: p.name,
+        }))
+      );
+      if (oErr) return { error: `Error al regenerar opciones: ${oErr.message}` };
+    }
+  } else {
+    const customRaw = formData.get('custom_options') as string;
+    const labels = customRaw
+      ?.split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean) ?? [];
+
+    if (labels.length < 2) return { error: 'Debes escribir al menos 2 opciones personalizadas (una por línea).' };
+
+    if (pickChanged) {
+      const { error: oErr } = await supabase.from('prediction_options').insert(
+        labels.map((label) => ({
+          question_id: questionId,
+          label,
+        }))
+      );
+      if (oErr) return { error: `Error al regenerar opciones: ${oErr.message}` };
+    }
+  }
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function updatePickemGeneralInfo(eventId: string, _prev: unknown, formData: FormData): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id, status')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+  if (event.status !== 'draft') return { error: 'Solo se puede editar la información en estado draft.' };
+
+  const title = (formData.get('title') as string)?.trim();
+  if (!title) return { error: 'El título es obligatorio.' };
+
+  const description = (formData.get('description') as string)?.trim() || null;
+  const closureMode = formData.get('closure_mode') as string;
+
+  let endsAt: string | null = null;
+
+  if (closureMode === 'auto') {
+    endsAt = formData.get('ends_at') as string;
+    if (!endsAt) return { error: 'Debes seleccionar una fecha y hora para el cierre automático.' };
+  }
+
+  const { error: uErr } = await supabase
+    .from('events')
+    .update({
+      title,
+      description,
+      ends_at: endsAt,
+    })
+    .eq('id', eventId);
+
+  if (uErr) return { error: `Error al actualizar: ${uErr.message}` };
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function upsertEventPrize(eventId: string, _prev: unknown, formData: FormData): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+
+  const tier = formData.get('tier') as string;
+  if (!['subscriber', 'nonsubscriber'].includes(tier)) return { error: 'Tipo de premio inválido.' };
+
+  const label = (formData.get('label') as string)?.trim();
+  if (!label) return { error: 'La etiqueta del premio es obligatoria.' };
+
+  const description = (formData.get('description') as string)?.trim() || null;
+
+  const amountRaw = formData.get('amount') as string;
+  const amount = amountRaw?.trim() ? parseFloat(amountRaw) : null;
+  if (amount !== null && (isNaN(amount) || amount < 0)) return { error: 'El monto debe ser un número válido mayor o igual a 0.' };
+
+  const currency = (formData.get('currency') as string)?.trim() || 'USD';
+
+  const quantityRaw = formData.get('quantity') as string;
+  const quantity = parseInt(quantityRaw, 10);
+  if (isNaN(quantity) || quantity < 1) return { error: 'La cantidad debe ser al menos 1.' };
+
+  console.log('[Prize] Input values', { eventId, tier, label, amount, currency, quantity });
+
+  console.log('[Prize] Searching existing prize', { eventId, tier });
+
+  const { data: existing, error: searchErr } = await supabase
+    .from('event_prizes')
+    .select('id')
+    .eq('event_id', eventId)
+    .eq('tier', tier)
+    .maybeSingle();
+
+  console.log('[Prize] Existing prize result', existing, 'error', searchErr);
+
+  const { data: allPrizes } = await supabase
+    .from('event_prizes')
+    .select('id, event_id, tier, label')
+    .eq('event_id', eventId);
+
+  console.log('[Prize] All prizes for event', allPrizes);
+
+  if (existing) {
+    const { error: uErr } = await supabase
+      .from('event_prizes')
+      .update({
+        label,
+        description,
+        amount,
+        currency,
+        quantity,
+      })
+      .eq('id', existing.id);
+
+    if (uErr) return { error: `Error al actualizar premio: ${uErr.message}` };
+  } else {
+    const { error: iErr } = await supabase
+      .from('event_prizes')
+      .insert(payload);
+
+    if (iErr) return { error: `Error al crear premio: ${iErr.message}` };
+  }
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function deleteEventPrize(eventId: string, prizeId: string): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+
+  const { error: dErr } = await supabase
+    .from('event_prizes')
+    .delete()
+    .eq('id', prizeId)
+    .eq('event_id', eventId);
+
+  if (dErr) return { error: `Error al eliminar premio: ${dErr.message}` };
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function publishPickem(eventId: string): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('*')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+  if (event.status !== 'draft') return { error: 'El Pick\'em ya fue publicado o no está en estado borrador.' };
+
+  if (!event.title?.trim()) return { error: 'El título es obligatorio.' };
+
+  const { count: activePlayers } = await supabase
+    .from('event_players')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', eventId)
+    .eq('is_active', true);
+
+  if (!activePlayers || activePlayers < 2) {
+    return { error: 'Se requieren al menos 2 jugadores activos para publicar.' };
+  }
+
+  const { data: questions } = await supabase
+    .from('prediction_questions')
+    .select('id, title, prediction_options(id)')
+    .eq('event_id', eventId)
+    .eq('is_active', true);
+
+  if (!questions || questions.length < 1) {
+    return { error: 'Se requiere al menos 1 predicción activa para publicar.' };
+  }
+
+  for (const q of questions) {
+    const opts = q.prediction_options ?? [];
+    if (opts.length < 2) {
+      return { error: `La predicción "${q.title}" necesita al menos 2 opciones.` };
+    }
+  }
+
+  if (event.ends_at) {
+    const endsAt = new Date(event.ends_at);
+    if (endsAt <= new Date()) {
+      return { error: 'La fecha de cierre debe ser posterior a la actual.' };
+    }
+  }
+
+  const { error: updateErr } = await supabase
+    .from('events')
+    .update({ status: 'published' })
+    .eq('id', eventId);
+
+  if (updateErr) return { error: `Error al publicar: ${updateErr.message}` };
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
 }

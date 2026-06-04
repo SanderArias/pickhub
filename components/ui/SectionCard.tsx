@@ -1,3 +1,5 @@
+import { Card } from './Card';
+
 export function SectionCard({
   title,
   subtitle,
@@ -9,27 +11,18 @@ export function SectionCard({
   subtitle?: string;
   action?: React.ReactNode;
   children?: React.ReactNode;
-  accent?: 'green' | 'red' | 'yellow' | 'none';
+  accent?: 'success' | 'warning' | 'error' | 'none';
 }) {
-  const borderColor = {
-    green: 'border-emerald-800/40',
-    red: 'border-red-800/40',
-    yellow: 'border-amber-800/40',
-    none: 'border-[#1f1f1f]',
-  };
-
   return (
-    <div
-      className={`rounded-lg border bg-[#111] p-5 text-sm ${borderColor[accent ?? 'none']}`}
-    >
+    <Card variant={accent === 'error' ? 'error' : accent === 'warning' ? 'warning' : accent === 'success' ? 'success' : 'none'}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 className="font-semibold text-[#e8e8e8]">{title}</h3>
-          {subtitle && <p className="mt-0.5 text-xs text-[#888]">{subtitle}</p>}
+          <h3 className="font-semibold text-text-primary">{title}</h3>
+          {subtitle && <p className="mt-0.5 text-xs text-text-secondary">{subtitle}</p>}
         </div>
         {action && <div className="shrink-0">{action}</div>}
       </div>
-      {children && <div className="mt-3">{children}</div>}
-    </div>
+      {children && <div className="mt-4">{children}</div>}
+    </Card>
   );
 }

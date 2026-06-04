@@ -1,51 +1,56 @@
 import { redirect } from 'next/navigation';
 import { getUser, signInWithTwitch } from '@/app/actions/auth';
 import { LoginForm } from './LoginForm';
+import { Logo } from '@/components/ui/Logo';
 
 export default async function LoginPage() {
   const user = await getUser();
 
   if (user) {
-    redirect('/dashboard');
+    redirect('/inicio');
   }
 
   return (
     <div className="flex flex-1 items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-lg border border-[#1f1f1f] bg-[#111] p-6">
-        <h1 className="mb-1 text-xl font-bold text-[#e8e8e8]">Iniciar sesión en PickHub</h1>
-        <p className="mb-6 text-sm text-[#555]">
-          Elige cómo quieres entrar.
-        </p>
-
-        <div className="mb-6">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#555]">
-            Entrar con Twitch
+      <div className="w-full max-w-sm">
+        <div className="mb-8 text-center">
+          <Logo size="lg" />
+          <p className="mt-2 text-sm text-text-muted">
+            Pick&apos;ems para tu comunidad
           </p>
-          <form action={signInWithTwitch}>
-            <button
-              type="submit"
-              className="flex w-full items-center justify-center gap-2 rounded-md bg-purple-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-700"
-            >
-              <TwitchIcon />
-              Continuar con Twitch
-            </button>
-          </form>
         </div>
 
-        <div className="relative mb-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-[#1f1f1f]" />
+        <div className="rounded-lg border border-border bg-surface p-6">
+          <div className="mb-6">
+            <p className="mb-3 text-xs font-semibold tracking-wider text-text-muted">
+              Entrar con Twitch
+            </p>
+            <form action={signInWithTwitch}>
+              <button
+                type="submit"
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-purple-primary px-4 py-2.5 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+              >
+                <TwitchIcon />
+                Continuar con Twitch
+              </button>
+            </form>
           </div>
-          <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-[#111] px-2 text-[#555]">o</span>
-          </div>
-        </div>
 
-        <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#555]">
-            Entrar como admin / dev
-          </p>
-          <LoginForm />
+          <div className="relative mb-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-surface px-2 text-text-muted">o</span>
+            </div>
+          </div>
+
+          <div>
+            <p className="mb-3 text-xs font-semibold tracking-wider text-text-muted">
+              Entrar como admin / dev
+            </p>
+            <LoginForm />
+          </div>
         </div>
       </div>
     </div>
