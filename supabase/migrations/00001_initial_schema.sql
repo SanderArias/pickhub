@@ -745,9 +745,4 @@ create index idx_receipt_assets_profile_id on receipt_assets (profile_id);
 -- ============================================================================
 
 insert into dynamic_types (slug, name, description) values
-  ('pickem',  'Pick''em',  'Predicciones de resultados en torneos'),
-  ('trivia',  'Trivia',    'Preguntas y respuestas'),
-  ('bingo',   'Bingo',     'Cartones de bingo interactivos'),
-  ('voting',  'Votaciones','Encuestas y votaciones en tiempo real'),
-  ('fantasy', 'Fantasy League', 'Ligas de fantasía'),
-  ('raffle',  'Sorteos',   'Rifas y sorteos aleatorios');
+  ('pickem',  'Pick''em',  'Predicciones de resultados en torneos');
