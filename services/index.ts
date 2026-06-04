@@ -1,2 +1,2 @@
-// Service layer barrel.
-// Import directly from subdirectories: services/dynamics/*
+export * from './dynamics';
+export * from './supabase';

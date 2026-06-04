@@ -29,6 +29,36 @@ To learn more about Next.js, take a look at the following resources:
 
 You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
 
+## Supabase
+
+PickHub uses Supabase for authentication, database, and storage.
+
+### Setup
+
+1. Create a Supabase project at [supabase.com](https://supabase.com).
+2. Copy your project URL and anon key from **Project Settings > API**.
+3. Create a `.env.local` file in the project root with:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-id.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+```
+
+4. Start the dev server:
+
+```bash
+npm run dev
+```
+
+> **Note:** The `.env.example` file tracks required variables. Never commit `.env.local` or real secrets.
+
+### Client structure
+
+| File | Usage |
+|---|---|
+| `services/supabase/client.ts` | Browser client for client components |
+| `services/supabase/server.ts` | Server client for Server Components and Route Handlers |
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
