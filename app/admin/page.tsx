@@ -4,8 +4,8 @@ import { requireAdmin } from '@/lib/auth';
 import { approveCreator, rejectCreator, suspendCreator } from '@/app/actions/admin';
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'text-yellow-400',
-  approved: 'text-green-400',
+  pending: 'text-amber-400',
+  approved: 'text-emerald-400',
   rejected: 'text-red-400',
   suspended: 'text-orange-400',
 };
@@ -30,13 +30,13 @@ function CreatorRow({
   };
 }) {
   return (
-    <tr className="border-b border-zinc-700 text-sm">
-      <td className="px-4 py-3 font-mono text-zinc-200">{creator.handle}</td>
-      <td className="px-4 py-3 text-zinc-400">{creator.display_name ?? '—'}</td>
+    <tr className="border-b border-[#1f1f1f] text-sm">
+      <td className="px-4 py-3 font-mono text-[#e8e8e8]">{creator.handle}</td>
+      <td className="px-4 py-3 text-[#888]">{creator.display_name ?? '—'}</td>
       <td className={`px-4 py-3 font-medium ${STATUS_COLORS[creator.status] ?? ''}`}>
         {STATUS_LABELS[creator.status] ?? creator.status}
       </td>
-      <td className="px-4 py-3 text-zinc-500">
+      <td className="px-4 py-3 text-[#555]">
         {new Date(creator.created_at).toLocaleDateString()}
       </td>
       <td className="flex gap-2 px-4 py-3">
@@ -44,7 +44,7 @@ function CreatorRow({
           <form action={approveCreator.bind(null, creator.profile_id)}>
             <button
               type="submit"
-              className="rounded bg-green-700 px-3 py-1 text-xs font-medium text-white hover:bg-green-600"
+              className="rounded bg-[#111] px-3 py-1 text-xs font-medium text-emerald-400 transition-colors hover:bg-[#1a1a1a]"
             >
               Aprobar
             </button>
@@ -54,7 +54,7 @@ function CreatorRow({
           <form action={rejectCreator.bind(null, creator.profile_id)}>
             <button
               type="submit"
-              className="rounded bg-red-700 px-3 py-1 text-xs font-medium text-white hover:bg-red-600"
+              className="rounded bg-[#111] px-3 py-1 text-xs font-medium text-red-400 transition-colors hover:bg-[#1a1a1a]"
             >
               Rechazar
             </button>
@@ -64,7 +64,7 @@ function CreatorRow({
           <form action={suspendCreator.bind(null, creator.profile_id)}>
             <button
               type="submit"
-              className="rounded bg-orange-700 px-3 py-1 text-xs font-medium text-white hover:bg-orange-600"
+              className="rounded bg-[#111] px-3 py-1 text-xs font-medium text-orange-400 transition-colors hover:bg-[#1a1a1a]"
             >
               Suspender
             </button>
@@ -113,53 +113,53 @@ export default async function AdminPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10">
-      <h1 className="text-2xl font-bold">Admin</h1>
+      <h1 className="text-2xl font-bold text-[#e8e8e8]">Admin</h1>
 
-      <div className="grid grid-cols-4 gap-4">
-        <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border border-[#1f1f1f] bg-[#111] p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#555]">
             Total usuarios
           </p>
-          <p className="mt-1 text-3xl font-bold text-zinc-100">{totalUsers}</p>
+          <p className="mt-1 text-3xl font-bold text-[#e8e8e8]">{totalUsers}</p>
         </div>
-        <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <div className="rounded-lg border border-[#1f1f1f] bg-[#111] p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#555]">
             Total creadores
           </p>
-          <p className="mt-1 text-3xl font-bold text-zinc-100">{totalCreators}</p>
+          <p className="mt-1 text-3xl font-bold text-[#e8e8e8]">{totalCreators}</p>
         </div>
-        <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <div className="rounded-lg border border-[#1f1f1f] bg-[#111] p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#555]">
             Pendientes
           </p>
-          <p className="mt-1 text-3xl font-bold text-yellow-400">{pendingCreators}</p>
+          <p className="mt-1 text-3xl font-bold text-amber-400">{pendingCreators}</p>
         </div>
-        <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+        <div className="rounded-lg border border-[#1f1f1f] bg-[#111] p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#555]">
             Aprobados
           </p>
-          <p className="mt-1 text-3xl font-bold text-green-400">{approvedCreators}</p>
+          <p className="mt-1 text-3xl font-bold text-emerald-400">{approvedCreators}</p>
         </div>
       </div>
 
       <div className="flex gap-4">
         <Link
           href="/admin/activities"
-          className="rounded-md bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-700"
+          className="rounded-md bg-[#181818] px-4 py-2 text-sm font-medium text-[#e8e8e8] transition-colors hover:bg-[#1f1f1f]"
         >
           Gestionar actividades
         </Link>
       </div>
 
       <div>
-        <h2 className="mb-4 text-lg font-semibold">Creadores</h2>
+        <h2 className="mb-4 text-lg font-semibold text-[#e8e8e8]">Creadores</h2>
         {rows.length === 0 ? (
-          <p className="text-sm text-zinc-500">No hay creadores registrados.</p>
+          <p className="text-sm text-[#555]">No hay creadores registrados.</p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-zinc-700">
+          <div className="overflow-x-auto rounded-lg border border-[#1f1f1f]">
             <table className="w-full text-left">
               <thead>
-                <tr className="border-b border-zinc-700 bg-zinc-900 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+                <tr className="border-b border-[#1f1f1f] bg-[#0a0a0a] text-xs font-semibold uppercase tracking-wider text-[#555]">
                   <th className="px-4 py-3">Handle</th>
                   <th className="px-4 py-3">Nombre</th>
                   <th className="px-4 py-3">Estado</th>

@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/services/supabase';
-import { getUser, signOut } from '@/app/actions/auth';
+import { getUser } from '@/app/actions/auth';
 import { getCurrentProfile } from '@/lib/auth';
 
 const ROLE_LABELS: Record<string, string> = {
@@ -18,10 +18,10 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'text-yellow-500',
-  approved: 'text-green-500',
-  rejected: 'text-red-500',
-  suspended: 'text-orange-500',
+  pending: 'text-amber-400',
+  approved: 'text-emerald-400',
+  rejected: 'text-red-400',
+  suspended: 'text-orange-400',
 };
 
 export default async function DashboardPage() {
@@ -46,11 +46,11 @@ export default async function DashboardPage() {
 
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 px-6 py-10">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <h1 className="text-2xl font-bold text-[#e8e8e8]">Dashboard</h1>
 
-        <div className="rounded-lg border border-red-700 bg-red-950 p-4 text-sm">
+        <div className="rounded-lg border border-red-800/40 bg-red-950/20 p-4 text-sm">
           <h2 className="mb-2 font-semibold text-red-300">Debug — Perfil no encontrado</h2>
-          <pre className="overflow-auto whitespace-pre-wrap font-mono text-xs text-red-200">
+          <pre className="overflow-auto whitespace-pre-wrap font-mono text-xs text-red-200/80">
 {`── getUser() ──────────────────────────────────────
 user.id:           ${user.id}
 user.email:        ${user.email ?? 'null'}
@@ -75,15 +75,6 @@ error: ${JSON.stringify(allProfiles.error)}
 `}
           </pre>
         </div>
-
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="rounded-md bg-zinc-800 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700"
-          >
-            Cerrar sesión
-          </button>
-        </form>
       </div>
     );
   }
@@ -91,53 +82,55 @@ error: ${JSON.stringify(allProfiles.error)}
   const creator = profile.creator_profile;
 
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-6">
-      <h1 className="text-2xl font-bold">Dashboard</h1>
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-10">
+      <h1 className="text-2xl font-bold text-[#e8e8e8]">Dashboard</h1>
 
-      <div className="flex flex-col gap-3 text-sm">
-        <p>
-          <span className="text-zinc-400">Nombre:</span>{' '}
-          <span className="text-zinc-200">{profile.display_name ?? '—'}</span>
-        </p>
-        <p>
-          <span className="text-zinc-400">Rol:</span>{' '}
-          <span className="font-medium text-zinc-200">
-            {ROLE_LABELS[profile.role] ?? profile.role}
-          </span>
-        </p>
-        <p>
-          <span className="text-zinc-400">Activo:</span>{' '}
-          <span className={profile.is_active ? 'text-green-500' : 'text-red-500'}>
-            {profile.is_active ? 'Sí' : 'No'}
-          </span>
-        </p>
+      <div className="rounded-lg border border-[#1f1f1f] bg-[#111] p-5 text-sm">
+        <div className="flex flex-col gap-3">
+          <p>
+            <span className="text-[#555]">Nombre:</span>{' '}
+            <span className="text-[#e8e8e8]">{profile.display_name ?? '—'}</span>
+          </p>
+          <p>
+            <span className="text-[#555]">Rol:</span>{' '}
+            <span className="font-medium text-[#e8e8e8]">
+              {ROLE_LABELS[profile.role] ?? profile.role}
+            </span>
+          </p>
+          <p>
+            <span className="text-[#555]">Activo:</span>{' '}
+            <span className={profile.is_active ? 'text-emerald-400' : 'text-red-400'}>
+              {profile.is_active ? 'Sí' : 'No'}
+            </span>
+          </p>
+        </div>
 
         {creator ? (
-          <div className="mt-4 flex flex-col gap-2 border-t border-zinc-700 pt-4">
-            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <div className="mt-5 flex flex-col gap-3 border-t border-[#1f1f1f] pt-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#555]">
               Perfil de creador
             </p>
             <p>
-              <span className="text-zinc-400">Handle:</span>{' '}
-              <span className="font-mono text-zinc-200">{creator.handle}</span>
+              <span className="text-[#555]">Handle:</span>{' '}
+              <span className="font-mono text-[#e8e8e8]">{creator.handle}</span>
             </p>
             <p>
-              <span className="text-zinc-400">Estado:</span>{' '}
+              <span className="text-[#555]">Estado:</span>{' '}
               <span className={`font-medium ${STATUS_COLORS[creator.status] ?? ''}`}>
                 {STATUS_LABELS[creator.status] ?? creator.status}
               </span>
             </p>
             {creator.bio && (
               <p>
-                <span className="text-zinc-400">Bio:</span>{' '}
-                <span className="text-zinc-200">{creator.bio}</span>
+                <span className="text-[#555]">Bio:</span>{' '}
+                <span className="text-[#e8e8e8]">{creator.bio}</span>
               </p>
             )}
             {creator.status === 'approved' && (
-              <div className="mt-2">
+              <div className="mt-1">
                 <Link
                   href="/creator"
-                  className="rounded-md bg-zinc-200 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-white"
+                  className="inline-block rounded-md bg-[#181818] px-4 py-2 text-sm font-medium text-[#e8e8e8] transition-colors hover:bg-[#1f1f1f]"
                 >
                   Panel de creador
                 </Link>
@@ -145,11 +138,11 @@ error: ${JSON.stringify(allProfiles.error)}
             )}
           </div>
         ) : (
-          <div className="mt-4 flex flex-col items-center gap-4 border-t border-zinc-700 pt-4">
-            <p className="text-zinc-500">Aún no tienes perfil de creador</p>
+          <div className="mt-5 flex flex-col items-center gap-4 border-t border-[#1f1f1f] pt-5">
+            <p className="text-[#888]">Aún no tienes perfil de creador</p>
             <Link
               href="/onboarding/creator"
-              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+              className="rounded-md bg-[#181818] px-4 py-2 text-sm font-medium text-[#e8e8e8] transition-colors hover:bg-[#1f1f1f]"
             >
               Convertirme en creador
             </Link>
@@ -157,10 +150,10 @@ error: ${JSON.stringify(allProfiles.error)}
         )}
 
         {profile.role === 'admin' && (
-          <div className="mt-4 border-t border-zinc-700 pt-4">
+          <div className="mt-5 border-t border-[#1f1f1f] pt-5">
             <Link
               href="/admin"
-              className="rounded-md bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-700"
+              className="inline-block rounded-md bg-[#181818] px-4 py-2 text-sm font-medium text-[#e8e8e8] transition-colors hover:bg-[#1f1f1f]"
             >
               Panel admin
             </Link>

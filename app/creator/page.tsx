@@ -15,35 +15,31 @@ export default async function CreatorPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-10">
-      <Link href="/dashboard" className="text-xs text-zinc-500 hover:text-zinc-300">
-        &larr; Volver al dashboard
-      </Link>
-
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Panel de creador</h1>
+        <h1 className="text-2xl font-bold text-[#e8e8e8]">Panel de creador</h1>
         <Link
           href="/creator/pickems"
-          className="rounded-md bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-700"
+          className="rounded-md bg-[#181818] px-4 py-2 text-sm font-medium text-[#e8e8e8] transition-colors hover:bg-[#1f1f1f]"
         >
           Mis Pick&apos;ems
         </Link>
       </div>
 
-      <div className="rounded-lg border border-zinc-700 bg-zinc-900 p-4 text-sm">
+      <div className="rounded-lg border border-[#1f1f1f] bg-[#111] p-4 text-sm">
         <p>
-          <span className="text-zinc-400">Handle:</span>{' '}
-          <span className="font-mono text-zinc-200">{creator.handle}</span>
+          <span className="text-[#555]">Handle:</span>{' '}
+          <span className="font-mono text-[#e8e8e8]">{creator.handle}</span>
         </p>
         <p>
-          <span className="text-zinc-400">Estado:</span>{' '}
-          <span className="font-medium text-green-400">Aprobado</span>
+          <span className="text-[#555]">Estado:</span>{' '}
+          <span className="font-medium text-emerald-400">Aprobado</span>
         </p>
       </div>
 
       <div>
-        <h2 className="mb-4 text-lg font-semibold">Actividades disponibles</h2>
+        <h2 className="mb-4 text-lg font-semibold text-[#e8e8e8]">Actividades disponibles</h2>
         {!activities || activities.length === 0 ? (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-[#555]">
             No hay actividades disponibles en este momento.
           </p>
         ) : (
@@ -51,20 +47,20 @@ export default async function CreatorPage() {
             {activities.map((a) => (
               <div
                 key={a.id}
-                className="rounded-lg border border-zinc-700 bg-zinc-900 p-4"
+                className="rounded-lg border border-[#1f1f1f] bg-[#111] p-4"
               >
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <h3 className="font-semibold text-zinc-100">{a.name}</h3>
+                    <h3 className="font-semibold text-[#e8e8e8]">{a.name}</h3>
                     {a.description && (
-                      <p className="mt-0.5 text-sm text-zinc-500">
+                      <p className="mt-0.5 text-sm text-[#888]">
                         {a.description}
                       </p>
                     )}
                   </div>
                   <Link
                     href="/creator/pickems/new"
-                    className="shrink-0 rounded-md bg-zinc-200 px-4 py-2 text-sm font-medium text-zinc-900 transition-colors hover:bg-white"
+                    className="shrink-0 rounded-md bg-[#e8e8e8] px-4 py-2 text-sm font-medium text-[#0a0a0a] transition-colors hover:bg-white"
                   >
                     Crear {a.name}
                   </Link>

@@ -85,6 +85,65 @@ export async function getCreatorPickems() {
   return data ?? [];
 }
 
+export async function getCreatorPickemById(id: string) {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('*')
+    .eq('id', id)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return null;
+
+  const { data: prizes } = await supabase
+    .from('event_prizes')
+    .select('*')
+    .eq('event_id', id);
+
+  const { data: players } = await supabase
+    .from('event_players')
+    .select('*')
+    .eq('event_id', id)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  const { data: questions } = await supabase
+    .from('prediction_questions')
+    .select('id, title, description, question_type, pick_type, max_selections, points_per_correct, sort_order, is_active, created_at')
+    .eq('event_id', id)
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: true });
+
+  type OptionShape = { id: string; question_id: string; player_id: string | null; label: string; sort_order: number };
+  let predictions: Array<Record<string, unknown> & { options: OptionShape[] }> = [];
+  if (questions && questions.length > 0) {
+    const questionIds = questions.map((q) => q.id);
+    const { data: options } = await supabase
+      .from('prediction_options')
+      .select('id, question_id, player_id, label, sort_order')
+      .in('question_id', questionIds)
+      .order('sort_order', { ascending: true });
+
+    const optionsByQuestion: Record<string, OptionShape[]> = {};
+    for (const opt of (options ?? []) as OptionShape[]) {
+      if (!optionsByQuestion[opt.question_id]) optionsByQuestion[opt.question_id] = [];
+      optionsByQuestion[opt.question_id].push(opt);
+    }
+
+    predictions = questions.map((q) => ({
+      ...q,
+      options: optionsByQuestion[q.id] ?? [],
+    }));
+  }
+
+  return { ...event, prizes: prizes ?? [], players: players ?? [], predictions };
+}
+
 export async function createPickem(formData: FormData) {
   const profile = await requireCreator();
   const creatorId = profile.creator_profile!.id;
@@ -93,9 +152,6 @@ export async function createPickem(formData: FormData) {
   if (!title) throw new Error('El título es obligatorio.');
 
   const description = (formData.get('description') as string)?.trim() || null;
-  const predictionCloseAt = (formData.get('prediction_close_at') as string)?.trim() || null;
-  const prizeSubscriber = (formData.get('prize_subscriber') as string)?.trim() || null;
-  const prizeNonSubscriber = (formData.get('prize_non_subscriber') as string)?.trim() || null;
 
   const slug = slugify(title);
   if (!slug) throw new Error('El título no puede generar un slug válido.');
@@ -120,33 +176,193 @@ export async function createPickem(formData: FormData) {
       slug,
       description,
       status: 'draft',
-      event_config: predictionCloseAt ? { prediction_close_at: predictionCloseAt } : {},
     })
     .select('id')
     .single();
 
   if (eventError) throw new Error(`Error al crear evento: ${eventError.message}`);
 
-  if (prizeSubscriber) {
-    const { error: psErr } = await supabase.from('event_prizes').insert({
-      event_id: event.id,
-      tier: 'subscriber',
-      label: prizeSubscriber,
-    });
-
-    if (psErr) throw new Error(`Error al crear premio subscriber: ${psErr.message}`);
-  }
-
-  if (prizeNonSubscriber) {
-    const { error: pnErr } = await supabase.from('event_prizes').insert({
-      event_id: event.id,
-      tier: 'nonsubscriber',
-      label: prizeNonSubscriber,
-    });
-
-    if (pnErr) throw new Error(`Error al crear premio no subscriber: ${pnErr.message}`);
-  }
-
   revalidatePath('/creator/pickems');
-  redirect('/creator/pickems');
+  redirect(`/creator/pickems/${event.id}`);
+}
+
+export async function createPredictionQuestion(eventId: string, _prev: unknown, formData: FormData) {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+
+  const { count: existingCount } = await supabase
+    .from('prediction_questions')
+    .select('id', { count: 'exact', head: true })
+    .eq('event_id', eventId);
+
+  if (existingCount && existingCount >= 5) {
+    return { error: 'Este Pick\'em ya alcanzó el máximo de 5 predicciones.' };
+  }
+
+  const title = (formData.get('title') as string)?.trim();
+  if (!title) return { error: 'El título de la predicción es obligatorio.' };
+
+  const description = (formData.get('description') as string)?.trim() || null;
+  const questionType = formData.get('question_type') as string;
+  const pickType = formData.get('pick_type') as string;
+
+  if (!['single', 'multiple'].includes(questionType)) {
+    return { error: 'Tipo de pregunta inválido.' };
+  }
+
+  if (!['player', 'custom'].includes(pickType)) {
+    return { error: 'Tipo de selección inválido.' };
+  }
+
+  const maxSelections = parseInt(formData.get('max_selections') as string, 10);
+  if (isNaN(maxSelections) || maxSelections < 1) {
+    return { error: 'El número máximo de selecciones debe ser al menos 1.' };
+  }
+
+  if (questionType === 'single' && maxSelections !== 1) {
+    return { error: 'Para preguntas de tipo single, max_selections debe ser 1.' };
+  }
+
+  if (questionType === 'multiple' && maxSelections < 2) {
+    return { error: 'Para preguntas de tipo multiple, max_selections debe ser mayor a 1.' };
+  }
+
+  const pointsPerCorrect = parseInt(formData.get('points_per_correct') as string, 10);
+  if (isNaN(pointsPerCorrect) || pointsPerCorrect < 1) {
+    return { error: 'Los puntos por acierto deben ser al menos 1.' };
+  }
+
+  const { data: question, error: qErr } = await supabase
+    .from('prediction_questions')
+    .insert({
+      event_id: eventId,
+      title,
+      description,
+      question_type: questionType,
+      pick_type: pickType,
+      max_selections: maxSelections,
+      points_per_correct: pointsPerCorrect,
+    })
+    .select('id')
+    .single();
+
+  if (qErr) return { error: `Error al crear predicción: ${qErr.message}` };
+
+  let options: { question_id: string; player_id?: string; label: string }[] = [];
+
+  if (pickType === 'player') {
+    const { data: activePlayers } = await supabase
+      .from('event_players')
+      .select('id, name')
+      .eq('event_id', eventId)
+      .eq('is_active', true);
+
+    if (!activePlayers || activePlayers.length === 0) {
+      await supabase.from('prediction_questions').delete().eq('id', question.id);
+      return { error: 'Debe existir al menos un jugador activo en el evento.' };
+    }
+
+    options = activePlayers.map((p) => ({
+      question_id: question.id,
+      player_id: p.id,
+      label: p.name,
+    }));
+  } else {
+    const customRaw = formData.get('custom_options') as string;
+    const labels = customRaw
+      ?.split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean) ?? [];
+
+    if (labels.length < 2) {
+      await supabase.from('prediction_questions').delete().eq('id', question.id);
+      return { error: 'Debes escribir al menos 2 opciones personalizadas (una por línea).' };
+    }
+
+    options = labels.map((label) => ({
+      question_id: question.id,
+      label,
+    }));
+  }
+
+  const { error: oErr } = await supabase.from('prediction_options').insert(options);
+
+  if (oErr) {
+    await supabase.from('prediction_questions').delete().eq('id', question.id);
+    return { error: `Error al crear opciones: ${oErr.message}` };
+  }
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function createEventPlayer(eventId: string, _prev: unknown, formData: FormData) {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const name = (formData.get('name') as string)?.trim();
+  if (!name) throw new Error('El nombre del jugador es obligatorio.');
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) throw new Error('Evento no encontrado.');
+
+  const { error } = await supabase.from('event_players').insert({
+    event_id: eventId,
+    name,
+  });
+
+  if (error) {
+    if (error.code === '23505') {
+      return { error: 'Este jugador ya existe en el evento.' };
+    }
+    return { error: `Error al crear jugador: ${error.message}` };
+  }
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function deleteEventPlayer(eventId: string, playerId: string) {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) throw new Error('Evento no encontrado.');
+
+  const { error } = await supabase
+    .from('event_players')
+    .delete()
+    .eq('id', playerId)
+    .eq('event_id', eventId);
+
+  if (error) throw new Error(`Error al eliminar jugador: ${error.message}`);
+
+  revalidatePath(`/creator/pickems/${eventId}`);
 }

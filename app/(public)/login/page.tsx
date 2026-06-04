@@ -11,14 +11,14 @@ export default async function LoginPage() {
 
   return (
     <div className="flex flex-1 items-center justify-center px-4">
-      <div className="w-full max-w-sm rounded-lg border border-zinc-700 bg-zinc-900 p-6">
-        <h1 className="mb-1 text-xl font-bold">Iniciar sesión en PickHub</h1>
-        <p className="mb-6 text-sm text-zinc-500">
+      <div className="w-full max-w-sm rounded-lg border border-[#1f1f1f] bg-[#111] p-6">
+        <h1 className="mb-1 text-xl font-bold text-[#e8e8e8]">Iniciar sesión en PickHub</h1>
+        <p className="mb-6 text-sm text-[#555]">
           Elige cómo quieres entrar.
         </p>
 
         <div className="mb-6">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#555]">
             Entrar con Twitch
           </p>
           <form action={signInWithTwitch}>
@@ -34,15 +34,15 @@ export default async function LoginPage() {
 
         <div className="relative mb-6">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-zinc-700" />
+            <div className="w-full border-t border-[#1f1f1f]" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-zinc-900 px-2 text-zinc-500">o</span>
+            <span className="bg-[#111] px-2 text-[#555]">o</span>
           </div>
         </div>
 
         <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#555]">
             Entrar como admin / dev
           </p>
           <LoginForm />

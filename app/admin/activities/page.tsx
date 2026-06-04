@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { createServerClient } from '@/services/supabase';
 import { requireAdmin } from '@/lib/auth';
 import { toggleActivity } from '@/app/actions/admin';
+import { StatusBadge } from '@/components/ui';
 
 export default async function ActivitiesPage() {
   await requireAdmin();
@@ -14,22 +14,18 @@ export default async function ActivitiesPage() {
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-6 py-10">
-      <Link href="/admin" className="text-xs text-zinc-500 hover:text-zinc-300">
-        &larr; Volver al admin
-      </Link>
-
-      <h1 className="text-2xl font-bold">Actividades</h1>
-      <p className="text-sm text-zinc-500">
+      <h1 className="text-2xl font-bold text-[#e8e8e8]">Actividades</h1>
+      <p className="text-sm text-[#555]">
         Activa o desactiva las actividades disponibles para los creadores.
       </p>
 
       {!activities || activities.length === 0 ? (
-        <p className="text-sm text-zinc-500">No hay actividades registradas.</p>
+        <p className="text-sm text-[#555]">No hay actividades registradas.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-zinc-700">
+        <div className="overflow-x-auto rounded-lg border border-[#1f1f1f]">
           <table className="w-full text-left">
             <thead>
-              <tr className="border-b border-zinc-700 bg-zinc-900 text-xs font-semibold uppercase tracking-wider text-zinc-500">
+              <tr className="border-b border-[#1f1f1f] bg-[#0a0a0a] text-xs font-semibold uppercase tracking-wider text-[#555]">
                 <th className="px-4 py-3">Nombre</th>
                 <th className="px-4 py-3">Slug</th>
                 <th className="px-4 py-3">Descripción</th>
@@ -40,34 +36,29 @@ export default async function ActivitiesPage() {
             </thead>
             <tbody>
               {activities.map((a) => (
-                <tr key={a.id} className="border-b border-zinc-700 text-sm">
-                  <td className="px-4 py-3 font-medium text-zinc-200">{a.name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-500">{a.slug}</td>
-                  <td className="px-4 py-3 text-zinc-400">
+                <tr key={a.id} className="border-b border-[#1f1f1f] text-sm">
+                  <td className="px-4 py-3 font-medium text-[#e8e8e8]">{a.name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-[#555]">{a.slug}</td>
+                  <td className="px-4 py-3 text-[#888]">
                     {a.description ?? '—'}
                   </td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`rounded px-2 py-0.5 text-xs font-medium ${
-                        a.is_enabled
-                          ? 'bg-green-800 text-green-300'
-                          : 'bg-zinc-700 text-zinc-400'
-                      }`}
-                    >
-                      {a.is_enabled ? 'Activa' : 'Inactiva'}
-                    </span>
+                    <StatusBadge
+                      status={a.is_enabled ? 'enabled' : 'disabled'}
+                      label={a.is_enabled ? 'Activa' : 'Inactiva'}
+                    />
                   </td>
-                  <td className="px-4 py-3 text-zinc-500">
+                  <td className="px-4 py-3 text-[#555]">
                     {new Date(a.created_at).toLocaleDateString()}
                   </td>
                   <td className="px-4 py-3">
                     <form action={toggleActivity.bind(null, a.id, a.is_enabled)}>
                       <button
                         type="submit"
-                        className={`rounded px-3 py-1 text-xs font-medium transition-colors ${
+                        className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
                           a.is_enabled
-                            ? 'bg-orange-700 text-orange-200 hover:bg-orange-600'
-                            : 'bg-green-700 text-green-200 hover:bg-green-600'
+                            ? 'bg-[#111] text-orange-400 hover:bg-[#1a1a1a]'
+                            : 'bg-[#111] text-emerald-400 hover:bg-[#1a1a1a]'
                         }`}
                       >
                         {a.is_enabled ? 'Desactivar' : 'Activar'}

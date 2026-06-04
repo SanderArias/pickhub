@@ -33,21 +33,21 @@ export function Header() {
   }, [user]);
 
   return (
-    <header className="flex h-14 items-center justify-between border-b border-zinc-800 bg-zinc-950 px-6">
-      <Link href="/" className="font-bold text-zinc-100">
+    <header className="flex h-14 items-center justify-between border-b border-[#1a1a1a] bg-[#0a0a0a] px-6">
+      <Link href="/" className="font-bold text-[#e8e8e8]">
         {SITE.name}
       </Link>
 
       <nav className="flex items-center gap-4">
         {loading ? null : user ? (
           <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-zinc-500 sm:inline">
+            <span className="hidden text-sm text-[#555] sm:inline">
               {user.email}
             </span>
 
             <Link
               href="/dashboard"
-              className="text-sm text-zinc-400 hover:text-zinc-200"
+              className="text-sm text-[#888] hover:text-[#e8e8e8]"
             >
               Dashboard
             </Link>
@@ -55,7 +55,7 @@ export function Header() {
             {role === 'admin' && (
               <Link
                 href="/admin"
-                className="text-sm text-zinc-400 hover:text-zinc-200"
+                className="text-sm text-[#888] hover:text-[#e8e8e8]"
               >
                 Admin
               </Link>
@@ -64,7 +64,7 @@ export function Header() {
             {role === 'creator' && creatorStatus === 'approved' && (
               <Link
                 href="/creator"
-                className="text-sm text-zinc-400 hover:text-zinc-200"
+                className="text-sm text-[#888] hover:text-[#e8e8e8]"
               >
                 Creador
               </Link>
@@ -73,7 +73,7 @@ export function Header() {
             <form action={signOut}>
               <button
                 type="submit"
-                className="rounded-md bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-700"
+                className="rounded-md bg-[#111] px-3 py-1.5 text-sm text-[#888] transition-colors hover:bg-[#1a1a1a] hover:text-[#e8e8e8]"
               >
                 Cerrar sesión
               </button>
@@ -82,7 +82,7 @@ export function Header() {
         ) : (
           <Link
             href="/login"
-            className="rounded-md bg-zinc-100 px-3 py-1.5 text-sm text-zinc-900 transition-colors hover:bg-white"
+            className="rounded-md bg-[#e8e8e8] px-3 py-1.5 text-sm text-[#0a0a0a] transition-colors hover:bg-white"
           >
             Iniciar sesión
           </Link>
