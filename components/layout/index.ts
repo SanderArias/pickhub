@@ -1,1 +1,1 @@
-// Layout components: Header, Footer, Sidebar, Nav, etc.
+export { Header } from './Header';

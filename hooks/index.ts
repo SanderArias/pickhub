@@ -1,1 +1,1 @@
-// Shared hooks: useMediaQuery, useDebounce, useLocalStorage, etc.
+export { useUser } from './useUser';
