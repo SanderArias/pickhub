@@ -59,6 +59,19 @@ npm run dev
 | `services/supabase/client.ts` | Browser client for client components |
 | `services/supabase/server.ts` | Server client for Server Components and Route Handlers |
 
+### Database
+
+The initial schema lives in `supabase/migrations/00001_initial_schema.sql`.
+
+#### Apply the migration
+
+1. Go to your Supabase project dashboard → **SQL Editor**.
+2. Open the file `supabase/migrations/00001_initial_schema.sql` and paste its contents.
+3. Run the query. All tables, indexes, RLS policies, and seed data will be created.
+
+> **Warning:** Never run this against a production database without reviewing it first.  
+> Never expose your Supabase `service_role` key — it bypasses RLS.
+
 ## Deploy on Vercel
 
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
