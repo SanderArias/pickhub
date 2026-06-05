@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useActionState, useCallback } from 'react';
+import { useState, useRef, useEffect, useActionState, useCallback } from 'react';
 import { createPredictionQuestion, updatePredictionQuestion, deletePredictionQuestion } from '@/app/actions/creator';
 
 const MAX_PREDICTIONS = 5;
@@ -54,6 +54,16 @@ export function PredictionsSection({
     },
     { error: null as string | null },
   );
+
+  const prevPending = useRef(pending);
+  useEffect(() => {
+    if (prevPending.current && !pending && !state.error) {
+      setShowForm(false);
+      setEditing(null);
+      setTemplateMode('custom');
+    }
+    prevPending.current = pending;
+  }, [pending, state.error]);
 
   const handleEdit = useCallback((q: Prediction) => {
     setEditing(q);
@@ -262,15 +272,21 @@ export function PredictionsSection({
                 <span className="text-sm font-medium text-text-primary">Top 8 ordenado</span>
               </div>
               <p className="text-xs text-text-secondary">
-                Los participantes ordenan 8 jugadores del puesto 1 al 8. El sistema calcula automáticamente el porcentaje de aciertos comparando posición exacta.
+                Los participantes ordenan 8 jugadores del puesto 1 al 8.
               </p>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-muted">
-                <span>8 posiciones</span>
-                <span>·</span>
-                <span>Scoring: acierto por posición exacta</span>
-                <span>·</span>
-                <span>Máx. 8 puntos</span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-xs">
+                  <span className="font-semibold text-purple-primary">+1</span>
+                  <span className="text-text-secondary">Jugador dentro del Top 8</span>
+                </span>
+                <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-xs">
+                  <span className="font-semibold text-purple-primary">+1</span>
+                  <span className="text-text-secondary">Posici&oacute;n exacta</span>
+                </span>
               </div>
+              <p className="mt-2 text-xs text-text-muted">
+                🏆 M&aacute;ximo posible: 16 puntos
+              </p>
             </div>
           )}
 

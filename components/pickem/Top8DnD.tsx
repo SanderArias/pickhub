@@ -115,7 +115,7 @@ function SortableSlot({
             {index + 1}
           </span>
           <span className="text-xs text-text-muted">
-            Arrastra un jugador aquí
+            Arrastra un jugador aqu\u00ed
           </span>
         </>
       )}
@@ -414,7 +414,7 @@ export function Top8DnD({
             <div className="flex max-h-[360px] flex-col gap-1.5 overflow-y-auto pr-1 pickhub-scrollbar">
               {filteredPool.length === 0 && (
                 <p className="py-4 text-center text-xs text-text-muted">
-                  {searchQuery ? 'Sin resultados' : 'No hay más jugadores disponibles'}
+                  {searchQuery ? 'Sin resultados' : 'No hay m\u00e1s jugadores disponibles'}
                 </p>
               )}
               {filteredPool.map((item) => (

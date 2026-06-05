@@ -14,7 +14,6 @@ import { PlayersSection } from '@/components/players/PlayersSection';
 import { PredictionsSection } from '@/components/predictions/PredictionsSection';
 import { GeneralInfoSection } from '@/components/pickem/GeneralInfoSection';
 import { PrizesSection } from '@/components/picks/PrizesSection';
-import { LeaderboardSection } from '@/components/pickem/LeaderboardSection';
 import { Top8Readonly } from '@/components/pickem/Top8Readonly';
 import { CompletedRightPanel } from '@/components/pickem/CompletedRightPanel';
 import { PublishSection } from './PublishSection';
@@ -55,11 +54,14 @@ export default async function PickemDashboardPage({
 
   const existingResults = await getEventResults(id);
   const leaderboard = await getLeaderboard(id);
-  const drawsMap = isCompleted ? await getTiebreakerDraws(id) : {};
-  const tieGroups = isCompleted ? await getTieGroups(id) : [];
+
+  const hasFinalResults = isCompleted || (isPredictionsClosed && leaderboard.length > 0);
+
+  const drawsMap = hasFinalResults ? await getTiebreakerDraws(id) : {};
+  const tieGroups = hasFinalResults ? await getTieGroups(id) : [];
 
   // Build readonly Top 8 official results
-  const top8Question = isCompleted
+  const top8Question = hasFinalResults
     ? activePredictions.find((p: { template_type: string | null }) => p.template_type === 'top8_ordered')
     : null;
   const top8Results = top8Question && existingResults
@@ -211,8 +213,8 @@ export default async function PickemDashboardPage({
         </>
       )}
 
-      {/* ===== PREDICTIONS CLOSED: Results management ===== */}
-      {isPredictionsClosed && (
+      {/* ===== PREDICTIONS CLOSED (no results yet): Needs to register results ===== */}
+      {isPredictionsClosed && !hasFinalResults && (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-border bg-surface p-4">
@@ -240,17 +242,11 @@ export default async function PickemDashboardPage({
               Ir a resultados
             </Link>
           </SectionCard>
-
-          {leaderboard.length > 0 && (
-            <SectionCard title="Clasificación" subtitle="Puntuaciones de todos los participantes">
-              <LeaderboardSection entries={leaderboard} />
-            </SectionCard>
-          )}
         </>
       )}
 
-      {/* ===== COMPLETED: Final results + prizes + tiebreaker + leaderboard ===== */}
-      {isCompleted && (
+      {/* ===== FINAL RESULTS: Show combined view (completed or predictions_closed with results) ===== */}
+      {hasFinalResults && (
         <>
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-border bg-surface p-4">

@@ -7,6 +7,7 @@ import { submitPredictions } from '@/app/actions/participant';
 import type { PublicEventData, EventPlayer, PredictionQuestion, Prize, Submission } from '@/app/actions/participant';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
 import { PredictionSelectionExpandable } from '@/components/pickem/PredictionSelectionExpandable';
+import { Top8DnD } from '@/components/pickem/Top8DnD';
 import { Top8Readonly } from '@/components/pickem/Top8Readonly';
 import { LeaderboardSection } from '@/components/pickem/LeaderboardSection';
 import { ReceiptModal } from '@/components/pickem/ReceiptModal';
@@ -205,9 +206,21 @@ export function PublicPickemView({
                   <p className="mt-0.5 text-xs text-text-secondary">{q.description}</p>
                 )}
                 {isTop8 ? (
-                  <p className="mt-0.5 text-xs text-text-muted">
-                    Ordena 8 jugadores del puesto 1 al 8 · Acierto por posición exacta
-                  </p>
+                  <div className="mt-0.5 space-y-2">
+                    <p className="text-xs text-text-muted">
+                      Arrastra los jugadores para crear tu ranking final.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
+                        <span className="font-semibold text-purple-primary">+1</span>
+                        <span className="text-text-secondary">Jugador dentro del Top 8</span>
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
+                        <span className="font-semibold text-purple-primary">+1</span>
+                        <span className="text-text-secondary">Posici&oacute;n exacta</span>
+                      </span>
+                    </div>
+                  </div>
                 ) : (
                   <p className="mt-0.5 text-xs text-text-muted">
                     {q.points_per_correct} punto{q.points_per_correct !== 1 ? 's' : ''} por acierto
@@ -217,28 +230,15 @@ export function PublicPickemView({
               </legend>
 
               {isTop8 ? (
-                <div className="flex flex-col gap-2">
-                  {[1,2,3,4,5,6,7,8].map((pos) => (
-                    <div key={pos} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-hover text-xs font-bold text-text-muted">
-                        {pos}
-                      </span>
-                      <select
-                        name={`q_${q.id}_${pos}`}
-                        required
-                        defaultValue=""
-                        className="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-sm text-text-primary"
-                      >
-                        <option value="" disabled>Seleccionar jugador</option>
-                        {q.options.map((opt) => (
-                          <option key={opt.id} value={opt.id}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  ))}
-                </div>
+                <Top8DnD
+                  questionId={q.id}
+                  activePlayers={activePlayers}
+                  options={q.options.map((opt) => ({
+                    id: opt.id,
+                    playerId: opt.player_id ?? null,
+                    label: opt.label,
+                  }))}
+                />
               ) : (
                 <div className="flex flex-col gap-2">
                   {q.options.map((opt) => (
