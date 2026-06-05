@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useActionState, useCallback } from 'react';
 import { createPredictionQuestion, updatePredictionQuestion, deletePredictionQuestion } from '@/app/actions/creator';
@@ -92,7 +92,7 @@ export function PredictionsSection({
       <div>
         {atLimit ? (
           <p className="py-4 text-center text-xs text-text-muted">
-            Límite alcanzado. No puedes crear más predicciones en este Pick&apos;em.
+            Límite alcanzado. No puedes crear más predicciones en este Pick’em.
           </p>
         ) : (
           <p className="py-4 text-center text-sm text-text-muted">
@@ -178,7 +178,7 @@ export function PredictionsSection({
 
       {readOnly ? null : atLimit && !editing ? (
         <p className="text-xs text-text-muted">
-          Límite alcanzado. No puedes crear más predicciones en este Pick&apos;em.
+          Límite alcanzado. No puedes crear más predicciones en este Pick’em.
         </p>
       ) : showForm ? (
         <form

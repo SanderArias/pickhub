@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
 import { getCurrentProfile } from '@/lib/auth';
@@ -86,7 +86,7 @@ export default async function InicioPage() {
 
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-border bg-surface p-4">
-            <p className="text-xs text-text-muted">Pick&apos;ems creados</p>
+            <p className="text-xs text-text-muted">Pick’ems creados</p>
             <p className="mt-1 text-2xl font-bold text-text-primary">{pickemCount}</p>
           </div>
           <div className="rounded-lg border border-border bg-surface p-4">
@@ -115,7 +115,7 @@ export default async function InicioPage() {
                   href="/creator/pickems/new"
                   className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-hover"
                 >
-                  <p className="text-sm font-medium text-text-primary">Nuevo Pick&apos;em</p>
+                  <p className="text-sm font-medium text-text-primary">Nuevo Pick’em</p>
                   <p className="mt-1 text-xs text-text-secondary">
                     Crea una nueva dinámica de predicciones
                   </p>
@@ -124,7 +124,7 @@ export default async function InicioPage() {
                   href="/creator/pickems"
                   className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-hover"
                 >
-                  <p className="text-sm font-medium text-text-primary">Mis Pick&apos;ems</p>
+                  <p className="text-sm font-medium text-text-primary">Mis Pick’ems</p>
                   <p className="mt-1 text-xs text-text-secondary">
                     Gestiona tus dinámicas existentes
                   </p>
@@ -148,13 +148,13 @@ export default async function InicioPage() {
           {activePickems.length === 0 ? (
             <div className="rounded-lg border border-dashed border-border bg-surface p-6 text-center">
               <p className="text-sm text-text-muted">
-                Todavía no has creado ningún Pick&apos;em.
+                Todavía no has creado ningún Pick’em.
               </p>
               <Link
                 href="/creator/pickems/new"
                 className="mt-3 inline-block rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
               >
-                Crear mi primer Pick&apos;em
+                Crear mi primer Pick’em
               </Link>
             </div>
           ) : (
@@ -190,7 +190,7 @@ export default async function InicioPage() {
       <div>
         <h1 className="text-xl font-bold text-text-primary">Bienvenido de nuevo, {displayName}</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          Consulta tus Pick&apos;ems, revisa tus predicciones y sigue tus resultados.
+          Consulta tus Pick’ems, revisa tus predicciones y sigue tus resultados.
         </p>
       </div>
 
@@ -205,7 +205,7 @@ export default async function InicioPage() {
                 <p className="mt-1 text-xs text-text-secondary">
                   {isReopened
                     ? 'Tu solicitud anterior fue reabierta. Puedes enviar una nueva solicitud cuando quieras.'
-                    : 'Crea Pick&apos;ems, configura predicciones y comparte din&aacute;micas con tu comunidad.'}
+                    : 'Crea Pick’ems, configura predicciones y comparte dinámicas con tu comunidad.'}
                 </p>
               </div>
             </div>
@@ -267,7 +267,7 @@ export default async function InicioPage() {
                   <StatusBadge status="suspended" label="Pausado" />
                 </div>
                 <p className="mt-1 text-xs text-text-secondary">
-                  Tu acceso al modo creador est&aacute; pausado.
+                  Tu acceso al modo creador está pausado.
                 </p>
                 {creatorProfile?.reason && (
                   <p className="mt-2 rounded-md bg-surface-elevated px-3 py-2 text-xs text-text-muted">
@@ -283,10 +283,10 @@ export default async function InicioPage() {
       {participations.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-surface p-8 text-center">
           <p className="text-sm text-text-secondary">
-            No has participado en ningún Pick&apos;em todavía.
+            No has participado en ningún Pick’em todavía.
           </p>
           <span className="mt-3 inline-block cursor-not-allowed rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted opacity-30">
-            Explorar Pick&apos;ems
+            Explorar Pick’ems
           </span>
         </div>
       ) : (

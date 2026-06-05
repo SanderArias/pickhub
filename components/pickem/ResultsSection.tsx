@@ -1,7 +1,7 @@
-'use client';
+﻿'use client';
 
 import { useState, useCallback } from 'react';
-import { saveResults, saveRankingResults, calculateScores } from '@/app/actions/scoring';
+import { publishResultsAndCalculateScores } from '@/app/actions/scoring';
 
 interface Option {
   id: string;
@@ -64,8 +64,7 @@ export function ResultsSection({ eventId, predictions, existingResults, status }
 
   const [selection, setSelection] = useState<Record<string, string[]>>(initialSelection);
   const [rankingSelection, setRankingSelection] = useState<Record<string, Record<number, string>>>(initialRanking);
-  const [saving, setSaving] = useState(false);
-  const [calculating, setCalculating] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const canEditResults = status === 'predictions_closed' || status === 'completed';
@@ -91,48 +90,33 @@ export function ResultsSection({ eventId, predictions, existingResults, status }
     }));
   }, []);
 
-  const handleSave = useCallback(async () => {
-    setSaving(true);
+  const handlePublish = useCallback(async () => {
+    setPublishing(true);
     setError(null);
 
-    // Save standard results
     const standardQs = activePredictions.filter((p) => p.template_type !== 'top8_ordered');
-    const standardSelection: Record<string, string[]> = {};
+    const standardResults: Record<string, string[]> = {};
     for (const q of standardQs) {
-      standardSelection[q.id] = selection[q.id] ?? [];
-    }
-    if (Object.keys(standardSelection).length > 0) {
-      const result = await saveResults(eventId, standardSelection);
-      if (result.error) { setError(result.error); setSaving(false); return; }
+      standardResults[q.id] = selection[q.id] ?? [];
     }
 
-    // Save ranking results
+    const rankingResults: Record<string, { position: number; option_id: string }[]> = {};
     const rankingQs = activePredictions.filter((p) => p.template_type === 'top8_ordered');
     for (const q of rankingQs) {
       const positions = rankingSelection[q.id] ?? {};
-      const posData = Object.entries(positions).map(([pos, optId]) => ({
+      rankingResults[q.id] = Object.entries(positions).map(([pos, optId]) => ({
         position: Number(pos),
         option_id: optId,
       }));
-      if (posData.length > 0) {
-        const result = await saveRankingResults(eventId, { [q.id]: posData });
-        if (result.error) { setError(result.error); setSaving(false); return; }
-      }
     }
 
-    setSaving(false);
+    const result = await publishResultsAndCalculateScores(eventId, standardResults, rankingResults);
+    if (result.error) setError(result.error);
+    setPublishing(false);
   }, [eventId, selection, rankingSelection, activePredictions]);
 
-  const handleCalculate = useCallback(async () => {
-    setCalculating(true);
-    setError(null);
-    const result = await calculateScores(eventId);
-    if (result.error) setError(result.error);
-    setCalculating(false);
-  }, [eventId]);
-
   if (activePredictions.length === 0) {
-    return <p className="text-sm text-text-muted">No hay predicciones activas en este Pick&apos;em.</p>;
+    return <p className="text-sm text-text-muted">No hay predicciones activas en este Pick’em.</p>;
   }
 
   const hasSelection = Object.values(selection).some((s) => s.length > 0) ||
@@ -268,31 +252,20 @@ disabled={!canEditResults}
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {canEditResults && (
-          <>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white disabled:opacity-50"
-            >
-              {saving ? 'Guardando...' : 'Guardar resultados'}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleCalculate}
-              disabled={calculating || !hasSelection}
-              className="rounded-lg bg-purple-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-hover disabled:opacity-50"
-            >
-              {calculating ? 'Calculando...' : 'Calcular puntuaciones'}
-            </button>
-          </>
+        {status === 'predictions_closed' && (
+          <button
+            type="button"
+            onClick={handlePublish}
+            disabled={publishing || !hasSelection}
+            className="rounded-lg bg-purple-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-hover disabled:opacity-50"
+          >
+            {publishing ? 'Publicando...' : 'Publicar resultados y calcular puntuaciones'}
+          </button>
         )}
 
-        {!canEditResults && (
+        {status === 'completed' && (
           <p className="text-xs text-text-muted">
-            Los resultados estar&aacute;n disponibles cuando publiques el Pick&apos;em.
+            Resultados publicados. Las puntuaciones ya están calculadas.
           </p>
         )}
       </div>

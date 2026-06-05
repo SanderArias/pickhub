@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import Link from 'next/link';
@@ -84,7 +84,7 @@ export function ParticipacionesClient({
                 </div>
                 <div className="shrink-0 text-right text-xs text-text-muted">
                   <p>{p.answersCount} respuesta{p.answersCount !== 1 ? 's' : ''}</p>
-                  <p className="mt-0.5 text-purple-primary">Ver mi Pick&apos;em</p>
+                  <p className="mt-0.5 text-purple-primary">Ver mi Pick’em</p>
                 </div>
               </div>
             </Link>

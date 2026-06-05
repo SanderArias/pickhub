@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useActionState, useCallback } from 'react';
+import { useState, useActionState, useCallback, useEffect, useRef, startTransition } from 'react';
 import { upsertEventPrize, deleteEventPrize } from '@/app/actions/creator';
 
 interface Prize {
@@ -29,11 +29,25 @@ function PrizePanel({
   readOnly: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [state, formAction, pending] = useActionState(
     upsertEventPrize.bind(null, eventId),
     { error: null as string | null },
   );
   const [deleting, setDeleting] = useState(false);
+  const firstRender = useRef(true);
+
+  useEffect(() => {
+    if (firstRender.current) { firstRender.current = false; return; }
+    if (!pending && state && !state.error) {
+      startTransition(() => {
+        setExpanded(false);
+        setShowSuccess(true);
+      });
+      const t = setTimeout(() => setShowSuccess(false), 2500);
+      return () => clearTimeout(t);
+    }
+  }, [state, pending]);
 
   const handleDelete = useCallback(async () => {
     if (!prize) return;
@@ -45,6 +59,9 @@ function PrizePanel({
 
   return (
     <div className="rounded-lg border border-border bg-surface">
+      {showSuccess && (
+        <p className="px-4 pt-3 text-xs text-success">Premio guardado.</p>
+      )}
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}

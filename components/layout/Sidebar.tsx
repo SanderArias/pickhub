@@ -87,59 +87,57 @@ export function Sidebar({ children }: { children: React.ReactNode }) {
   const groups: NavGroup[] = [];
 
   if (profile) {
-    groups.push({
-      label: 'General',
-      items: [{ label: 'Inicio', href: '/inicio', exact: true }],
-    });
-
     const isCreator = profile.role === 'creator' && profile.creator_status === 'approved';
     const isAdmin = profile.role === 'admin';
-    const isUser = profile.role === 'user';
 
-    if (isUser) {
-      groups.push({
-        label: "Pick'ems",
-        items: [
-          { label: 'Mis participaciones', href: '/participaciones' },
-          { label: 'Explorar', href: '#', placeholder: true },
-        ],
-      });
+    // GENERAL — shared for all
+    groups.push({
+      label: 'General',
+      items: [
+        { label: 'Inicio', href: '/inicio', exact: true },
+        { label: 'Explorar', href: '#', placeholder: true },
+      ],
+    });
 
-      groups.push({
-        label: 'Configuración',
-        items: [
-          { label: 'Perfil', href: '#', placeholder: true },
-          { label: 'Cuenta', href: '#', placeholder: true },
-        ],
-      });
-    }
+    // PARTICIPACIÓN — shared for all
+    groups.push({
+      label: 'Participación',
+      items: [
+        { label: 'Mis participaciones', href: '/participaciones' },
+      ],
+    });
 
+    // CREADOR — only for creators
     if (isCreator) {
       groups.push({
-        label: "Pick'ems",
+        label: 'Creador',
         items: [
           { label: "Mis Pick'ems", href: '/creator/pickems' },
           { label: "Crear Pick'em", href: '/creator/pickems/new', exact: true },
         ],
       });
+    }
 
+    // COMUNIDAD — only for creators
+    if (isCreator) {
       groups.push({
         label: 'Comunidad',
         items: [
-          { label: 'Explorar', href: '#', placeholder: true },
           { label: 'Ranking', href: '#', placeholder: true },
-        ],
-      });
-
-      groups.push({
-        label: 'Configuraci\u00f3n',
-        items: [
-          { label: 'Perfil', href: '/creator', exact: true },
-          { label: 'Cuenta', href: '#', placeholder: true },
         ],
       });
     }
 
+    // CUENTA — shared for all
+    groups.push({
+      label: 'Cuenta',
+      items: [
+        { label: 'Perfil', href: isCreator ? '/creator' : '#', placeholder: !isCreator },
+        { label: 'Configuración', href: '#', placeholder: true },
+      ],
+    });
+
+    // ADMIN — only for admins
     if (isAdmin) {
       groups.push({
         label: 'Admin',

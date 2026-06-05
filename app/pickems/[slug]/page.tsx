@@ -1,9 +1,10 @@
-import { notFound } from 'next/navigation';
+﻿import { notFound } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
 import { getPublicPickem } from '@/app/actions/participant';
 import { getLeaderboard, getMyScore } from '@/app/actions/leaderboard';
 import { PublicPickemView } from '@/components/pickem/PublicPickemView';
 import { LeaderboardSection } from '@/components/pickem/LeaderboardSection';
+import { createServerClient } from '@/services/supabase';
 
 export default async function PickemPublicPage({
   params,
@@ -21,6 +22,17 @@ export default async function PickemPublicPage({
   const event = result.event;
   const isClosed = event.status === 'predictions_closed' || event.status === 'completed';
 
+  let participantName: string | undefined;
+  if (user) {
+    const supabase = await createServerClient();
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', user.id)
+      .maybeSingle();
+    participantName = profile?.display_name ?? user.email ?? undefined;
+  }
+
   const [leaderboard, myScore] = await Promise.all([
     getLeaderboard(event.id),
     getMyScore(event.id),
@@ -37,11 +49,12 @@ export default async function PickemPublicPage({
         myScore={myScore}
         isAuthenticated={!!user}
         isClosed={isClosed}
+        participantName={participantName}
       />
 
       {leaderboard.length > 0 && (
         <div className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-text-primary">Clasificaci&oacute;n</h2>
+          <h2 className="text-sm font-semibold text-text-primary">Clasificación</h2>
           <LeaderboardSection entries={leaderboard} myProfileId={user?.id} />
         </div>
       )}

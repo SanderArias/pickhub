@@ -38,7 +38,7 @@ export default async function PickemResultsPage({
             href={`/creator/pickems/${id}`}
             className="mt-4 inline-block rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
           >
-            Volver al Pick&apos;em
+            Volver al Pick'em
           </Link>
         </div>
       </div>

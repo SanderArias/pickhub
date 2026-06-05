@@ -19,6 +19,11 @@ export const metadata: Metadata = {
     default: SITE.name,
   },
   description: SITE.description,
+  icons: {
+    icon: '/brand/pickhub-icon-neutral.svg',
+    shortcut: '/brand/pickhub-icon-neutral.svg',
+    apple: '/brand/pickhub-icon-purple.svg',
+  },
 };
 
 export default function RootLayout({

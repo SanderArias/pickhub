@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+﻿import { redirect } from 'next/navigation';
 import { getUser, signInWithTwitch } from '@/app/actions/auth';
 import { LoginForm } from './LoginForm';
 import { Logo } from '@/components/ui/Logo';
@@ -16,7 +16,7 @@ export default async function LoginPage() {
         <div className="mb-8 text-center">
           <Logo size="lg" />
           <p className="mt-2 text-sm text-text-muted">
-            Pick&apos;ems para tu comunidad
+            Pick’ems para tu comunidad
           </p>
         </div>
 

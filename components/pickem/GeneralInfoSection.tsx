@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState, useActionState } from 'react';
 import { updatePickemGeneralInfo } from '@/app/actions/creator';
@@ -42,12 +42,12 @@ export function GeneralInfoSection({
       <div className="flex flex-col gap-3">
         <div className="flex flex-col gap-1.5 text-sm">
           <p>
-            <span className="text-text-muted">T&iacute;tulo:</span>{' '}
+            <span className="text-text-muted">Título:</span>{' '}
             <span className="text-text-primary">{event.title}</span>
           </p>
           {event.description && (
             <p>
-              <span className="text-text-muted">Descripci&oacute;n:</span>{' '}
+              <span className="text-text-muted">Descripción:</span>{' '}
               <span className="text-text-primary">{event.description}</span>
             </p>
           )}
@@ -66,7 +66,7 @@ export function GeneralInfoSection({
               onClick={() => setEditing(true)}
               className="rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
             >
-              Editar informaci&oacute;n
+              Editar información
             </button>
           </div>
         )}
@@ -78,7 +78,7 @@ export function GeneralInfoSection({
     <form action={formAction} className="flex flex-col gap-4">
       <div>
         <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-          T&iacute;tulo
+          Título
         </label>
         <input
           name="title"
@@ -91,7 +91,7 @@ export function GeneralInfoSection({
 
       <div>
         <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-          Descripci&oacute;n <span className="text-text-muted">(opcional)</span>
+          Descripción <span className="text-text-muted">(opcional)</span>
         </label>
         <textarea
           name="description"
@@ -118,7 +118,7 @@ export function GeneralInfoSection({
             <div>
               <span className="text-sm text-text-primary">Manual</span>
               <p className="mt-0.5 text-xs text-text-muted">
-                El creador decidir&aacute; cu&aacute;ndo cerrar las predicciones.
+                El creador decidirá cuándo cerrar las predicciones.
               </p>
             </div>
           </label>
@@ -132,9 +132,9 @@ export function GeneralInfoSection({
               className="mt-0.5 accent-purple-primary"
             />
             <div>
-              <span className="text-sm text-text-primary">Autom&aacute;tico</span>
+              <span className="text-sm text-text-primary">Automático</span>
               <p className="mt-0.5 text-xs text-text-muted">
-                Las predicciones se cerrar&aacute;n autom&aacute;ticamente en la fecha seleccionada.
+                Las predicciones se cerrarán automáticamente en la fecha seleccionada.
               </p>
             </div>
           </label>

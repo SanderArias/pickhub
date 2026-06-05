@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { createServerClient } from '@/services/supabase';
 import { getUser } from './auth';
 import { requireCreator } from '@/lib/auth';
+import { normalizeTwitchChannel } from '@/lib/twitch';
 
 export async function getCreatorProfile() {
   const user = await getUser();
@@ -242,6 +243,9 @@ export async function createPickem(formData: FormData) {
 
   if (!pickemType) throw new Error('La actividad Pick\'em no está disponible.');
 
+  const twitchRaw = formData.get('twitch_channel') as string | null;
+  const twitchChannel = normalizeTwitchChannel(twitchRaw);
+
   const { data: event, error: eventError } = await supabase
     .from('events')
     .insert({
@@ -252,6 +256,7 @@ export async function createPickem(formData: FormData) {
       description,
       ends_at: endsAt,
       status: 'draft',
+      twitch_channel: twitchChannel,
     })
     .select('id')
     .single();
@@ -418,6 +423,8 @@ export async function createEventPlayer(eventId: string, _prev: unknown, formDat
   const name = (formData.get('name') as string)?.trim();
   if (!name) throw new Error('El nombre del jugador es obligatorio.');
 
+  const countryCode = (formData.get('country_code') as string)?.trim() || null;
+
   const supabase = await createServerClient();
 
   const { data: event } = await supabase
@@ -432,6 +439,7 @@ export async function createEventPlayer(eventId: string, _prev: unknown, formDat
   const { error } = await supabase.from('event_players').insert({
     event_id: eventId,
     name,
+    country_code: countryCode,
   });
 
   if (error) {
@@ -440,6 +448,37 @@ export async function createEventPlayer(eventId: string, _prev: unknown, formDat
     }
     return { error: `Error al crear jugador: ${error.message}` };
   }
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function updateEventPlayerCountry(
+  eventId: string,
+  playerId: string,
+  countryCode: string | null,
+): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+
+  const { error } = await supabase
+    .from('event_players')
+    .update({ country_code: countryCode })
+    .eq('id', playerId)
+    .eq('event_id', eventId);
+
+  if (error) return { error: `Error al actualizar país: ${error.message}` };
 
   revalidatePath(`/creator/pickems/${eventId}`);
   return { error: null };
@@ -663,16 +702,126 @@ export async function updatePickemGeneralInfo(eventId: string, _prev: unknown, f
     if (!endsAt) return { error: 'Debes seleccionar una fecha y hora para el cierre automático.' };
   }
 
+  const twitchRaw = formData.get('twitch_channel') as string | null;
+  const twitchChannel = normalizeTwitchChannel(twitchRaw);
+
   const { error: uErr } = await supabase
     .from('events')
     .update({
       title,
       description,
       ends_at: endsAt,
+      twitch_channel: twitchChannel,
     })
     .eq('id', eventId);
 
   if (uErr) return { error: `Error al actualizar: ${uErr.message}` };
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+const ALLOWED_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'];
+const MAX_FILE_SIZE = 1_048_576; // 1 MB
+
+function extFromMime(mime: string): string {
+  const map: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/svg+xml': 'svg',
+  };
+  return map[mime] ?? 'png';
+}
+
+export async function uploadEventLogo(
+  eventId: string,
+  _prev: unknown,
+  formData: FormData,
+): Promise<{ url: string | null; error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.', url: null };
+
+  const file = formData.get('logo') as File | null;
+  if (!file || file.size === 0) return { error: 'No se seleccionó ningún archivo.', url: null };
+
+  if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+    return { error: 'Formato no soportado. Usa PNG, JPG, WEBP o SVG.', url: null };
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    return { error: 'El logo no puede superar 1 MB.', url: null };
+  }
+
+  const ext = extFromMime(file.type);
+  const path = `pickems/${eventId}/logo.${ext}`;
+
+  const { error: uploadErr } = await supabase.storage
+    .from('pickem-assets')
+    .upload(path, file, { upsert: true, contentType: file.type });
+
+  if (uploadErr) return { error: `Error al subir logo: ${uploadErr.message}`, url: null };
+
+  const { data: publicUrl } = supabase.storage
+    .from('pickem-assets')
+    .getPublicUrl(path);
+
+  const url = publicUrl?.publicUrl ?? null;
+
+  if (url) {
+    const { error: updateErr } = await supabase
+      .from('events')
+      .update({ logo_url: url })
+      .eq('id', eventId);
+
+    if (updateErr) return { error: `Error al guardar URL del logo: ${updateErr.message}`, url: null };
+  }
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { url, error: null };
+}
+
+export async function removeEventLogo(
+  eventId: string,
+): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id, logo_url')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+
+  if (event.logo_url) {
+    const pathMatch = event.logo_url.match(/\/pickem-assets\/(.+)$/);
+    if (pathMatch) {
+      await supabase.storage.from('pickem-assets').remove([pathMatch[1]]);
+    }
+  }
+
+  const { error: updateErr } = await supabase
+    .from('events')
+    .update({ logo_url: null })
+    .eq('id', eventId);
+
+  if (updateErr) return { error: `Error al quitar logo: ${updateErr.message}` };
 
   revalidatePath(`/creator/pickems/${eventId}`);
   return { error: null };

@@ -1,20 +1,13 @@
-'use client';
+﻿'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { signInWithTwitch } from '@/app/actions/auth';
 import { submitPredictions } from '@/app/actions/participant';
 import type { PublicEventData, EventPlayer, PredictionQuestion, Prize, Submission } from '@/app/actions/participant';
 import { PredictionSelectionExpandable } from '@/components/pickem/PredictionSelectionExpandable';
-
-function PlayerChip({ name }: { name: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-text-secondary">
-      <span className="size-1.5 rounded-full bg-purple-primary" />
-      {name}
-    </span>
-  );
-}
+import { Top8Readonly } from '@/components/pickem/Top8Readonly';
+import { ReceiptModal } from '@/components/pickem/ReceiptModal';
 
 export function PublicPickemView({
   event,
@@ -25,6 +18,7 @@ export function PublicPickemView({
   myScore,
   isAuthenticated,
   isClosed,
+  participantName,
 }: {
   event: PublicEventData;
   players: EventPlayer[];
@@ -34,13 +28,36 @@ export function PublicPickemView({
   myScore: { total_score: number | null; correct_answers: number; total_questions: number } | null;
   isAuthenticated: boolean;
   isClosed: boolean;
+  participantName?: string;
 }) {
   const [state, formAction, pending] = useActionState(
     submitPredictions.bind(null, event.id),
-    { error: null as string | null, success: false },
+    { error: null as string | null, success: false, submissionId: null as string | null },
   );
 
+  const [showModal, setShowModal] = useState(false);
   const activePlayers = players.filter((p) => p.is_active);
+
+  const rankedPlayers = useMemo(() => {
+    const top8Q = predictions.find((q) => q.template_type === 'top8_ordered');
+    if (!top8Q || !mySubmission) return [];
+    const answers = mySubmission.answers
+      .filter((a) => a.question_id === top8Q.id)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const playerLookup = new Map(activePlayers.map((p) => [p.id, p.country_code]));
+    return answers.map((a) => {
+      const opt = top8Q.options.find((o) => o.id === a.option_id);
+      let countryCode: string | null = null;
+      if (opt?.player_id) {
+        countryCode = playerLookup.get(opt.player_id) ?? null;
+      }
+      return {
+        position: a.position ?? 0,
+        label: opt?.label ?? '—',
+        countryCode,
+      };
+    });
+  }, [predictions, mySubmission, activePlayers]);
   const hasPrizes = prizes.length > 0;
   const isOpen = event.status === 'open';
 
@@ -101,47 +118,63 @@ export function PublicPickemView({
       </section>
 
       {/* Prizes */}
-      {hasPrizes && (
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-text-primary">Premios</h2>
-          <div className="flex flex-wrap gap-2">
-            {prizes.map((p) => (
-              <div
-                key={p.id}
-                className="rounded-lg border border-purple-border bg-purple-surface px-3 py-2 text-sm text-purple-primary"
-              >
-                {p.label}{p.amount !== null ? ` (${p.amount} ${p.currency ?? 'USD'})` : ''}
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {hasPrizes && (() => {
+        const subPrizes = prizes.filter((p) => p.tier === 'subscriber');
+        const communityPrizes = prizes.filter((p) => p.tier === 'nonsubscriber');
 
-      {/* Players */}
-      <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-text-primary">
-          Jugadores {activePlayers.length > 0 && <span className="text-text-muted">({activePlayers.length})</span>}
-        </h2>
-        <div className="flex flex-wrap gap-1.5">
-          {activePlayers.length > 0
-            ? activePlayers.map((p) => <PlayerChip key={p.id} name={p.name} />)
-            : <span className="text-sm text-text-muted">Sin jugadores</span>}
-        </div>
-        <div className="h-px bg-border" />
-      </section>
+        const PrizeCard = ({ prize, variant }: { prize: Prize; variant: 'sub' | 'community' }) => (
+          <div
+            className={`inline-flex flex-col gap-0.5 rounded-lg border px-3 py-2 w-fit min-w-[150px] max-w-[220px] ${
+              variant === 'sub'
+                ? 'border-yellow-600/30 bg-yellow-500/5'
+                : 'border-border bg-surface'
+            }`}
+          >
+            {variant === 'sub' ? (
+              <p className="text-[11px] font-semibold text-yellow-400 tracking-wide">
+                ★ Subs
+              </p>
+            ) : (
+              <p className="text-[11px] font-medium text-text-secondary">Comunidad</p>
+            )}
+            {prize.amount !== null && (
+              <p className={`text-xs font-bold ${variant === 'sub' ? 'text-yellow-400' : 'text-text-primary'}`}>
+                {prize.amount.toLocaleString('es-ES')} {prize.currency ?? 'USD'}
+              </p>
+            )}
+            <p className="text-[11px] text-text-muted">
+              {prize.quantity} ganador{prize.quantity !== 1 ? 'es' : ''}
+            </p>
+          </div>
+        );
+
+        return (
+          <section className="flex flex-col gap-2">
+            <h2 className="text-sm font-semibold text-text-primary">Premios</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              {subPrizes.map((p) => (
+                <PrizeCard key={p.id} prize={p} variant="sub" />
+              ))}
+              {communityPrizes.map((p) => (
+                <PrizeCard key={p.id} prize={p} variant="community" />
+              ))}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* Unauthenticated CTA */}
       {!isAuthenticated && (
         <section className="rounded-xl border border-border bg-surface p-6 text-center">
           <p className="mb-4 text-sm text-text-secondary">
-            Inicia sesi&oacute;n con Twitch para participar.
+            Inicia sesión con Twitch para participar.
           </p>
           <form action={signInWithTwitch}>
             <button
               type="submit"
               className="rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
             >
-              Iniciar sesi&oacute;n con Twitch
+              Iniciar sesión con Twitch
             </button>
           </form>
         </section>
@@ -235,7 +268,7 @@ export function PublicPickemView({
             disabled={pending}
             className="self-start rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
           >
-            {pending ? 'Enviando\u2026' : 'Enviar participaci&oacute;n'}
+            {pending ? 'Enviando\u2026' : 'Enviar participación'}
           </button>
         </form>
       )}
@@ -243,14 +276,14 @@ export function PublicPickemView({
       {/* Closed without submission */}
       {isAuthenticated && !mySubmission && isClosed && (
         <section className="rounded-xl border border-border bg-surface p-6 text-center">
-          <p className="text-sm text-text-muted">Las predicciones ya est&aacute;n cerradas.</p>
+          <p className="text-sm text-text-muted">Las predicciones ya están cerradas.</p>
         </section>
       )}
 
       {/* No predictions configured */}
       {isAuthenticated && !mySubmission && predictions.length === 0 && (
         <section className="rounded-xl border border-border bg-surface p-6 text-center">
-          <p className="text-sm text-text-muted">Este Pick&apos;em no tiene predicciones configuradas.</p>
+          <p className="text-sm text-text-muted">Este Pick’em no tiene predicciones configuradas.</p>
         </section>
       )}
 
@@ -273,7 +306,16 @@ export function PublicPickemView({
 
           {/* Predictions review */}
           <div className="rounded-xl border border-border bg-surface p-5">
-            <h3 className="mb-4 text-sm font-semibold text-text-primary">Tus predicciones</h3>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-text-primary">Tus predicciones</h3>
+              <button
+                type="button"
+                onClick={() => setShowModal(true)}
+                className="shrink-0 rounded-lg border border-purple-primary px-3 py-1.5 text-xs font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+              >
+                Ver mi comprobante
+              </button>
+            </div>
 
             <div className="flex flex-col gap-3">
               {predictions.map((q) => {
@@ -282,20 +324,20 @@ export function PublicPickemView({
 
                 if (isTop8) {
                   const sorted = [...selected].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-                  const labels = sorted.map((s) => ({
-                    position: s.position ?? 0,
-                    label: q.options.find((o) => o.id === s.option_id)?.label ?? '—',
-                  }));
+                  const ranked = sorted.map((s) => {
+                    const opt = q.options.find((o) => o.id === s.option_id);
+                    return {
+                      position: s.position ?? 0,
+                      optionId: s.option_id,
+                      label: opt?.label ?? '—',
+                      playerId: opt?.player_id ?? null,
+                    };
+                  });
                   return (
-                    <PredictionSelectionExpandable
-                      key={q.id}
-                      eventTitle={event.title}
-                      creatorLabel={event.creator?.display_name ?? event.creator?.handle ?? '—'}
-                      questionTitle={q.title}
-                      selectedLabels={labels.map((l) => l.label)}
-                      isSingle={false}
-                      isTop8={true}
-                    />
+                    <div key={q.id} className="border-b border-border pb-3 last:border-0 last:pb-0">
+                      <p className="mb-3 text-sm font-semibold text-text-primary">{q.title}</p>
+                      <Top8Readonly rankedPlayers={ranked} activePlayers={activePlayers} />
+                    </div>
                   );
                 }
 
@@ -315,9 +357,22 @@ export function PublicPickemView({
                 );
               })}
             </div>
+
           </div>
         </section>
       )}
+
+      <ReceiptModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        eventTitle={event.title}
+        eventSlug={event.slug}
+        eventLogoUrl={event.logo_url}
+        creatorLabel={event.creator?.display_name ?? event.creator?.handle ?? '—'}
+        participantName={participantName ?? '—'}
+        submittedAt={mySubmission?.submitted_at ?? null}
+        rankedPlayers={rankedPlayers}
+      />
     </div>
   );
 }
@@ -340,19 +395,19 @@ function SubmissionReceipt({
             <path d="M20 6L9 17L4 12" stroke="#A855F7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-purple-primary">Tu Pick&apos;em fue enviado</h2>
+        <h2 className="text-xl font-bold text-purple-primary">Tu Pick’em fue enviado</h2>
         <p className="mt-2 text-sm text-text-secondary">
           Tus predicciones para <strong className="text-text-primary">{event.title}</strong> se guardaron correctamente.
         </p>
         <p className="mt-1 text-xs text-text-muted">
-          {predictions.length} predicci&oacute;n{predictions.length !== 1 ? 'es' : ''} respondida{predictions.length !== 1 ? 's' : ''}
+          {predictions.length} predicción{predictions.length !== 1 ? 'es' : ''} respondida{predictions.length !== 1 ? 's' : ''}
         </p>
       </section>
 
       {/* CTAs */}
       <div className="flex flex-wrap items-center gap-3">
         <Link
-          href={`/pickems/${event.slug}`}
+          href={`/pickems/${event.slug}/receipt`}
           className="rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
         >
           Ver mi comprobante

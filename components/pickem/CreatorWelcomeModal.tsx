@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -46,7 +46,7 @@ export function CreatorWelcomeModal() {
           Bienvenido al modo creador de PickHub
         </h2>
         <p className="mt-2 text-sm text-text-secondary">
-          Ya puedes crear Pick&apos;ems, configurar predicciones y compartir dinámicas con tu comunidad.
+          Ya puedes crear Pick’ems, configurar predicciones y compartir dinámicas con tu comunidad.
         </p>
 
         <div className="mt-6 flex flex-col gap-2">
@@ -55,7 +55,7 @@ export function CreatorWelcomeModal() {
             onClick={handleClose}
             className="rounded-lg border border-purple-primary px-4 py-2 text-center text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
           >
-            Empezar creando un Pick&apos;em
+            Empezar creando un Pick’em
           </Link>
           <Link
             href="/creator"

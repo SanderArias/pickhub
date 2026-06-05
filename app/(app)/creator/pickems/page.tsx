@@ -1,4 +1,4 @@
-import Link from 'next/link';
+﻿import Link from 'next/link';
 import { getCreatorPickems } from '@/app/actions/creator';
 import { StatusBadge, EmptyState } from '@/components/ui';
 
@@ -16,12 +16,12 @@ export default async function PickemsPage() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-text-primary">Mis Pick&apos;ems</h1>
+        <h1 className="text-2xl font-bold text-text-primary">Mis Pick’ems</h1>
         <Link
           href="/creator/pickems/new"
           className="rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
         >
-          Nuevo Pick&apos;em
+          Nuevo Pick’em
         </Link>
       </div>
 
@@ -34,7 +34,7 @@ export default async function PickemsPage() {
               href="/creator/pickems/new"
               className="rounded-lg bg-surface px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover"
             >
-              Crear Pick&apos;em
+              Crear Pick’em
             </Link>
           }
         />

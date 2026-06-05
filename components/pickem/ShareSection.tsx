@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useRef, useState, useCallback } from 'react';
 import { toPng } from 'html-to-image';
@@ -162,7 +162,7 @@ export function ShareSection({ title, description, creator, players, slug, statu
 
       {!isPublished && (
         <p className="text-xs text-text-muted">
-          El enlace publico estara disponible cuando inicies el Pick&apos;em.
+          El enlace publico estara disponible cuando inicies el Pick’em.
         </p>
       )}
     </div>

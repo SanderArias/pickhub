@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 
@@ -15,7 +15,7 @@ export function ShareLink({ slug, isPublished }: { slug: string; isPublished: bo
   if (!isPublished) {
     return (
       <p className="text-xs text-text-muted">
-        El enlace estará disponible cuando inicies el Pick&apos;em.
+        El enlace estará disponible cuando inicies el Pick’em.
       </p>
     );
   }

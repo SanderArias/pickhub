@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useActionState } from 'react';
 import { publishPickem } from '@/app/actions/creator';
@@ -58,12 +58,12 @@ export function PublishSection({
         <div className="flex items-center gap-2 text-xs">
           <span className="h-1.5 w-1.5 rounded-full bg-success" />
           <span className="text-text-secondary">
-            Pick&apos;em publicado el{' '}
+            Pick’em publicado el{' '}
             {new Date().toLocaleDateString()}
           </span>
         </div>
         <p className="text-sm text-text-muted">
-          Este Pick&apos;em ya fue iniciado. La configuraci&oacute;n est&aacute; bloqueada.
+          Este Pick’em ya fue iniciado. La configuración está bloqueada.
         </p>
       </div>
     );

@@ -57,3 +57,27 @@ textarea:focus-visible {
   outline: none;
   border-color: #A855F7;
 }
+
+.pickhub-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.pickhub-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.pickhub-scrollbar::-webkit-scrollbar-thumb {
+  background: #27272A;
+  border-radius: 3px;
+}
+
+.pickhub-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3F3F46;
+}
+
+@supports (scrollbar-width: thin) {
+  .pickhub-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #27272A transparent;
+  }
+}

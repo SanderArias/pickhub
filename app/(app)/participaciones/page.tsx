@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+﻿import { redirect } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
 import { getCurrentProfile } from '@/lib/auth';
 import { getUserParticipations } from '@/app/actions/participant';
@@ -32,7 +32,7 @@ export default async function ParticipacionesPage() {
       <div>
         <h1 className="text-xl font-bold text-text-primary">Mis participaciones</h1>
         <p className="mt-1 text-sm text-text-secondary">
-          {participations.length} Pick&apos;em{participations.length !== 1 ? 'es' : ''} en los que has participado
+          {participations.length} Pick’em{participations.length !== 1 ? 'es' : ''} en los que has participado
         </p>
       </div>
 

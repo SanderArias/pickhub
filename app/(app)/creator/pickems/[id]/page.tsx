@@ -16,6 +16,7 @@ import { PrizesSection } from '@/components/picks/PrizesSection';
 import { LeaderboardSection } from '@/components/pickem/LeaderboardSection';
 import { PublishSection } from './PublishSection';
 import { ClosePredictionsButton } from './ClosePredictionsButton';
+import { SharePickemSection } from './SharePickemSection';
 
 export default async function PickemDashboardPage({
   params,
@@ -163,10 +164,12 @@ export default async function PickemDashboardPage({
       {/* ===== OPEN: Operational phase ===== */}
       {isOpen && (
         <>
+          <SharePickemSection slug={event.slug} />
+
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-border bg-surface p-4">
               <p className="text-xs text-text-muted">Participaciones</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{leaderboard.length > 0 ? leaderboard.length : '—'}</p>
+              <p className="mt-1 text-2xl font-bold text-text-primary">{leaderboard.length}</p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-4">
               <p className="text-xs text-text-muted">Predicciones</p>
@@ -194,7 +197,7 @@ export default async function PickemDashboardPage({
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-border bg-surface p-4">
               <p className="text-xs text-text-muted">Participaciones</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{leaderboard.length > 0 ? leaderboard.length : '—'}</p>
+              <p className="mt-1 text-2xl font-bold text-text-primary">{leaderboard.length}</p>
             </div>
             <div className="rounded-lg border border-border bg-surface p-4">
               <p className="text-xs text-text-muted">Predicciones</p>

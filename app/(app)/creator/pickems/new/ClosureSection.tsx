@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useState } from 'react';
 import { DateTimePickerField } from '@/components/ui/DateTimePicker';
@@ -38,7 +38,7 @@ export function ClosureSection() {
           <div>
             <span className="text-sm text-text-primary">Manual</span>
             <p className="mt-0.5 text-xs text-text-muted">
-              El creador decidir&aacute; cu&aacute;ndo cerrar las predicciones.
+              El creador decidirá cuándo cerrar las predicciones.
             </p>
           </div>
         </label>
@@ -52,9 +52,9 @@ export function ClosureSection() {
             className="mt-0.5 accent-purple-primary"
           />
           <div>
-            <span className="text-sm text-text-primary">Autom&aacute;tico</span>
+            <span className="text-sm text-text-primary">Automático</span>
             <p className="mt-0.5 text-xs text-text-muted">
-              Las predicciones se cerrar&aacute;n autom&aacute;ticamente en la fecha seleccionada.
+              Las predicciones se cerrarán automáticamente en la fecha seleccionada.
             </p>
           </div>
         </label>
@@ -70,7 +70,7 @@ export function ClosureSection() {
           />
           {!dateValue && (
             <p className="mt-1 text-xs text-text-muted">
-              Debes seleccionar una fecha y hora para el cierre autom&aacute;tico.
+              Debes seleccionar una fecha y hora para el cierre automático.
             </p>
           )}
         </div>

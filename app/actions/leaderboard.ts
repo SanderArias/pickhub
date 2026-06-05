@@ -23,7 +23,51 @@ export async function getLeaderboard(eventId: string): Promise<LeaderboardEntry[
     return [];
   }
 
-  return (data ?? []) as LeaderboardEntry[];
+  const entries = (data ?? []) as LeaderboardEntry[];
+  if (entries.length === 0) return [];
+
+  // Apply tiebreaker draws within each score group
+  const { data: draws } = await supabase
+    .from('tiebreaker_draws')
+    .select('profile_id, draw_order')
+    .eq('event_id', eventId);
+
+  if (draws && draws.length > 0) {
+    const drawMap = new Map(draws.map((d) => [d.profile_id, d.draw_order]));
+
+    // Group entries by score and apply tiebreaker ordering
+    const byScore = new Map<number, LeaderboardEntry[]>();
+    for (const e of entries) {
+      const group = byScore.get(e.total_score) ?? [];
+      group.push(e);
+      byScore.set(e.total_score, group);
+    }
+
+    const reordered: LeaderboardEntry[] = [];
+    const scores = [...byScore.keys()].sort((a, b) => b - a);
+
+    for (const score of scores) {
+      const group = byScore.get(score)!;
+      const hasDraws = group.some((e) => drawMap.has(e.profile_id));
+      if (hasDraws) {
+        group.sort((a, b) => {
+          const aOrder = drawMap.get(a.profile_id) ?? 999;
+          const bOrder = drawMap.get(b.profile_id) ?? 999;
+          return aOrder - bOrder;
+        });
+      }
+      reordered.push(...group);
+    }
+
+    // Reassign ranks
+    reordered.forEach((e, i) => {
+      e.rank = i + 1;
+    });
+
+    return reordered;
+  }
+
+  return entries;
 }
 
 export async function getMyScore(eventId: string): Promise<{

@@ -12,6 +12,8 @@ export interface PublicEventData {
   status: string;
   ends_at: string | null;
   created_at: string;
+  logo_url: string | null;
+  twitch_channel: string | null;
   creator: { display_name: string | null; handle: string | null } | null;
 }
 
@@ -19,6 +21,7 @@ export interface EventPlayer {
   id: string;
   name: string;
   is_active: boolean;
+  country_code: string | null;
 }
 
 export interface PredictionOption {
@@ -107,7 +110,7 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
   if (user) {
     const [cpRes, playersRes, questionsRes, prizesRes] = await Promise.all([
       supabase.from('creator_profiles').select('id, profile_id, handle').eq('id', event.creator_id).maybeSingle(),
-      supabase.from('event_players').select('id, name, is_active').eq('event_id', event.id).order('sort_order', { ascending: true }),
+      supabase.from('event_players').select('id, name, is_active, country_code').eq('event_id', event.id).order('sort_order', { ascending: true }),
       supabase.from('prediction_questions').select('*').eq('event_id', event.id).eq('is_active', true).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
       supabase.from('event_prizes').select('*').eq('event_id', event.id).order('tier', { ascending: true }),
     ]);
@@ -182,11 +185,11 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
 
 export async function submitPredictions(
   eventId: string,
-  _prev: { error: string | null; success: boolean },
+  _prev: { error: string | null; success: boolean; submissionId: string | null },
   formData: FormData,
-): Promise<{ error: string | null; success: boolean }> {
+): Promise<{ error: string | null; success: boolean; submissionId: string | null }> {
   const user = await getUser();
-  if (!user) return { error: 'Debes iniciar sesión para participar.', success: false };
+  if (!user) return { error: 'Debes iniciar sesión para participar.', success: false, submissionId: null };
 
   const supabase = await createServerClient();
 
@@ -197,8 +200,8 @@ export async function submitPredictions(
     .neq('status', 'draft')
     .maybeSingle();
 
-  if (!event) return { error: 'Pick\'em no encontrado.', success: false };
-  if (event.status !== 'open') return { error: 'Las predicciones ya están cerradas.', success: false };
+  if (!event) return { error: 'Pick\'em no encontrado.', success: false, submissionId: null };
+  if (event.status !== 'open') return { error: 'Las predicciones ya están cerradas.', success: false, submissionId: null };
 
   const { data: questions } = await supabase
     .from('prediction_questions')
@@ -207,7 +210,7 @@ export async function submitPredictions(
     .eq('is_active', true);
 
   if (!questions || questions.length === 0) {
-    return { error: 'Este Pick\'em no tiene predicciones activas.', success: false };
+    return { error: 'Este Pick\'em no tiene predicciones activas.', success: false, submissionId: null };
   }
 
   // Validate each question has a valid answer
@@ -216,7 +219,7 @@ export async function submitPredictions(
       for (let pos = 1; pos <= 8; pos++) {
         const val = formData.get(`q_${q.id}_${pos}`) as string;
         if (!val || !val.trim()) {
-          return { error: `Debes seleccionar un jugador para la posición ${pos}.`, success: false };
+          return { error: 'Debes seleccionar 8 jugadores para enviar tu Top 8.', success: false, submissionId: null };
         }
       }
       // Check no duplicate players
@@ -226,22 +229,22 @@ export async function submitPredictions(
       }
       const unique = new Set(selected);
       if (unique.size !== 8) {
-        return { error: 'No puedes seleccionar el mismo jugador en más de una posición.', success: false };
+        return { error: 'No puedes seleccionar el mismo jugador en más de una posición.', success: false, submissionId: null };
       }
     } else {
       const values = formData.getAll(`q_${q.id}`) as string[];
       const clean = values.filter((v) => v.trim().length > 0);
 
       if (clean.length === 0) {
-        return { error: `Debes responder todas las predicciones.`, success: false };
+        return { error: `Debes responder todas las predicciones.`, success: false, submissionId: null };
       }
 
       if (q.question_type === 'single' && clean.length > 1) {
-        return { error: `Selecciona solo una opción por predicción.`, success: false };
+        return { error: `Selecciona solo una opción por predicción.`, success: false, submissionId: null };
       }
 
       if (q.question_type === 'multiple' && clean.length > q.max_selections) {
-        return { error: `Máximo ${q.max_selections} selecciones por predicción.`, success: false };
+        return { error: `Máximo ${q.max_selections} selecciones por predicción.`, success: false, submissionId: null };
       }
     }
   }
@@ -266,7 +269,7 @@ export async function submitPredictions(
       .single();
 
     if (insertErr || !newParticipant) {
-      return { error: `Error al registrarte en el evento: ${insertErr?.message}`, success: false };
+      return { error: `Error al registrarte en el evento: ${insertErr?.message}`, success: false, submissionId: null };
     }
     participantId = newParticipant.id;
   }
@@ -280,7 +283,7 @@ export async function submitPredictions(
     .maybeSingle();
 
   if (existingSubmission) {
-    return { error: 'Ya has enviado tu participación para este Pick\'em.', success: false };
+    return { error: 'Ya has enviado tu participación para este Pick\'em.', success: false, submissionId: null };
   }
 
   // Create submission
@@ -296,7 +299,7 @@ export async function submitPredictions(
     .single();
 
   if (subErr || !submission) {
-    return { error: `Error al enviar: ${subErr?.message}`, success: false };
+    return { error: `Error al enviar: ${subErr?.message}`, success: false, submissionId: null };
   }
 
   // Create prediction_answers
@@ -332,11 +335,11 @@ export async function submitPredictions(
     .insert(answers);
 
   if (ansErr) {
-    return { error: `Error al guardar respuestas: ${ansErr?.message}`, success: false };
+    return { error: `Error al guardar respuestas: ${ansErr?.message}`, success: false, submissionId: null };
   }
 
   revalidatePath(`/pickems/${eventId}`);
-  return { error: null, success: true };
+  return { error: null, success: true, submissionId: submission.id };
 }
 
 export interface Participation {
@@ -359,11 +362,20 @@ export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 
 
   const supabase = await createServerClient();
 
+  // Find the user's participant entries to scope submissions
+  const { data: participants } = await supabase
+    .from('event_participants')
+    .select('id')
+    .eq('profile_id', user.id);
+
+  if (!participants || participants.length === 0) return [];
+
+  const participantIds = participants.map((p) => p.id);
+
   const { data: submissions } = await supabase
     .from('submissions')
-    .select(`
-      id, status, submitted_at, event_id
-    `)
+    .select('id, status, submitted_at, event_id')
+    .in('participant_id', participantIds)
     .order('submitted_at', { ascending: false });
 
   if (!submissions || submissions.length === 0) return [];
@@ -471,39 +483,128 @@ export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 
   return participations;
 }
 
-export async function getMySubmissionResult(
-  eventId: string,
-): Promise<{ submission: (Submission & { event_title: string }) | null; error: string | null }> {
-  const user = await getUser();
-  if (!user) return { submission: null, error: null };
-
+export async function getSubmissionReceipt(
+  eventSlug: string,
+  submissionId?: string | null,
+): Promise<{
+  event: PublicEventData | null;
+  submission: (Submission & { answers: (Answer & { option_label?: string; player_id?: string | null })[] }) | null;
+  predictions: PredictionQuestion[];
+  players: EventPlayer[];
+  prizes: Prize[];
+  error: string | null;
+}> {
   const supabase = await createServerClient();
+  const user = await getUser();
+  if (!user) return { event: null, submission: null, predictions: [], players: [], prizes: [], error: 'No autenticado.' };
 
-  const { data: participant } = await supabase
-    .from('event_participants')
-    .select('id')
-    .eq('event_id', eventId)
-    .eq('profile_id', user.id)
+  const { data: event } = await supabase
+    .from('events')
+    .select('*')
+    .eq('slug', eventSlug)
+    .in('status', ['open', 'predictions_closed', 'completed', 'archived'])
     .maybeSingle();
 
-  if (!participant) return { submission: null, error: null };
+  if (!event) return { event: null, submission: null, predictions: [], players: [], prizes: [], error: 'Pick\'em no encontrado.' };
 
-  const { data: submission } = await supabase
-    .from('submissions')
-    .select('id, status, submitted_at')
-    .eq('event_id', eventId)
-    .eq('participant_id', participant.id)
-    .maybeSingle();
+  // Fetch all needed data
+  const [cpRes, playersRes, questionsRes, prizesRes] = await Promise.all([
+    supabase.from('creator_profiles').select('id, profile_id, handle').eq('id', event.creator_id).maybeSingle(),
+    supabase.from('event_players').select('id, name, is_active, country_code').eq('event_id', event.id).order('sort_order', { ascending: true }),
+    supabase.from('prediction_questions').select('*').eq('event_id', event.id).eq('is_active', true).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+    supabase.from('event_prizes').select('*').eq('event_id', event.id).order('tier', { ascending: true }),
+  ]);
 
-  if (!submission) return { submission: null, error: null };
+  const players = (playersRes.data ?? []) as EventPlayer[];
+  const prizes = (prizesRes.data ?? []) as Prize[];
+
+  let creatorInfo: { display_name: string | null; handle: string | null } | null = null;
+  if (cpRes.data) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('display_name')
+      .eq('id', cpRes.data.profile_id)
+      .maybeSingle();
+    creatorInfo = {
+      display_name: profile?.display_name ?? null,
+      handle: cpRes.data.handle,
+    };
+  }
+
+  const questions = (questionsRes.data ?? []) as PredictionQuestion[];
+  let predictions: PredictionQuestion[] = [];
+
+  if (questions.length > 0) {
+    const qIds = questions.map((q) => q.id);
+    const { data: options } = await supabase
+      .from('prediction_options')
+      .select('*')
+      .in('question_id', qIds)
+      .order('sort_order', { ascending: true });
+
+    predictions = questions.map((q) => ({
+      ...q,
+      options: (options ?? []).filter((o: PredictionOption) => o.question_id === q.id),
+    }));
+  }
+
+  // Get submission
+  let submissionData;
+  if (submissionId) {
+    const { data: s } = await supabase
+      .from('submissions')
+      .select('id, status, submitted_at')
+      .eq('id', submissionId)
+      .eq('event_id', event.id)
+      .maybeSingle();
+    submissionData = s;
+  } else {
+    const { data: participant } = await supabase
+      .from('event_participants')
+      .select('id')
+      .eq('event_id', event.id)
+      .eq('profile_id', user.id)
+      .maybeSingle();
+
+    if (participant) {
+      const { data: s } = await supabase
+        .from('submissions')
+        .select('id, status, submitted_at')
+        .eq('event_id', event.id)
+        .eq('participant_id', participant.id)
+        .maybeSingle();
+      submissionData = s;
+    }
+  }
+
+  if (!submissionData) return { event: null, submission: null, predictions: [], players: [], prizes: [], error: 'Participación no encontrada.' };
 
   const { data: answers } = await supabase
     .from('prediction_answers')
     .select('id, question_id, option_id, position')
-    .eq('submission_id', submission.id);
+    .eq('submission_id', submissionData.id);
+
+  // Enrich answers with option labels
+  const optionIds = (answers ?? []).map((a) => a.option_id);
+  const { data: optionData } = await supabase
+    .from('prediction_options')
+    .select('id, label, player_id')
+    .in('id', optionIds);
+
+  const optionMap = new Map((optionData ?? []).map((o) => [o.id, { label: o.label, player_id: o.player_id }]));
+
+  const enrichedAnswers = (answers ?? []).map((a) => ({
+    ...a,
+    option_label: optionMap.get(a.option_id)?.label ?? '—',
+    player_id: optionMap.get(a.option_id)?.player_id ?? null,
+  }));
 
   return {
-    submission: { ...submission, answers: answers ?? [], event_title: '' },
+    event: { ...event, creator: creatorInfo },
+    submission: { ...submissionData, answers: enrichedAnswers },
+    predictions,
+    players,
+    prizes,
     error: null,
   };
 }

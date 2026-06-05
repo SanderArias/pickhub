@@ -1,4 +1,4 @@
-import { requireCreator } from '@/lib/auth';
+﻿import { requireCreator } from '@/lib/auth';
 import { createPickem } from '@/app/actions/creator';
 import { PageHeader, ActionButton } from '@/components/ui';
 import { ClosureSection } from './ClosureSection';
@@ -45,7 +45,7 @@ export default async function NewPickemPage() {
         <ClosureSection />
 
         <ActionButton type="submit" variant="primary">
-          Crear Pick&apos;em
+          Crear Pick’em
         </ActionButton>
       </form>
     </div>

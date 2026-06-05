@@ -27,122 +27,109 @@ export async function getEventResults(eventId: string) {
   return results ?? [];
 }
 
-export async function saveResults(
+export async function publishResultsAndCalculateScores(
   eventId: string,
-  results: Record<string, string[]>,
+  standardResults: Record<string, string[]>,
+  rankingResults: Record<string, { position: number; option_id: string }[]>,
 ): Promise<{ error: string | null }> {
   const profile = await requireCreator();
   const creatorId = profile.creator_profile!.id;
 
   const supabase = await createServerClient();
 
+  // 1. Validate creator owns event
   const { data: event } = await supabase
     .from('events')
-    .select('id')
+    .select('id, status, title')
     .eq('id', eventId)
     .eq('creator_id', creatorId)
     .single();
 
   if (!event) return { error: 'Evento no encontrado.' };
 
-  const questionIds = Object.keys(results);
+  // 2. Validate event status
+  if (event.status === 'completed') {
+    return { error: 'Este Pick\'em ya fue completado.' };
+  }
+  if (event.status !== 'predictions_closed') {
+    return { error: 'El Pick\'em debe estar en estado "Predicciones cerradas" para publicar resultados.' };
+  }
 
-  const { data: questions } = await supabase
-    .from('prediction_questions')
-    .select('id, question_type')
-    .eq('event_id', eventId)
-    .in('id', questionIds);
+  // 3. Validate standard results
+  const stdQuestionIds = Object.keys(standardResults);
+  if (stdQuestionIds.length > 0) {
+    const { data: questions } = await supabase
+      .from('prediction_questions')
+      .select('id, question_type')
+      .eq('event_id', eventId)
+      .in('id', stdQuestionIds);
 
-  if (!questions || questions.length === 0) return { error: 'No se encontraron preguntas.' };
+    if (!questions || questions.length === 0) {
+      return { error: 'No se encontraron preguntas.' };
+    }
 
-  for (const q of questions) {
-    const selected = results[q.id] ?? [];
-    if (q.question_type === 'single' && selected.length > 1) {
-      return { error: `La pregunta "${q.id}" es de tipo single y solo permite una opción correcta.` };
+    for (const q of questions) {
+      const selected = standardResults[q.id] ?? [];
+      if (q.question_type === 'single' && selected.length > 1) {
+        return {
+          error: `La pregunta "${q.id}" es de tipo única y solo permite una opción correcta.`,
+        };
+      }
     }
   }
 
+  // 4. Validate ranking results
+  const rankQuestionIds = Object.keys(rankingResults);
+  if (rankQuestionIds.length > 0) {
+    const { data: rankQuestions } = await supabase
+      .from('prediction_questions')
+      .select('id, template_type')
+      .eq('event_id', eventId)
+      .in('id', rankQuestionIds);
+
+    for (const q of rankQuestions ?? []) {
+      const positions = rankingResults[q.id] ?? [];
+      if (q.template_type === 'top8_ordered' && positions.length !== 8) {
+        return { error: `La pregunta "${q.id}" requiere exactamente 8 posiciones.` };
+      }
+    }
+  }
+
+  // 5. Delete old prediction_results
   const { error: delErr } = await supabase
     .from('prediction_results')
     .delete()
     .eq('event_id', eventId);
 
-  if (delErr) return { error: `Error al limpiar resultados: ${delErr.message}` };
+  if (delErr) return { error: `Error al limpiar resultados anteriores: ${delErr.message}` };
 
-  const rows: { event_id: string; question_id: string; option_id: string; is_correct: boolean }[] = [];
-  for (const questionId of questionIds) {
-    for (const optionId of results[questionId] ?? []) {
-      rows.push({ event_id: eventId, question_id: questionId, option_id: optionId, is_correct: true });
+  // 6. Insert standard results
+  const stdRows: { event_id: string; question_id: string; option_id: string; is_correct: boolean }[] = [];
+  for (const questionId of stdQuestionIds) {
+    for (const optionId of standardResults[questionId] ?? []) {
+      stdRows.push({ event_id: eventId, question_id: questionId, option_id: optionId, is_correct: true });
     }
   }
 
-  if (rows.length > 0) {
-    const { error: insErr } = await supabase.from('prediction_results').insert(rows);
+  if (stdRows.length > 0) {
+    const { error: insErr } = await supabase.from('prediction_results').insert(stdRows);
     if (insErr) return { error: `Error al guardar resultados: ${insErr.message}` };
   }
 
-  revalidatePath(`/creator/pickems/${eventId}`);
-  return { error: null };
-}
-
-export async function saveRankingResults(
-  eventId: string,
-  results: Record<string, { position: number; option_id: string }[]>,
-): Promise<{ error: string | null }> {
-  const profile = await requireCreator();
-  const creatorId = profile.creator_profile!.id;
-
-  const supabase = await createServerClient();
-
-  const { data: event } = await supabase
-    .from('events')
-    .select('id')
-    .eq('id', eventId)
-    .eq('creator_id', creatorId)
-    .single();
-
-  if (!event) return { error: 'Evento no encontrado.' };
-
-  const { error: delErr } = await supabase
-    .from('prediction_results')
-    .delete()
-    .eq('event_id', eventId);
-
-  if (delErr) return { error: `Error al limpiar resultados: ${delErr.message}` };
-
-  const rows: { event_id: string; question_id: string; option_id: string; position: number; is_correct: boolean }[] = [];
-  for (const [questionId, positions] of Object.entries(results)) {
+  // 7. Insert ranking results
+  const rankRows: { event_id: string; question_id: string; option_id: string; position: number; is_correct: boolean }[] = [];
+  for (const [questionId, positions] of Object.entries(rankingResults)) {
     for (const { position, option_id } of positions) {
-      rows.push({ event_id: eventId, question_id: questionId, option_id, position, is_correct: true });
+      rankRows.push({ event_id: eventId, question_id: questionId, option_id, position, is_correct: true });
     }
   }
 
-  if (rows.length > 0) {
-    const { error: insErr } = await supabase.from('prediction_results').insert(rows);
-    if (insErr) return { error: `Error al guardar resultados: ${insErr.message}` };
+  if (rankRows.length > 0) {
+    const { error: insErr } = await supabase.from('prediction_results').insert(rankRows);
+    if (insErr) return { error: `Error al guardar resultados de ranking: ${insErr.message}` };
   }
 
-  revalidatePath(`/creator/pickems/${eventId}`);
-  return { error: null };
-}
-
-export async function calculateScores(
-  eventId: string,
-): Promise<{ error: string | null }> {
-  const profile = await requireCreator();
-  const creatorId = profile.creator_profile!.id;
-
-  const supabase = await createServerClient();
-
-  const { data: event } = await supabase
-    .from('events')
-    .select('id')
-    .eq('id', eventId)
-    .eq('creator_id', creatorId)
-    .single();
-
-  if (!event) return { error: 'Evento no encontrado.' };
-
+  // 8. Calculate scores
   const { data: results } = await supabase
     .from('prediction_results')
     .select('question_id, option_id, position')
@@ -150,10 +137,9 @@ export async function calculateScores(
     .eq('is_correct', true);
 
   if (!results || results.length === 0) {
-    return { error: 'Debes guardar los resultados correctos antes de calcular puntuaciones.' };
+    return { error: 'No hay resultados guardados para calcular puntuaciones.' };
   }
 
-  // Build correct answers map: for ranking questions, position -> option_id; for others, set of option_ids
   const correctSet = new Map<string, Set<string>>();
   const correctPositionMap = new Map<string, Map<number, string>>();
   for (const r of results) {
@@ -172,10 +158,8 @@ export async function calculateScores(
     .eq('event_id', eventId);
 
   const pointsMap = new Map<string, number>();
-  const isRankingMap = new Map<string, boolean>();
   for (const q of questions ?? []) {
     pointsMap.set(q.id, q.points_per_correct);
-    isRankingMap.set(q.id, q.question_type === 'ranking' || q.template_type === 'top8_ordered');
   }
 
   const { data: submissions } = await supabase
@@ -195,22 +179,18 @@ export async function calculateScores(
     .select('submission_id, question_id, option_id, position')
     .in('submission_id', submissionIds);
 
-  interface AnswerRow { submission_id: string; question_id: string; option_id: string; position: number | null }
-  const answersBySubmission = new Map<string, AnswerRow[]>();
-  for (const a of (answers ?? []) as AnswerRow[]) {
+  const answersBySubmission = new Map<string, { submission_id: string; question_id: string; option_id: string; position: number | null }[]>();
+  for (const a of answers ?? []) {
     if (!answersBySubmission.has(a.submission_id)) answersBySubmission.set(a.submission_id, []);
     answersBySubmission.get(a.submission_id)!.push(a);
   }
 
-  const participantSubMap = new Map<string, string>();
-  for (const s of submissions) {
-    participantSubMap.set(s.participant_id, s.id);
-  }
+  const participantIds = submissions.map((s) => s.participant_id);
 
   const { data: participants } = await supabase
     .from('event_participants')
     .select('id, profile_id')
-    .in('id', Array.from(participantSubMap.keys()));
+    .in('id', participantIds);
 
   const profileIdMap = new Map<string, string>();
   for (const p of participants ?? []) {
@@ -229,15 +209,14 @@ export async function calculateScores(
   const submissionTotals = new Map<string, number>();
 
   for (const submission of submissions) {
-    const participantId = submission.participant_id;
-    const profileId = profileIdMap.get(participantId);
+    const profileId = profileIdMap.get(submission.participant_id);
     if (!profileId) continue;
 
     const userAnswers = answersBySubmission.get(submission.id) ?? [];
     const answersByQuestion = new Map<string, Set<string>>();
     const answersByPosition = new Map<string, Map<number, string>>();
     for (const a of userAnswers) {
-      if (a.position !== null && a.position !== undefined) {
+      if (a.position !== null) {
         if (!answersByPosition.has(a.question_id)) answersByPosition.set(a.question_id, new Map());
         answersByPosition.get(a.question_id)!.set(a.position, a.option_id);
       } else {
@@ -268,42 +247,55 @@ export async function calculateScores(
       });
     }
 
-    // Handle ranking questions (exact position match)
     for (const [qId, correctPositions] of correctPositionMap) {
       const userPositions = answersByPosition.get(qId);
-      let correctCount = 0;
+      let exactMatches = 0;
+      let presenceMatches = 0;
+
       if (userPositions) {
-        for (const [pos, correctOptId] of correctPositions) {
-          if (userPositions.get(pos) === correctOptId) correctCount++;
+        const correctOptionIds = new Set(correctPositions.values());
+
+        for (const [pos, predictedOptId] of userPositions) {
+          const inTop8 = correctOptionIds.has(predictedOptId);
+          const exactPosition = correctPositions.get(pos) === predictedOptId;
+
+          if (inTop8) presenceMatches++;
+          if (exactPosition) exactMatches++;
         }
       }
-      totalScore += correctCount;
+
+      const questionPoints = presenceMatches + exactMatches;
+      totalScore += questionPoints;
 
       scoreRows.push({
         event_id: eventId,
         profile_id: profileId,
         submission_id: submission.id,
         question_id: qId,
-        correct_count: correctCount,
-        total_points: correctCount,
+        correct_count: exactMatches,
+        total_points: questionPoints,
       });
     }
 
     submissionTotals.set(submission.id, totalScore);
   }
 
+  // 9. Delete old scores and insert new ones
   const { error: delScoreErr } = await supabase
     .from('prediction_scores')
     .delete()
     .eq('event_id', eventId);
 
-  if (delScoreErr) return { error: `Error al limpiar puntuaciones: ${delScoreErr.message}` };
+  if (delScoreErr) return { error: `Error al limpiar puntuaciones anteriores: ${delScoreErr.message}` };
 
   if (scoreRows.length > 0) {
-    const { error: insScoreErr } = await supabase.from('prediction_scores').insert(scoreRows);
+    const { error: insScoreErr } = await supabase
+      .from('prediction_scores')
+      .upsert(scoreRows, { onConflict: 'event_id,profile_id,question_id' });
     if (insScoreErr) return { error: `Error al guardar puntuaciones: ${insScoreErr.message}` };
   }
 
+  // 10. Update submissions to scored
   for (const [subId, total] of submissionTotals) {
     const { error: upErr } = await supabase
       .from('submissions')
@@ -313,14 +305,18 @@ export async function calculateScores(
     if (upErr) return { error: `Error al actualizar participación: ${upErr.message}` };
   }
 
-  // Mark event as completed
+  // 11. Mark event as completed
   const { error: statusErr } = await supabase
     .from('events')
     .update({ status: 'completed' })
     .eq('id', eventId);
 
-  if (statusErr) return { error: `Error al actualizar estado: ${statusErr.message}` };
+  if (statusErr) return { error: `Error al actualizar estado del Pick\'em: ${statusErr.message}` };
 
+  // 12. Revalidate paths
   revalidatePath(`/creator/pickems/${eventId}`);
+  revalidatePath(`/creator/pickems/${eventId}/results`);
+  revalidatePath(`/pickems/[slug]`);
+
   return { error: null };
 }

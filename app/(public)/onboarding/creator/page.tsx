@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation';
+﻿import { redirect } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
 import { getCreatorProfile, createCreatorProfile } from '@/app/actions/creator';
 import { Logo } from '@/components/ui/Logo';
@@ -17,7 +17,7 @@ export default async function OnboardingCreatorPage() {
           <Logo />
           <h1 className="mt-4 text-xl font-bold text-text-primary">Solicitar acceso al modo creador</h1>
           <p className="mt-1 text-sm text-text-muted">
-            Crea tu perfil público para empezar a crear Pick&apos;ems y dinámicas para tu comunidad
+            Crea tu perfil público para empezar a crear Pick’ems y dinámicas para tu comunidad
           </p>
         </div>
 
