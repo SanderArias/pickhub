@@ -14,10 +14,5 @@ alter table events
   add constraint events_status_check
   check (status in ('draft', 'open', 'predictions_closed', 'completed', 'archived'));
 
--- Migrate existing statuses to the new lifecycle
-update events set status = 'open'              where status = 'published';
-update events set status = 'open'              where status = 'active';
-update events set status = 'predictions_closed' where status = 'closed';
-
 comment on column events.status is
-  'Lifecycle: draft → open → predictions_closed → completed (→ archived in future)';
+  'Lifecycle: draft → open → predictions_closed → completed. archived is terminal.';

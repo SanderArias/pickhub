@@ -4,9 +4,7 @@ const VARIANTS: Record<string, { container: string; dot: string }> = {
   predictions_closed: { container: 'border-warning-border text-warning', dot: 'bg-warning' },
   completed: { container: 'border-success-border text-success', dot: 'bg-success' },
   archived: { container: 'border-border text-text-muted', dot: 'bg-text-muted' },
-  published: { container: 'border-purple-border text-purple-primary', dot: 'bg-purple-primary' },
-  active: { container: 'border-purple-border text-purple-primary', dot: 'bg-purple-primary' },
-  closed: { container: 'border-warning-border text-warning', dot: 'bg-warning' },
+
   pending: { container: 'border-warning-border text-warning', dot: 'bg-warning' },
   approved: { container: 'border-purple-border text-purple-primary', dot: 'bg-purple-primary' },
   rejected: { container: 'border-danger-border text-danger', dot: 'bg-danger' },
@@ -22,9 +20,7 @@ const LABELS: Record<string, string> = {
   predictions_closed: 'Predicciones cerradas',
   completed: 'Completado',
   archived: 'Archivado',
-  published: 'Publicado',
-  active: 'Activo',
-  closed: 'Cerrado',
+
   pending: 'Pendiente',
   approved: 'Aprobado',
   rejected: 'Rechazado',

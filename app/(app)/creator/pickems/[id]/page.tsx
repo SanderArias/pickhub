@@ -13,7 +13,6 @@ import { PlayersSection } from '@/components/players/PlayersSection';
 import { PredictionsSection } from '@/components/predictions/PredictionsSection';
 import { GeneralInfoSection } from '@/components/pickem/GeneralInfoSection';
 import { PrizesSection } from '@/components/picks/PrizesSection';
-import { ShareSection } from '@/components/pickem/ShareSection';
 import { LeaderboardSection } from '@/components/pickem/LeaderboardSection';
 import { PublishSection } from './PublishSection';
 import { ClosePredictionsButton } from './ClosePredictionsButton';
@@ -144,18 +143,6 @@ export default async function PickemDashboardPage({
             <PrizesSection eventId={id} prizes={event.prizes} readOnly={false} />
           </SectionCard>
 
-          <SectionCard title="Diseño para compartir" subtitle="Imagen optimizada para redes sociales, Discord o tu stream">
-            <ShareSection
-              title={event.title}
-              description={event.description}
-              creator={event.creator}
-              players={event.players}
-              slug={event.slug}
-              status={event.status}
-              isPublished={false}
-            />
-          </SectionCard>
-
           <SectionCard title="Publicación">
             <PublishSection
               eventId={id}
@@ -190,18 +177,6 @@ export default async function PickemDashboardPage({
               <p className="mt-1 text-2xl font-bold text-text-primary">{activePlayerCount}</p>
             </div>
           </div>
-
-          <SectionCard title="Compartir" subtitle="Invita participantes con este enlace">
-            <ShareSection
-              title={event.title}
-              description={event.description}
-              creator={event.creator}
-              players={event.players}
-              slug={event.slug}
-              status={event.status}
-              isPublished={true}
-            />
-          </SectionCard>
 
           <SectionCard title="Predicciones" subtitle="Vista de solo lectura">
             <PredictionsSection eventId={id} predictions={event.predictions} readOnly={true} />

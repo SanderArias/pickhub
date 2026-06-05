@@ -6,7 +6,7 @@ export type DynamicType =
   | 'fantasy'
   | 'raffle';
 
-export type DynamicStatus = 'draft' | 'published' | 'active' | 'closed' | 'archived';
+export type DynamicStatus = 'draft' | 'open' | 'predictions_closed' | 'completed' | 'archived';
 
 export interface Dynamic {
   id: string;

@@ -456,13 +456,13 @@ export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 
 
   if (filter === 'open') {
     participations = participations.filter((p) => {
-      if (p.eventStatus === 'closed' || p.eventStatus === 'archived') return false;
+      if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return false;
       if (p.eventEndsAt && p.eventEndsAt <= now) return false;
       return true;
     });
   } else if (filter === 'closed') {
     participations = participations.filter((p) => {
-      if (p.eventStatus === 'closed' || p.eventStatus === 'archived') return true;
+      if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return true;
       if (p.eventEndsAt && p.eventEndsAt <= now) return true;
       return false;
     });
