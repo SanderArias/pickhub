@@ -129,22 +129,29 @@ export async function performTiebreaker(
     return { error: 'No hay suficientes participantes empatados.', draws: null };
   }
 
+  // Check if draws already exist for this event+score group (idempotent)
+  const profileIds = participants.map((p) => p.profile_id);
+  const { data: existingDraws } = await supabase
+    .from('tiebreaker_draws')
+    .select('profile_id, draw_order')
+    .eq('event_id', eventId)
+    .in('profile_id', profileIds);
+
+  if (existingDraws && existingDraws.length > 0) {
+    // All participants already have draws — return existing result
+    if (existingDraws.length === profileIds.length) {
+      return { error: null, draws: existingDraws };
+    }
+    // Inconsistent state: only some participants have draws — admin must resolve
+    return { error: 'El desempate tiene un estado inconsistente. Contacta al administrador.', draws: null };
+  }
+
   // Fisher-Yates shuffle
   const shuffled = [...participants];
   for (let i = shuffled.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
-
-  // Delete existing draws for this event+score group
-  const profileIds = participants.map((p) => p.profile_id);
-  const { error: delErr } = await supabase
-    .from('tiebreaker_draws')
-    .delete()
-    .eq('event_id', eventId)
-    .in('profile_id', profileIds);
-
-  if (delErr) return { error: `Error al limpiar sorteos anteriores: ${delErr.message}`, draws: null };
 
   // Insert shuffled order
   const rows = shuffled.map((p, i) => ({

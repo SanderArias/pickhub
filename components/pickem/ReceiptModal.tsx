@@ -35,6 +35,7 @@ export function ReceiptModal({
 }: ReceiptModalProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
+  const [copying, setCopying] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'unsupported'>('idle');
 
   useEffect(() => {
@@ -67,6 +68,7 @@ export function ReceiptModal({
 
   const handleCopy = useCallback(async () => {
     if (!cardRef.current) return;
+    setCopying(true);
     try {
       const blob = await toBlob(cardRef.current, {
         width: CARD_W,
@@ -91,6 +93,8 @@ export function ReceiptModal({
         setCopyStatus('unsupported');
         setTimeout(() => setCopyStatus('idle'), 3000);
       }
+    } finally {
+      setCopying(false);
     }
   }, []);
 
@@ -177,13 +181,14 @@ export function ReceiptModal({
             <button
               type="button"
               onClick={handleCopy}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+              disabled={copying}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white disabled:opacity-50"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" />
                 <path d="M5 15H4C2.89543 15 2 14.1046 2 13V4C2 2.89543 2.89543 2 4 2H13C14.1046 2 15 2.89543 15 4V5" />
               </svg>
-              Copiar imagen
+              {copying ? 'Copiando...' : 'Copiar imagen'}
             </button>
           </div>
 

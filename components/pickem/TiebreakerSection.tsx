@@ -83,7 +83,7 @@ export function TiebreakerSection({ eventId, tieGroups, drawsMap, onTiebreakerDo
                           </span>
                           {isWinner && (
                             <span className="shrink-0 rounded-full bg-green-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-green-400">
-                              Ganador
+                              Ganador desempate
                             </span>
                           )}
                         </div>

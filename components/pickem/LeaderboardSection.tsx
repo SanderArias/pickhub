@@ -24,11 +24,15 @@ export function LeaderboardSection({ entries, myProfileId, tiebreakerWinners }: 
       {entries.map((entry, index) => {
         const isMe = entry.profile_id === myProfileId;
         const isTop3 = index < 3;
+        const isFirstPlace = index === 0;
         const isTieWinner = tiebreakerWinners
           ? tiebreakerWinners instanceof Set
             ? tiebreakerWinners.has(entry.profile_id)
             : tiebreakerWinners.includes(entry.profile_id)
           : false;
+
+        const showWinnerBadge = isFirstPlace;
+        const hasGreenAccent = isFirstPlace || isTieWinner;
 
         return (
           <div
@@ -36,7 +40,7 @@ export function LeaderboardSection({ entries, myProfileId, tiebreakerWinners }: 
             className={`flex items-center gap-3 rounded-lg border px-4 py-3 transition-colors ${
               isMe
                 ? 'border-purple-primary bg-purple-surface'
-                : isTieWinner
+                : hasGreenAccent
                   ? 'border-green-500/30 bg-green-500/[0.03]'
                   : 'border-border bg-surface'
             }`}
@@ -66,9 +70,9 @@ export function LeaderboardSection({ entries, myProfileId, tiebreakerWinners }: 
             <span className="shrink-0 text-sm font-semibold text-text-primary">
               {entry.total_score} pts
             </span>
-            {isTieWinner && (
+            {showWinnerBadge && (
               <span className="shrink-0 rounded-full bg-green-500/15 px-2.5 py-0.5 text-[11px] font-medium text-green-400">
-                Ganador desempate
+                Ganador
               </span>
             )}
           </div>

@@ -174,7 +174,7 @@ export function TiebreakerModal({ group, eventId, onClose, onDone }: TiebreakerM
 
                 {phase === 'done' && finalPos === 1 && (
                   <span className="shrink-0 rounded-full bg-green-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-green-400">
-                    Ganador
+                    Ganador desempate
                   </span>
                 )}
               </div>
