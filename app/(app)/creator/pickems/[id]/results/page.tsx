@@ -2,10 +2,8 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getCreatorPickemById } from '@/app/actions/creator';
 import { getEventResults } from '@/app/actions/scoring';
-import { getLeaderboard } from '@/app/actions/leaderboard';
 import { PageHeader, SectionCard } from '@/components/ui';
 import { ResultsSection } from '@/components/pickem/ResultsSection';
-import { LeaderboardSection } from '@/components/pickem/LeaderboardSection';
 
 export default async function PickemResultsPage({
   params,
@@ -18,6 +16,10 @@ export default async function PickemResultsPage({
   if (!event) notFound();
 
   if (event.status === 'draft') {
+    redirect(`/creator/pickems/${id}`);
+  }
+
+  if (event.status === 'completed') {
     redirect(`/creator/pickems/${id}`);
   }
 
@@ -46,13 +48,12 @@ export default async function PickemResultsPage({
   }
 
   const existingResults = await getEventResults(id);
-  const leaderboard = await getLeaderboard(id);
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         title={event.title}
-        description={event.status === 'completed' ? 'Resultados finales' : 'Registrar resultados'}
+        description="Registrar resultados"
         backHref={`/creator/pickems/${id}`}
         backLabel="Volver al Pick'em"
       />
@@ -66,17 +67,10 @@ export default async function PickemResultsPage({
           predictions={event.predictions}
           existingResults={existingResults}
           status={event.status}
+          players={event.players}
+          onPublished={`/creator/pickems/${id}`}
         />
       </SectionCard>
-
-      {leaderboard.length > 0 && (
-        <SectionCard
-          title="Clasificación"
-          subtitle="Puntuaciones calculadas de todos los participantes"
-        >
-          <LeaderboardSection entries={leaderboard} />
-        </SectionCard>
-      )}
     </div>
   );
 }

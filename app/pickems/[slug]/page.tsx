@@ -2,8 +2,8 @@
 import { getUser } from '@/app/actions/auth';
 import { getPublicPickem } from '@/app/actions/participant';
 import { getLeaderboard, getMyScore } from '@/app/actions/leaderboard';
+import { getTiebreakerDraws } from '@/app/actions/tiebreaker';
 import { PublicPickemView } from '@/components/pickem/PublicPickemView';
-import { LeaderboardSection } from '@/components/pickem/LeaderboardSection';
 import { createServerClient } from '@/services/supabase';
 
 export default async function PickemPublicPage({
@@ -38,6 +38,11 @@ export default async function PickemPublicPage({
     getMyScore(event.id),
   ]);
 
+  const drawsMap = event.status === 'completed' ? await getTiebreakerDraws(event.id) : {};
+  const tiebreakerWinners = Object.entries(drawsMap)
+    .filter(([, order]) => order === 1)
+    .map(([pid]) => pid);
+
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8">
       <PublicPickemView
@@ -50,14 +55,11 @@ export default async function PickemPublicPage({
         isAuthenticated={!!user}
         isClosed={isClosed}
         participantName={participantName}
+        leaderboard={leaderboard}
+        drawsMap={drawsMap}
+        tiebreakerWinners={tiebreakerWinners}
+        myProfileId={user?.id}
       />
-
-      {leaderboard.length > 0 && (
-        <div className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold text-text-primary">Clasificación</h2>
-          <LeaderboardSection entries={leaderboard} myProfileId={user?.id} />
-        </div>
-      )}
     </div>
   );
 }

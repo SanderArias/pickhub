@@ -74,6 +74,20 @@ export async function getTieGroups(eventId: string): Promise<TieGroup[]> {
   }));
 }
 
+export async function getTiebreakerDraws(eventId: string): Promise<Record<string, number>> {
+  const supabase = await createServerClient();
+  const { data } = await supabase
+    .from('tiebreaker_draws')
+    .select('profile_id, draw_order')
+    .eq('event_id', eventId);
+
+  const map: Record<string, number> = {};
+  for (const d of data ?? []) {
+    map[d.profile_id] = d.draw_order;
+  }
+  return map;
+}
+
 export async function performTiebreaker(
   eventId: string,
   score: number,

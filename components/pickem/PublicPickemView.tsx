@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { signInWithTwitch } from '@/app/actions/auth';
 import { submitPredictions } from '@/app/actions/participant';
 import type { PublicEventData, EventPlayer, PredictionQuestion, Prize, Submission } from '@/app/actions/participant';
+import type { LeaderboardEntry } from '@/app/actions/leaderboard';
 import { PredictionSelectionExpandable } from '@/components/pickem/PredictionSelectionExpandable';
 import { Top8Readonly } from '@/components/pickem/Top8Readonly';
+import { LeaderboardSection } from '@/components/pickem/LeaderboardSection';
 import { ReceiptModal } from '@/components/pickem/ReceiptModal';
 
 export function PublicPickemView({
@@ -19,6 +21,10 @@ export function PublicPickemView({
   isAuthenticated,
   isClosed,
   participantName,
+  leaderboard,
+  drawsMap,
+  tiebreakerWinners,
+  myProfileId,
 }: {
   event: PublicEventData;
   players: EventPlayer[];
@@ -29,6 +35,10 @@ export function PublicPickemView({
   isAuthenticated: boolean;
   isClosed: boolean;
   participantName?: string;
+  leaderboard: LeaderboardEntry[];
+  drawsMap: Record<string, number>;
+  tiebreakerWinners: string[];
+  myProfileId?: string | null;
 }) {
   const [state, formAction, pending] = useActionState(
     submitPredictions.bind(null, event.id),
@@ -53,7 +63,9 @@ export function PublicPickemView({
       }
       return {
         position: a.position ?? 0,
+        optionId: a.option_id,
         label: opt?.label ?? '—',
+        playerId: opt?.player_id ?? null,
         countryCode,
       };
     });
@@ -64,6 +76,8 @@ export function PublicPickemView({
   if (state.success) {
     return <SubmissionReceipt event={event} predictions={predictions} players={activePlayers} />;
   }
+
+  const resolvedTies = Object.keys(drawsMap).length > 0;
 
   return (
     <div className="flex flex-col gap-8">
@@ -113,7 +127,6 @@ export function PublicPickemView({
           )}
         </div>
 
-        {/* Divider */}
         <div className="h-px bg-border" />
       </section>
 
@@ -131,9 +144,7 @@ export function PublicPickemView({
             }`}
           >
             {variant === 'sub' ? (
-              <p className="text-[11px] font-semibold text-yellow-400 tracking-wide">
-                ★ Subs
-              </p>
+              <p className="text-[11px] font-semibold text-yellow-400 tracking-wide">★ Subs</p>
             ) : (
               <p className="text-[11px] font-medium text-text-secondary">Comunidad</p>
             )}
@@ -283,83 +294,137 @@ export function PublicPickemView({
       {/* No predictions configured */}
       {isAuthenticated && !mySubmission && predictions.length === 0 && (
         <section className="rounded-xl border border-border bg-surface p-6 text-center">
-          <p className="text-sm text-text-muted">Este Pick’em no tiene predicciones configuradas.</p>
+          <p className="text-sm text-text-muted">Este Pick'em no tiene predicciones configuradas.</p>
         </section>
       )}
 
       {/* Already submitted */}
       {isAuthenticated && mySubmission && (
-        <section className="flex flex-col gap-6">
-          {/* Score card */}
-          {myScore && myScore.total_score !== null && (
-            <div className="flex items-center gap-6 rounded-xl border border-purple-border bg-purple-surface p-5">
-              <div className="text-center">
-                <p className="text-3xl font-bold text-purple-primary">{myScore.total_score}</p>
-                <p className="text-xs text-text-muted">puntos</p>
+        <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:gap-6">
+          {/* Left column — Predictions review */}
+          <div className="flex flex-col gap-6">
+            <div className="rounded-xl border border-border bg-surface p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold text-text-primary">Tus predicciones</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowModal(true)}
+                  className="shrink-0 rounded-lg border border-purple-primary px-3 py-1.5 text-xs font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+                >
+                  Ver mi comprobante
+                </button>
               </div>
-              <div className="text-sm text-text-secondary">
-                <p>{myScore.correct_answers} aciertos</p>
-                <p>{myScore.total_questions} preguntas</p>
-              </div>
-            </div>
-          )}
 
-          {/* Predictions review */}
-          <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-sm font-semibold text-text-primary">Tus predicciones</h3>
-              <button
-                type="button"
-                onClick={() => setShowModal(true)}
-                className="shrink-0 rounded-lg border border-purple-primary px-3 py-1.5 text-xs font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
-              >
-                Ver mi comprobante
-              </button>
-            </div>
+              <div className="flex flex-col gap-3">
+                {predictions.map((q) => {
+                  const isTop8 = q.template_type === 'top8_ordered';
+                  const selected = mySubmission.answers.filter((a) => a.question_id === q.id);
 
-            <div className="flex flex-col gap-3">
-              {predictions.map((q) => {
-                const isTop8 = q.template_type === 'top8_ordered';
-                const selected = mySubmission.answers.filter((a) => a.question_id === q.id);
+                  if (isTop8) {
+                    const sorted = [...selected].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+                    const ranked = sorted.map((s) => {
+                      const opt = q.options.find((o) => o.id === s.option_id);
+                      return {
+                        position: s.position ?? 0,
+                        optionId: s.option_id,
+                        label: opt?.label ?? '—',
+                        playerId: opt?.player_id ?? null,
+                      };
+                    });
+                    return (
+                      <div key={q.id} className="border-b border-border pb-3 last:border-0 last:pb-0">
+                        <p className="mb-3 text-sm font-semibold text-text-primary">{q.title}</p>
+                        <Top8Readonly rankedPlayers={ranked} activePlayers={activePlayers} />
+                      </div>
+                    );
+                  }
 
-                if (isTop8) {
-                  const sorted = [...selected].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
-                  const ranked = sorted.map((s) => {
-                    const opt = q.options.find((o) => o.id === s.option_id);
-                    return {
-                      position: s.position ?? 0,
-                      optionId: s.option_id,
-                      label: opt?.label ?? '—',
-                      playerId: opt?.player_id ?? null,
-                    };
-                  });
+                  const selectedLabels = selected
+                    .map((s) => q.options.find((o) => o.id === s.option_id)?.label)
+                    .filter(Boolean) as string[];
+
                   return (
-                    <div key={q.id} className="border-b border-border pb-3 last:border-0 last:pb-0">
-                      <p className="mb-3 text-sm font-semibold text-text-primary">{q.title}</p>
-                      <Top8Readonly rankedPlayers={ranked} activePlayers={activePlayers} />
-                    </div>
+                    <PredictionSelectionExpandable
+                      key={q.id}
+                      eventTitle={event.title}
+                      creatorLabel={event.creator?.display_name ?? event.creator?.handle ?? '—'}
+                      questionTitle={q.title}
+                      selectedLabels={selectedLabels}
+                      isSingle={q.question_type === 'single'}
+                    />
                   );
-                }
-
-                const selectedLabels = selected
-                  .map((s) => q.options.find((o) => o.id === s.option_id)?.label)
-                  .filter(Boolean) as string[];
-
-                return (
-                  <PredictionSelectionExpandable
-                    key={q.id}
-                    eventTitle={event.title}
-                    creatorLabel={event.creator?.display_name ?? event.creator?.handle ?? '—'}
-                    questionTitle={q.title}
-                    selectedLabels={selectedLabels}
-                    isSingle={q.question_type === 'single'}
-                  />
-                );
-              })}
+                })}
+              </div>
             </div>
-
           </div>
-        </section>
+
+          {/* Right column — Score + Tiebreaker + Leaderboard */}
+          <div className="flex flex-col gap-6">
+            {myScore && myScore.total_score !== null && (
+              <div className="flex items-center gap-6 rounded-xl border border-purple-border bg-purple-surface p-5">
+                <div className="text-center">
+                  <p className="text-3xl font-bold text-purple-primary">{myScore.total_score}</p>
+                  <p className="text-xs text-text-muted">puntos</p>
+                </div>
+                <div className="text-sm text-text-secondary">
+                  <p>{myScore.correct_answers} aciertos</p>
+                  <p>{myScore.total_questions} preguntas</p>
+                </div>
+              </div>
+            )}
+
+            {resolvedTies && (
+              <section className="flex flex-col gap-4">
+                <div className="flex items-center gap-2">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-400">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                    <polyline points="22 4 12 14.01 9 11.01" />
+                  </svg>
+                  <h2 className="text-sm font-semibold text-text-primary">Desempate resuelto</h2>
+                </div>
+
+                <div className="rounded-xl border border-green-500/20 bg-green-500/[0.02] p-5">
+                  {[...leaderboard]
+                    .filter((e) => e.profile_id in drawsMap)
+                    .sort((a, b) => (drawsMap[a.profile_id] ?? 0) - (drawsMap[b.profile_id] ?? 0))
+                    .map((entry) => {
+                      const order = drawsMap[entry.profile_id] ?? 0;
+                      const isWinner = order === 1;
+                      return (
+                        <div key={entry.profile_id} className="flex items-center gap-3 py-1.5">
+                          <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                            isWinner ? 'bg-green-500 text-white' : 'bg-surface-hover text-text-muted'
+                          }`}>
+                            {order}
+                          </span>
+                          <span className={`text-sm ${
+                            isWinner ? 'font-medium text-green-400' : 'text-text-primary'
+                          }`}>
+                            {entry.display_name ?? 'Participante'}
+                          </span>
+                          {isWinner && (
+                            <span className="shrink-0 rounded-full bg-green-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-green-400">
+                              Ganador
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  <p className="mt-3 text-xs text-text-muted">
+                    El desempate fue resuelto mediante sorteo aleatorio.
+                  </p>
+                </div>
+              </section>
+            )}
+
+            {leaderboard.length > 0 && (
+              <div className="flex flex-col gap-3">
+                <h2 className="text-sm font-semibold text-text-primary">Clasificación</h2>
+                <LeaderboardSection entries={leaderboard} myProfileId={myProfileId} tiebreakerWinners={tiebreakerWinners} />
+              </div>
+            )}
+          </div>
+        </div>
       )}
 
       <ReceiptModal
@@ -388,14 +453,13 @@ function SubmissionReceipt({
 }) {
   return (
     <div className="flex flex-col gap-8">
-      {/* Success card */}
       <section className="rounded-xl border border-purple-border bg-surface p-8 text-center">
         <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-purple-primary/20">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M20 6L9 17L4 12" stroke="#A855F7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
-        <h2 className="text-xl font-bold text-purple-primary">Tu Pick’em fue enviado</h2>
+        <h2 className="text-xl font-bold text-purple-primary">Tu Pick'em fue enviado</h2>
         <p className="mt-2 text-sm text-text-secondary">
           Tus predicciones para <strong className="text-text-primary">{event.title}</strong> se guardaron correctamente.
         </p>
@@ -404,7 +468,6 @@ function SubmissionReceipt({
         </p>
       </section>
 
-      {/* CTAs */}
       <div className="flex flex-wrap items-center gap-3">
         <Link
           href={`/pickems/${event.slug}/receipt`}

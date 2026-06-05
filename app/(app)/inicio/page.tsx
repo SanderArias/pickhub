@@ -7,6 +7,24 @@ import { getUserParticipations } from '@/app/actions/participant';
 import { StatusBadge } from '@/components/ui';
 import { RequestCreatorAccessForm } from './RequestCreatorAccessForm';
 
+interface ActivityItem {
+  display_name: string | null;
+  event_title: string;
+  event_slug: string;
+  submitted_at: string;
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Ahora';
+  if (mins < 60) return `Hace ${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `Hace ${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `Hace ${days}d`;
+}
+
 export default async function InicioPage() {
   const user = await getUser();
   if (!user) redirect('/login');
@@ -26,268 +44,264 @@ export default async function InicioPage() {
   const isSuspended = creatorStatus === 'suspended';
   const isReopened = creatorStatus === 'reopened';
 
+  // Data for all users
+  const participations = await getUserParticipations('all');
+
+  // Data for creators
+  let activeCount = 0;
+  let draftCount = 0;
+  let submissionCount = 0;
+  let creatorActivities: ActivityItem[] = [];
+  let attentionItems: { title: string; description: string; href: string; label: string }[] = [];
+
   if (isApproved || isAdmin) {
     const supabase = await createServerClient();
-
-    if (isAdmin && !isApproved) {
-      return (
-        <div className="flex flex-col gap-8">
-          <div>
-            <h1 className="text-xl font-bold text-text-primary">Bienvenido de nuevo, {displayName}</h1>
-            <p className="mt-1 text-sm text-text-secondary">Panel de administración de PickHub.</p>
-          </div>
-          <Link
-            href="/admin"
-            className="self-start rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
-          >
-            Ir al panel admin
-          </Link>
-        </div>
-      );
-    }
-
     const creatorId = creatorProfile!.id;
 
-    const { count: total } = await supabase
+    const { data: events } = await supabase
       .from('events')
-      .select('*', { count: 'exact', head: true })
-      .eq('creator_id', creatorId);
-
-    const pickemCount = total ?? 0;
-
-    const { data: recent } = await supabase
-      .from('events')
-      .select('id, title, status, created_at')
+      .select('id, title, slug, status')
       .eq('creator_id', creatorId)
-      .order('created_at', { ascending: false })
-      .limit(5);
+      .order('created_at', { ascending: false });
 
-    const activePickems = recent ?? [];
+    const safeEvents = events ?? [];
+    activeCount = safeEvents.filter((e) => e.status === 'open').length;
+    draftCount = safeEvents.filter((e) => e.status === 'draft').length;
 
-    const { count: drafts } = await supabase
-      .from('events')
-      .select('*', { count: 'exact', head: true })
-      .eq('creator_id', creatorId)
-      .eq('status', 'draft');
+    if (safeEvents.length > 0) {
+      const eventIds = safeEvents.map((e) => e.id);
 
-    const draftCount = drafts ?? 0;
+      const { count: sc } = await supabase
+        .from('submissions')
+        .select('*', { count: 'exact', head: true })
+        .in('event_id', eventIds);
+      submissionCount = sc ?? 0;
 
-    return (
-      <div className="flex flex-col gap-8">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold text-text-primary">Bienvenido de nuevo, {displayName}</h1>
-            <p className="mt-1 text-sm text-text-secondary">
-              Crea dinámicas para tu comunidad, gestiona torneos y premia a tus seguidores.
-            </p>
-          </div>
-          <StatusBadge status="approved" label="Acceso activo" />
-        </div>
+      const { data: raw } = await supabase
+        .from('submissions')
+        .select(`
+          submitted_at,
+          event_id,
+          event_participants!inner(profile_id),
+          events!inner(title, slug)
+        `)
+        .in('event_id', eventIds)
+        .order('submitted_at', { ascending: false })
+        .limit(5);
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border border-border bg-surface p-4">
-            <p className="text-xs text-text-muted">Pick’ems creados</p>
-            <p className="mt-1 text-2xl font-bold text-text-primary">{pickemCount}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-surface p-4">
-            <p className="text-xs text-text-muted">Borradores</p>
-            <p className="mt-1 text-2xl font-bold text-text-primary">{draftCount}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-surface p-4">
-            <p className="text-xs text-text-muted">Estado</p>
-            <p className="mt-1 text-2xl font-bold text-purple-primary">Activo</p>
-          </div>
-        </div>
+      const profileIds = [...new Set((raw ?? []).map((r: any) => r.event_participants?.profile_id).filter(Boolean))];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, display_name')
+        .in('id', profileIds);
+      const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
 
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-text-primary">Acciones rápidas</h2>
-          <div className="grid gap-2 sm:grid-cols-3">
-              <Link
-                  href="/creator"
-                  className="rounded-lg border border-purple-border bg-surface p-4 transition-colors hover:border-purple-primary"
-                >
-                  <p className="text-sm font-medium text-purple-primary">Ir al panel de creador</p>
-                  <p className="mt-1 text-xs text-text-secondary">
-                    Ya tienes acceso al modo creador de PickHub.
-                  </p>
-                </Link>
-                <Link
-                  href="/creator/pickems/new"
-                  className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-hover"
-                >
-                  <p className="text-sm font-medium text-text-primary">Nuevo Pick’em</p>
-                  <p className="mt-1 text-xs text-text-secondary">
-                    Crea una nueva dinámica de predicciones
-                  </p>
-                </Link>
-                <Link
-                  href="/creator/pickems"
-                  className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-hover"
-                >
-                  <p className="text-sm font-medium text-text-primary">Mis Pick’ems</p>
-                  <p className="mt-1 text-xs text-text-secondary">
-                    Gestiona tus dinámicas existentes
-                  </p>
-                </Link>
-            {isAdmin && (
-              <Link
-                href="/admin"
-                className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-hover"
-              >
-                <p className="text-sm font-medium text-text-primary">Panel admin</p>
-                <p className="mt-1 text-xs text-text-secondary">
-                  Administra creadores y configura la plataforma
-                </p>
-              </Link>
-            )}
-          </div>
-        </div>
+      creatorActivities = (raw ?? []).map((r: any) => ({
+        display_name: profileMap.get(r.event_participants?.profile_id) ?? null,
+        event_title: r.events?.title ?? '',
+        event_slug: r.events?.slug ?? '',
+        submitted_at: r.submitted_at ?? '',
+      }));
 
-        <div>
-          <h2 className="mb-3 text-sm font-semibold text-text-primary">Actividad reciente</h2>
-          {activePickems.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border bg-surface p-6 text-center">
-              <p className="text-sm text-text-muted">
-                Todavía no has creado ningún Pick’em.
-              </p>
-              <Link
-                href="/creator/pickems/new"
-                className="mt-3 inline-block rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
-              >
-                Crear mi primer Pick’em
-              </Link>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-1.5">
-              {activePickems.map((p) => (
-                <Link
-                  key={p.id}
-                  href={`/creator/pickems/${p.id}`}
-                  className="rounded-lg border border-border bg-surface p-3 transition-colors hover:border-border-hover"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-sm font-medium text-text-primary">{p.title}</span>
-                    <span className="shrink-0 text-xs text-text-muted">
-                      {p.status === 'draft' ? 'Borrador' : p.status}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 text-xs text-text-muted">
-                    {new Date(p.created_at).toLocaleDateString()}
-                  </p>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
+      // Build attention items (max 3)
+      for (const event of safeEvents) {
+        if (attentionItems.length >= 3) break;
+
+        if (event.status === 'draft') {
+          attentionItems.push({
+            title: event.title,
+            description: 'Borrador incompleto',
+            href: `/creator/pickems/${event.id}`,
+            label: 'Continuar configuración',
+          });
+        } else if (event.status === 'predictions_closed') {
+          attentionItems.push({
+            title: event.title,
+            description: 'Resultados pendientes',
+            href: `/creator/pickems/${event.id}/results`,
+            label: 'Publicar resultados',
+          });
+        } else if (event.status === 'open') {
+          const { count } = await supabase
+            .from('submissions')
+            .select('*', { count: 'exact', head: true })
+            .eq('event_id', event.id);
+          if (count === 0) {
+            const slug = safeEvents.find((e) => e.id === event.id)?.slug;
+            attentionItems.push({
+              title: event.title,
+              description: 'Sin participaciones todavía',
+              href: slug ? `/pickems/${slug}` : `/creator/pickems/${event.id}`,
+              label: 'Compartir Pick\'em',
+            });
+          }
+        }
+      }
+    }
   }
-
-  const participations = await getUserParticipations('all');
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-xl font-bold text-text-primary">Bienvenido de nuevo, {displayName}</h1>
-        <p className="mt-1 text-sm text-text-secondary">
-          Consulta tus Pick’ems, revisa tus predicciones y sigue tus resultados.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-4">
-        {(isReopened || !hasCreatorProfile) && (
-          <div className="rounded-lg border border-border bg-surface p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <h2 className="text-sm font-semibold text-text-primary">
-                  Solicita acceso anticipado al modo creador
-                </h2>
-                <p className="mt-1 text-xs text-text-secondary">
-                  {isReopened
-                    ? 'Tu solicitud anterior fue reabierta. Puedes enviar una nueva solicitud cuando quieras.'
-                    : 'Crea Pick’ems, configura predicciones y comparte dinámicas con tu comunidad.'}
-                </p>
-              </div>
-            </div>
-            <div className="mt-4">
-              <RequestCreatorAccessForm />
-            </div>
-          </div>
-        )}
-
-        {isPending && (
-          <div className="rounded-lg border border-border bg-surface p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-text-primary">
-                    Solicitud en revisión
-                  </h2>
-                  <StatusBadge status="pending" label="En revisión" />
-                </div>
-                <p className="mt-1 text-xs text-text-secondary">
-                  Tu solicitud para acceder al modo creador de PickHub fue recibida. Revisaremos tu perfil y te notificaremos cuando esté disponible.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isRejected && (
-          <div className="rounded-lg border border-border bg-surface p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-text-primary">
-                    Solicitud no aprobada
-                  </h2>
-                  <StatusBadge status="rejected" label="No aprobada" />
-                </div>
-                <p className="mt-1 text-xs text-text-secondary">
-                  Tu solicitud no fue aprobada por ahora.
-                </p>
-                {creatorProfile?.reason && (
-                  <p className="mt-2 rounded-md bg-surface-elevated px-3 py-2 text-xs text-text-muted">
-                    {creatorProfile.reason}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isSuspended && (
-          <div className="rounded-lg border border-border bg-surface p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-text-primary">
-                    Acceso pausado
-                  </h2>
-                  <StatusBadge status="suspended" label="Pausado" />
-                </div>
-                <p className="mt-1 text-xs text-text-secondary">
-                  Tu acceso al modo creador está pausado.
-                </p>
-                {creatorProfile?.reason && (
-                  <p className="mt-2 rounded-md bg-surface-elevated px-3 py-2 text-xs text-text-muted">
-                    {creatorProfile.reason}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="text-xl font-bold text-text-primary">Bienvenido de nuevo, {displayName}</h1>
+          <p className="mt-1 text-sm text-text-secondary">
+            {isApproved || isAdmin
+              ? `Tienes ${activeCount} Pick'em${activeCount !== 1 ? 'es' : ''} activo${activeCount !== 1 ? 's' : ''} y ${submissionCount} participación${submissionCount !== 1 ? 'es' : ''} en total.`
+              : 'Consulta tus Pick\'ems, revisa tus predicciones y sigue tus resultados.'}
+          </p>
+        </div>
+        {(isApproved || isAdmin) && (
+          <Link
+            href="/creator/pickems/new"
+            className="shrink-0 rounded-lg border border-purple-primary px-4 py-2 text-xs font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+          >
+            Crear nuevo Pick'em
+          </Link>
         )}
       </div>
 
+      {/* Creator metrics */}
+      {(isApproved || isAdmin) && (
+        <>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <p className="text-xs text-text-muted">Pick'ems activos</p>
+              <p className="mt-1 text-3xl font-bold text-text-primary">{activeCount}</p>
+            </div>
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <p className="text-xs text-text-muted">Participaciones</p>
+              <p className="mt-1 text-3xl font-bold text-purple-primary">{submissionCount}</p>
+            </div>
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <p className="text-xs text-text-muted">Borradores</p>
+              <p className="mt-1 text-3xl font-bold text-text-primary">{draftCount}</p>
+            </div>
+          </div>
+
+          {attentionItems.length > 0 && (
+            <section className="flex flex-col gap-4">
+              <h2 className="text-sm font-semibold text-text-primary">Requieren atención</h2>
+              <div className="flex flex-col gap-3">
+                {attentionItems.map((item) => (
+                  <div
+                    key={item.href}
+                    className="flex items-center justify-between gap-4 rounded-lg border border-border bg-surface p-4"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-text-primary truncate">{item.title}</p>
+                      <p className="text-xs text-text-muted">{item.description}</p>
+                    </div>
+                    <Link
+                      href={item.href}
+                      className="shrink-0 rounded-lg border border-purple-primary px-4 py-2 text-xs font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+                    >
+                      {item.label}
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      )}
+
+      {/* Non-creator status messages */}
+      {!isApproved && !isAdmin && (
+        <div className="flex flex-col gap-4">
+          {(isReopened || !hasCreatorProfile) && (
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-semibold text-text-primary">
+                    Solicita acceso anticipado al modo creador
+                  </h2>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    {isReopened
+                      ? 'Tu solicitud anterior fue reabierta. Puedes enviar una nueva solicitud cuando quieras.'
+                      : 'Crea Pick\'ems, configura predicciones y comparte dinámicas con tu comunidad.'}
+                  </p>
+                </div>
+              </div>
+              <div className="mt-4">
+                <RequestCreatorAccessForm />
+              </div>
+            </div>
+          )}
+
+          {isPending && (
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-text-primary">
+                      Solicitud en revisión
+                    </h2>
+                    <StatusBadge status="pending" label="En revisión" />
+                  </div>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Tu solicitud para acceder al modo creador de PickHub fue recibida. Revisaremos tu perfil y te notificaremos cuando esté disponible.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isRejected && (
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-text-primary">
+                      Solicitud no aprobada
+                    </h2>
+                    <StatusBadge status="rejected" label="No aprobada" />
+                  </div>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Tu solicitud no fue aprobada por ahora.
+                  </p>
+                  {creatorProfile?.reason && (
+                    <p className="mt-2 rounded-md bg-surface-elevated px-3 py-2 text-xs text-text-muted">
+                      {creatorProfile.reason}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isSuspended && (
+            <div className="rounded-lg border border-border bg-surface p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-text-primary">
+                      Acceso pausado
+                    </h2>
+                    <StatusBadge status="suspended" label="Pausado" />
+                  </div>
+                  <p className="mt-1 text-xs text-text-secondary">
+                    Tu acceso al modo creador está pausado.
+                  </p>
+                  {creatorProfile?.reason && (
+                    <p className="mt-2 rounded-md bg-surface-elevated px-3 py-2 text-xs text-text-muted">
+                      {creatorProfile.reason}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Mis participaciones — for all users */}
       {participations.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border bg-surface p-8 text-center">
           <p className="text-sm text-text-secondary">
-            No has participado en ningún Pick’em todavía.
+            No has participado en ningún Pick'em todavía.
           </p>
-          <span className="mt-3 inline-block cursor-not-allowed rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted opacity-30">
-            Explorar Pick’ems
-          </span>
         </div>
       ) : (
         <>
@@ -322,6 +336,48 @@ export default async function InicioPage() {
             ))}
           </div>
         </>
+      )}
+
+      {/* Creator community activity */}
+      {(isApproved || isAdmin) && (
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-text-primary">Actividad reciente</h2>
+            <Link
+              href="/creator/activity"
+              className="text-xs text-purple-primary transition-colors hover:text-purple-hover"
+            >
+              Ver todo
+            </Link>
+          </div>
+          {creatorActivities.length === 0 ? (
+            <div className="rounded-lg border border-border bg-surface p-6 text-center">
+              <p className="text-sm text-text-muted">
+                Aún no hay participaciones recientes.
+              </p>
+              <p className="mt-1 text-xs text-text-secondary">
+                Invita a tu comunidad a participar en tus Pick'ems.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {creatorActivities.map((a, i) => (
+                <Link
+                  key={i}
+                  href={`/pickems/${a.event_slug}`}
+                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 transition-colors hover:bg-surface-hover"
+                >
+                  <p className="text-sm text-text-primary truncate">
+                    <span className="font-medium">{a.display_name ?? 'Alguien'}</span>
+                    <span className="text-text-muted"> participó en </span>
+                    <span className="font-medium">{a.event_title}</span>
+                  </p>
+                  <span className="shrink-0 text-xs text-text-muted">{timeAgo(a.submitted_at)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </section>
       )}
     </div>
   );

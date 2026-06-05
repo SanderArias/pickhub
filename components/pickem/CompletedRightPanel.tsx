@@ -9,25 +9,25 @@ import { LeaderboardSection } from './LeaderboardSection';
 import type { TieGroup } from '@/app/actions/tiebreaker';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
 
-interface CompletedSectionProps {
+interface CompletedRightPanelProps {
   eventId: string;
   initialLeaderboard: LeaderboardEntry[];
   initialTieGroups: TieGroup[];
-  initialDrawsMap?: Record<string, number>;
+  initialDrawsMap: Record<string, number>;
   myProfileId?: string | null;
 }
 
-export function CompletedSection({
+export function CompletedRightPanel({
   eventId,
   initialLeaderboard,
   initialTieGroups,
   initialDrawsMap,
   myProfileId,
-}: CompletedSectionProps) {
+}: CompletedRightPanelProps) {
   const router = useRouter();
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(initialLeaderboard);
   const [tieGroups, setTieGroups] = useState<TieGroup[]>(initialTieGroups);
-  const [drawsMap, setDrawsMap] = useState<Record<string, number>>(initialDrawsMap ?? {});
+  const [drawsMap, setDrawsMap] = useState<Record<string, number>>(initialDrawsMap);
   const [refreshing, setRefreshing] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -48,13 +48,12 @@ export function CompletedSection({
     router.refresh();
   }, [refresh, router]);
 
-  // Build set of tiebreaker winners (profile_ids with draw_order === 1)
   const tiebreakerWinners = Object.entries(drawsMap)
     .filter(([, order]) => order === 1)
     .map(([pid]) => pid);
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
       <TiebreakerSection
         eventId={eventId}
         tieGroups={tieGroups}

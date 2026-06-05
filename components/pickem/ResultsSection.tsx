@@ -2,6 +2,8 @@
 
 import { useState, useCallback } from 'react';
 import { publishResultsAndCalculateScores } from '@/app/actions/scoring';
+import { Top8OfficialResults } from '@/components/pickem/Top8OfficialResults';
+import { PublishConfirmModal } from '@/components/pickem/PublishConfirmModal';
 
 interface Option {
   id: string;
@@ -34,9 +36,11 @@ interface ResultsSectionProps {
   predictions: Prediction[];
   existingResults: ExistingResult[];
   status: string;
+  players: Array<{ id: string; country_code: string | null }>;
+  onPublished?: string | (() => void);
 }
 
-export function ResultsSection({ eventId, predictions, existingResults, status }: ResultsSectionProps) {
+export function ResultsSection({ eventId, predictions, existingResults, status, players, onPublished }: ResultsSectionProps) {
   const activePredictions = predictions.filter((p) => p.is_active !== false);
 
   const initialSelection = () => {
@@ -50,24 +54,29 @@ export function ResultsSection({ eventId, predictions, existingResults, status }
     return map;
   };
 
-  const initialRanking = (): Record<string, Record<number, string>> => {
-    const map: Record<string, Record<number, string>> = {};
+  const initialRanking = (): Record<string, string[]> => {
+    const map: Record<string, string[]> = {};
     for (const p of activePredictions.filter((p) => p.template_type === 'top8_ordered')) {
       const byPosition: Record<number, string> = {};
       for (const r of existingResults.filter((r) => r.question_id === p.id && r.position !== null)) {
         byPosition[r.position!] = r.option_id;
       }
-      map[p.id] = byPosition;
+      const ordered: string[] = [];
+      for (let i = 1; i <= 8; i++) {
+        if (byPosition[i]) ordered.push(byPosition[i]);
+      }
+      map[p.id] = ordered;
     }
     return map;
   };
 
   const [selection, setSelection] = useState<Record<string, string[]>>(initialSelection);
-  const [rankingSelection, setRankingSelection] = useState<Record<string, Record<number, string>>>(initialRanking);
+  const [rankingSelection, setRankingSelection] = useState<Record<string, string[]>>(initialRanking);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  const canEditResults = status === 'predictions_closed' || status === 'completed';
+  const canEditResults = status === 'predictions_closed';
 
   const handleSingleSelect = useCallback((questionId: string, optionId: string) => {
     setSelection((prev) => ({ ...prev, [questionId]: [optionId] }));
@@ -83,14 +92,11 @@ export function ResultsSection({ eventId, predictions, existingResults, status }
     });
   }, []);
 
-  const handleRankingSelect = useCallback((questionId: string, position: number, optionId: string) => {
-    setRankingSelection((prev) => ({
-      ...prev,
-      [questionId]: { ...(prev[questionId] ?? {}), [position]: optionId },
-    }));
+  const handleRankingChange = useCallback((questionId: string, orderedIds: string[]) => {
+    setRankingSelection((prev) => ({ ...prev, [questionId]: orderedIds }));
   }, []);
 
-  const handlePublish = useCallback(async () => {
+  const doPublish = useCallback(async () => {
     setPublishing(true);
     setError(null);
 
@@ -103,24 +109,34 @@ export function ResultsSection({ eventId, predictions, existingResults, status }
     const rankingResults: Record<string, { position: number; option_id: string }[]> = {};
     const rankingQs = activePredictions.filter((p) => p.template_type === 'top8_ordered');
     for (const q of rankingQs) {
-      const positions = rankingSelection[q.id] ?? {};
-      rankingResults[q.id] = Object.entries(positions).map(([pos, optId]) => ({
-        position: Number(pos),
-        option_id: optId,
+      const ordered = rankingSelection[q.id] ?? [];
+      rankingResults[q.id] = ordered.map((optionId, index) => ({
+        position: index + 1,
+        option_id: optionId,
       }));
     }
 
     const result = await publishResultsAndCalculateScores(eventId, standardResults, rankingResults);
-    if (result.error) setError(result.error);
     setPublishing(false);
-  }, [eventId, selection, rankingSelection, activePredictions]);
+    setShowConfirm(false);
+
+    if (result.error) {
+      setError(result.error);
+    } else if (onPublished) {
+      if (typeof onPublished === 'string') {
+        window.location.href = onPublished;
+      } else {
+        onPublished();
+      }
+    }
+  }, [eventId, selection, rankingSelection, activePredictions, onPublished]);
 
   if (activePredictions.length === 0) {
-    return <p className="text-sm text-text-muted">No hay predicciones activas en este Pick’em.</p>;
+    return <p className="text-sm text-text-muted">No hay predicciones activas en este Pick'em.</p>;
   }
 
   const hasSelection = Object.values(selection).some((s) => s.length > 0) ||
-    Object.values(rankingSelection).some((posMap) => Object.keys(posMap).length > 0);
+    Object.values(rankingSelection).some((arr) => arr.length === 8);
 
   return (
     <div className="flex flex-col gap-6">
@@ -128,7 +144,7 @@ export function ResultsSection({ eventId, predictions, existingResults, status }
         const isTop8 = prediction.template_type === 'top8_ordered';
 
         if (isTop8) {
-          const selected = rankingSelection[prediction.id] ?? {};
+          const ranked = rankingSelection[prediction.id] ?? [];
           return (
             <div key={prediction.id} className="rounded-lg border border-border bg-surface p-4">
               <div className="mb-3">
@@ -141,28 +157,13 @@ export function ResultsSection({ eventId, predictions, existingResults, status }
                 </span>
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                {[1,2,3,4,5,6,7,8].map((pos) => (
-                  <div key={pos} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-hover text-xs font-bold text-text-muted">
-                      {pos}
-                    </span>
-                    <select
-                      value={selected[pos] ?? ''}
-                      onChange={(e) => handleRankingSelect(prediction.id, pos, e.target.value)}
-                      disabled={!canEditResults}
-                      className="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-sm text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      <option value="">Seleccionar</option>
-                      {prediction.options.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                ))}
-              </div>
+              <Top8OfficialResults
+                options={prediction.options.map((o) => ({ id: o.id, label: o.label, playerId: o.player_id }))}
+                players={players}
+                initialRanked={ranked}
+                disabled={!canEditResults}
+                onChange={(orderedIds) => handleRankingChange(prediction.id, orderedIds)}
+              />
             </div>
           );
         }
@@ -221,8 +222,8 @@ export function ResultsSection({ eventId, predictions, existingResults, status }
                       key={option.id}
                       type="button"
                       onClick={() => handleMultipleSelect(prediction.id, option.id)}
-disabled={!canEditResults}
-                        className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                      disabled={!canEditResults}
+                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
                         isSelected
                           ? 'border-purple-primary bg-purple-surface text-text-primary'
                           : 'border-border text-text-secondary hover:border-border-hover'
@@ -251,24 +252,24 @@ disabled={!canEditResults}
         <p className="text-xs text-red-400">{error}</p>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        {status === 'predictions_closed' && (
-          <button
-            type="button"
-            onClick={handlePublish}
-            disabled={publishing || !hasSelection}
-            className="rounded-lg bg-purple-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-hover disabled:opacity-50"
-          >
-            {publishing ? 'Publicando...' : 'Publicar resultados y calcular puntuaciones'}
-          </button>
-        )}
+      {canEditResults && (
+        <button
+          type="button"
+          onClick={() => setShowConfirm(true)}
+          disabled={publishing || !hasSelection}
+          className="w-fit rounded-lg bg-purple-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-hover disabled:opacity-50"
+        >
+          Publicar resultados y calcular puntuaciones
+        </button>
+      )}
 
-        {status === 'completed' && (
-          <p className="text-xs text-text-muted">
-            Resultados publicados. Las puntuaciones ya están calculadas.
-          </p>
-        )}
-      </div>
+      {showConfirm && (
+        <PublishConfirmModal
+          onConfirm={doPublish}
+          onCancel={() => setShowConfirm(false)}
+          publishing={publishing}
+        />
+      )}
     </div>
   );
 }

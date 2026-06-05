@@ -213,7 +213,12 @@ export async function getCreatorPickemById(id: string) {
     }));
   }
 
-  return { ...event, creator: creatorProfile ?? null, prizes: prizes ?? [], players: players ?? [], predictions };
+  const { count: submissionCount } = await supabase
+    .from('submissions')
+    .select('*', { count: 'exact', head: true })
+    .eq('event_id', id);
+
+  return { ...event, creator: creatorProfile ?? null, prizes: prizes ?? [], players: players ?? [], predictions, submissionCount: submissionCount ?? 0 };
 }
 
 export async function createPickem(formData: FormData) {

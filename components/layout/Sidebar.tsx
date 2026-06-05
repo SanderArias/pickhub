@@ -114,6 +114,7 @@ export function Sidebar({ children }: { children: React.ReactNode }) {
         items: [
           { label: "Mis Pick'ems", href: '/creator/pickems' },
           { label: "Crear Pick'em", href: '/creator/pickems/new', exact: true },
+          { label: 'Actividad', href: '/creator/activity' },
         ],
       });
     }
@@ -132,7 +133,7 @@ export function Sidebar({ children }: { children: React.ReactNode }) {
     groups.push({
       label: 'Cuenta',
       items: [
-        { label: 'Perfil', href: isCreator ? '/creator' : '#', placeholder: !isCreator },
+        { label: 'Perfil', href: isCreator ? '/creator' : '#', exact: true, placeholder: !isCreator },
         { label: 'Configuración', href: '#', placeholder: true },
       ],
     });
