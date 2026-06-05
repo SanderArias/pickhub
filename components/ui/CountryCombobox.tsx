@@ -36,7 +36,7 @@ export function CountryCombobox({
   const [menuStyle, setMenuStyle] = useState<React.CSSProperties>({});
 
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
   const allOptions = useMemo(
     () => [NONE_OPTION, ...COUNTRIES],
@@ -102,13 +102,20 @@ export function CountryCombobox({
   const updateMenuPosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
+    const spacing = 4;
+    const estimatedHeight = 300;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const top =
+      spaceBelow >= estimatedHeight
+        ? rect.bottom + spacing
+        : Math.max(spacing, rect.top - estimatedHeight);
     setMenuStyle({
       position: 'fixed',
-      top: `${rect.bottom + 4}px`,
-      left: `${rect.left}px`,
-      minWidth: `${Math.max(rect.width, 180)}px`,
+      top: `${top}px`,
+      left: `${Math.max(8, rect.left)}px`,
+      minWidth: `${Math.max(rect.width, compact ? 200 : 260)}px`,
     });
-  }, []);
+  }, [compact]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -186,7 +193,9 @@ export function CountryCombobox({
 
   useEffect(() => {
     if (!isOpen || !listRef.current) return;
-    const item = listRef.current.children[safeFocusedIndex] as HTMLElement | undefined;
+    const listbox = listRef.current.querySelector('[role="listbox"]');
+    if (!listbox) return;
+    const item = listbox.children[safeFocusedIndex] as HTMLElement | undefined;
     item?.scrollIntoView({ block: 'nearest' });
   }, [safeFocusedIndex, isOpen]);
 
@@ -273,14 +282,30 @@ export function CountryCombobox({
       {isOpen &&
         typeof document !== 'undefined' &&
         createPortal(
-          <ul
+          <div
             ref={listRef}
-            id={`${id}-listbox`}
-            role="listbox"
             style={menuStyle}
-            className="z-[100] overflow-auto rounded-lg border border-border bg-surface shadow-lg"
-            {...(compact ? { 'data-compact': '' } : {})}
+            className="z-[9999] flex flex-col rounded-lg border border-border bg-surface shadow-lg"
           >
+            <div className="border-b border-border px-2 py-1.5">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setFocusedIndex(0);
+                }}
+                placeholder="Buscar país..."
+                className="w-full rounded-md border border-border bg-bg px-2 py-1 text-xs text-text-primary placeholder:text-text-muted outline-none focus:border-purple-primary"
+              />
+            </div>
+            <ul
+              id={`${id}-listbox`}
+              role="listbox"
+              className="pickhub-scrollbar max-h-[360px] md:max-h-[520px] overflow-auto"
+              aria-label="Países"
+              {...(compact ? { 'data-compact': '' as string } : {})}
+            >
             {filteredOptions.length === 0 ? (
               <li className="px-3 py-2 text-xs text-text-muted">Sin resultados</li>
             ) : (
@@ -323,7 +348,8 @@ export function CountryCombobox({
                 </li>
               ))
             )}
-          </ul>,
+          </ul>
+          </div>,
           document.body,
         )}
     </div>

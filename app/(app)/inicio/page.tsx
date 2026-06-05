@@ -18,6 +18,7 @@ export default async function InicioPage() {
 
   const hasCreatorProfile = creatorProfile !== null;
   const creatorStatus = creatorProfile?.status ?? null;
+  const isAdmin = profile.role === 'admin';
   const isApproved = profile.role === 'creator' && creatorStatus === 'approved';
   const isPending = creatorStatus === 'pending';
   const isRejected = creatorStatus === 'rejected';
@@ -39,7 +40,7 @@ export default async function InicioPage() {
       </div>
 
       {/* Creator access status */}
-      {!isApproved && (
+      {!isApproved && !isAdmin && (
         <div className="flex flex-col gap-4">
           {(isReopened || !hasCreatorProfile) && (
             <div className="rounded-lg border border-border bg-surface p-5">

@@ -1,7 +1,9 @@
 'use client';
 
-import { useActionState } from 'react';
-import { createEventPlayer, deleteEventPlayer } from '@/app/actions/creator';
+import { useState, useRef, useEffect, useActionState } from 'react';
+import { createEventPlayer, deleteEventPlayer, updateEventPlayerCountry } from '@/app/actions/creator';
+import { CountryCombobox } from '@/components/ui/CountryCombobox';
+import { COUNTRIES } from '@/lib/countries';
 
 interface Player {
   id: string;
@@ -11,6 +13,37 @@ interface Player {
   sort_order: number;
   is_active: boolean;
   created_at: string;
+  country_code: string | null;
+}
+
+function CountryCell({
+  player,
+  eventId,
+}: {
+  player: Player;
+  eventId: string;
+}) {
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <div className="flex items-center gap-1">
+      <CountryCombobox
+        compact
+        defaultValue={player.country_code}
+        onChange={async (code) => {
+          setSaving(true);
+          try {
+            await updateEventPlayerCountry(eventId, player.id, code);
+          } finally {
+            setSaving(false);
+          }
+        }}
+      />
+      {saving && (
+        <span className="size-3 animate-spin rounded-full border-2 border-text-muted border-t-transparent" />
+      )}
+    </div>
+  );
 }
 
 export function PlayersSection({
@@ -31,14 +64,21 @@ export function PlayersSection({
     <div>
       {!readOnly && (
         <div className="mb-4">
-          <form action={formAction} className="flex gap-2">
-            <input
-              name="name"
-              type="text"
-              required
-              placeholder="Nombre del jugador"
-              className="min-w-0 flex-1 rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted"
-            />
+          <form action={formAction} className="flex flex-wrap items-end gap-2">
+            <div className="flex-1 min-w-0">
+              <label className="mb-1 block text-xs font-medium text-text-secondary">Nombre</label>
+              <input
+                name="name"
+                type="text"
+                required
+                placeholder="Nombre del jugador"
+                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-text-secondary">País</label>
+              <CountryCombobox name="country_code" />
+            </div>
             <button
               type="submit"
               disabled={pending}
@@ -65,6 +105,7 @@ export function PlayersSection({
                 <th className="px-3 py-2 font-medium">#</th>
                 <th className="px-3 py-2 font-medium">Jugador</th>
                 <th className="px-3 py-2 font-medium">Seed</th>
+                <th className="px-3 py-2 font-medium">País</th>
                 <th className="px-3 py-2 font-medium">Agregado</th>
                 {!readOnly && <th className="w-14 px-3 py-2" />}
               </tr>
@@ -81,6 +122,9 @@ export function PlayersSection({
                   </td>
                   <td className="px-3 py-2 text-xs text-text-muted">
                     {player.seed ?? '—'}
+                  </td>
+                  <td className="px-3 py-2">
+                    <CountryCell player={player} eventId={eventId} />
                   </td>
                   <td className="px-3 py-2 text-xs text-text-muted">
                     {new Date(player.created_at).toLocaleDateString()}
