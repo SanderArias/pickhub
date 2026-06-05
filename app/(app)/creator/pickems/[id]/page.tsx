@@ -144,7 +144,7 @@ export default async function PickemDashboardPage({
         subtitle={isPublished ? 'Vista de solo lectura' : 'Configura los premios para los ganadores'}
         action={
           <span className="text-xs text-text-muted">
-            {hasPrizes ? `${event.prizes.length} de 2 configurados` : 'Opcional'}
+            {hasPrizes ? `${event.prizes.length} configurado${event.prizes.length !== 1 ? 's' : ''}` : 'Opcional'}
           </span>
         }
         accent={hasPrizes ? 'success' : 'warning'}

@@ -3,13 +3,6 @@
 import { useState, useActionState, useCallback } from 'react';
 import { upsertEventPrize, deleteEventPrize } from '@/app/actions/creator';
 
-const TIER_OPTIONS = [
-  { value: 'subscriber', label: 'Suscriptores' },
-  { value: 'nonsubscriber', label: 'No suscriptores' },
-];
-
-const MAX_PRIZES = 2;
-
 interface Prize {
   id: string;
   tier: string;
@@ -18,6 +11,198 @@ interface Prize {
   amount: number | null;
   currency: string | null;
   quantity: number;
+}
+
+function PrizePanel({
+  eventId,
+  tier,
+  tierLabel,
+  tierDescription,
+  prize,
+  readOnly,
+}: {
+  eventId: string;
+  tier: string;
+  tierLabel: string;
+  tierDescription: string;
+  prize: Prize | null;
+  readOnly: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [state, formAction, pending] = useActionState(
+    upsertEventPrize.bind(null, eventId),
+    { error: null as string | null },
+  );
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = useCallback(async () => {
+    if (!prize) return;
+    setDeleting(true);
+    const result = await deleteEventPrize(eventId, prize.id);
+    setDeleting(false);
+    if (result?.error) alert(result.error);
+  }, [eventId, prize]);
+
+  return (
+    <div className="rounded-lg border border-border bg-surface">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left"
+      >
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-text-primary">
+              {tierLabel}
+            </span>
+            {prize ? (
+              <span className="text-xs text-purple-primary">Configurado</span>
+            ) : (
+              <span className="text-xs text-text-muted">Sin configurar</span>
+            )}
+          </div>
+          {prize && (
+            <p className="mt-0.5 text-xs text-text-secondary">
+              {prize.label}
+              {prize.amount !== null && ` · ${prize.amount} ${prize.currency ?? 'USD'}`}
+              {` · ${prize.quantity} ganador${prize.quantity !== 1 ? 'es' : ''}`}
+            </p>
+          )}
+        </div>
+        <svg
+          className={`h-4 w-4 shrink-0 text-text-muted transition-transform ${expanded ? 'rotate-180' : ''}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-border px-4 py-3">
+          <p className="mb-3 text-xs text-text-secondary">{tierDescription}</p>
+
+          {readOnly && prize && (
+            <div className="mb-3 rounded-lg border border-border bg-surface-elevated px-3 py-2">
+              <p className="text-sm text-text-primary">{prize.label}</p>
+              {prize.description && (
+                <p className="text-xs text-text-secondary">{prize.description}</p>
+              )}
+              <p className="mt-0.5 text-xs text-text-muted">
+                {prize.amount !== null && `${prize.amount} ${prize.currency ?? 'USD'} · `}
+                {prize.quantity} ganador{prize.quantity !== 1 ? 'es' : ''}
+              </p>
+            </div>
+          )}
+
+          {!readOnly && (
+            <form action={formAction} className="flex flex-col gap-3">
+              <input type="hidden" name="tier" value={tier} />
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-secondary">
+                  Nombre del premio
+                </label>
+                <input
+                  name="label"
+                  type="text"
+                  required
+                  defaultValue={prize?.label ?? ''}
+                  placeholder="Ej. Gift card de $25"
+                  className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium text-text-secondary">
+                  Descripción <span className="text-text-muted">(opcional)</span>
+                </label>
+                <textarea
+                  name="description"
+                  rows={2}
+                  defaultValue={prize?.description ?? ''}
+                  placeholder="Ej. Canjeable por suscripción de 1 mes"
+                  className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-text-secondary">
+                    Cantidad
+                  </label>
+                  <input
+                    name="quantity"
+                    type="number"
+                    min={1}
+                    defaultValue={prize?.quantity ?? 1}
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text-primary focus:border-purple-primary focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-text-secondary">
+                    Monto <span className="text-text-muted">(opcional)</span>
+                  </label>
+                  <input
+                    name="amount"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    defaultValue={prize?.amount ?? ''}
+                    placeholder="25.00"
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-text-secondary">
+                    Moneda
+                  </label>
+                  <select
+                    name="currency"
+                    defaultValue={prize?.currency ?? 'USD'}
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text-primary focus:border-purple-primary focus:outline-none"
+                  >
+                    <option value="USD">USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="MXN">MXN</option>
+                    <option value="COP">COP</option>
+                    <option value="ARS">ARS</option>
+                    <option value="CLP">CLP</option>
+                    <option value="PEN">PEN</option>
+                  </select>
+                </div>
+              </div>
+
+              {state?.error && (
+                <p className="text-xs text-danger">{state.error}</p>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="self-start rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white disabled:opacity-50"
+                >
+                  {pending ? 'Guardando…' : prize ? 'Actualizar premio' : 'Guardar premio'}
+                </button>
+                {prize && (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="self-start rounded-lg px-4 py-2 text-sm font-medium text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
+                  >
+                    {deleting ? 'Eliminando…' : 'Eliminar premio'}
+                  </button>
+                )}
+              </div>
+            </form>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function PrizesSection({
@@ -29,227 +214,42 @@ export function PrizesSection({
   prizes: Prize[];
   readOnly?: boolean;
 }) {
-  const [showForm, setShowForm] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [state, formAction, pending] = useActionState(
-    upsertEventPrize.bind(null, eventId),
-    { error: null as string | null },
-  );
-
-  const occupiedTiers = new Set(prizes.map((p) => p.tier));
-  const atLimit = prizes.length >= MAX_PRIZES;
-
-  const handleDelete = useCallback(async (prizeId: string) => {
-    setDeletingId(prizeId);
-    const result = await deleteEventPrize(eventId, prizeId);
-    setDeletingId(null);
-    if (result?.error) alert(result.error);
-  }, [eventId]);
-
-  if (prizes.length === 0 && !showForm) {
-    return (
-      <div>
-        <p className="text-xs text-text-secondary">
-          Los premios son opcionales y se pueden configurar en cualquier momento.
-        </p>
-        {!atLimit && !readOnly && (
-          <div className="mt-3">
-            <button
-              onClick={() => setShowForm(true)}
-              className="rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
-            >
-              Agregar premio
-            </button>
-          </div>
-        )}
-      </div>
-    );
-  }
+  const subscriberPrize = prizes.find((p) => p.tier === 'subscriber') ?? null;
+  const nonsubscriberPrize = prizes.find((p) => p.tier === 'nonsubscriber') ?? null;
+  const count = prizes.length;
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs text-text-muted">
-          {prizes.length} de {MAX_PRIZES} configurados
-        </span>
+      <p className="mb-3 text-xs text-text-secondary">
+        Configura premios opcionales para incentivar la participación.
+      </p>
+
+      <p className="mb-4 text-xs text-text-muted">
+        {count === 0
+          ? 'Sin premios configurados'
+          : count === 1
+            ? '1 premio configurado'
+            : 'Premios configurados'}
+      </p>
+
+      <div className="flex flex-col gap-3">
+        <PrizePanel
+          eventId={eventId}
+          tier="subscriber"
+          tierLabel="Premio para suscriptores"
+          tierDescription="Incentivo exclusivo para tus suscriptores de Twitch."
+          prize={subscriberPrize}
+          readOnly={readOnly}
+        />
+        <PrizePanel
+          eventId={eventId}
+          tier="nonsubscriber"
+          tierLabel="Premio para no suscriptores"
+          tierDescription="Premio abierto a todos los participantes."
+          prize={nonsubscriberPrize}
+          readOnly={readOnly}
+        />
       </div>
-
-      {prizes.length > 0 && (
-        <div className="mb-4 flex flex-col gap-2">
-          {prizes.map((prize) => (
-            <div
-              key={prize.id}
-              className="rounded-lg border border-border bg-surface p-3"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium text-text-primary">{prize.label}</span>
-                    <span className="rounded bg-surface-hover px-1.5 py-0.5 text-xs text-text-muted">
-                      {TIER_OPTIONS.find((t) => t.value === prize.tier)?.label ?? prize.tier}
-                    </span>
-                  </div>
-                  {prize.description && (
-                    <p className="mt-0.5 text-xs text-text-secondary">{prize.description}</p>
-                  )}
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-muted">
-                    {prize.amount !== null && (
-                      <span>{prize.amount} {prize.currency ?? 'USD'}</span>
-                    )}
-                    <span>{prize.quantity} ganador{prize.quantity !== 1 ? 'es' : ''}</span>
-                  </div>
-                </div>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(prize.id)}
-                    disabled={deletingId === prize.id}
-                    className="shrink-0 rounded px-2 py-0.5 text-xs text-danger transition-colors hover:bg-danger/10 disabled:opacity-50"
-                  >
-                    {deletingId === prize.id ? '…' : 'Eliminar'}
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!readOnly && (atLimit && !showForm ? (
-        <p className="text-sm text-text-primary">
-          Límite alcanzado: este Pick&apos;em puede tener hasta {MAX_PRIZES} premios (uno por tipo).
-        </p>
-      ) : showForm ? (
-        <form action={formAction} className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-                Tipo de premio
-              </label>
-              <select
-                name="tier"
-                defaultValue={
-                  prizes.length === 0
-                    ? 'subscriber'
-                    : TIER_OPTIONS.find((t) => !occupiedTiers.has(t.value))?.value ?? 'subscriber'
-                }
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
-              >
-                {TIER_OPTIONS.map((t) => (
-                  <option
-                    key={t.value}
-                    value={t.value}
-                    disabled={occupiedTiers.has(t.value)}
-                  >
-                    {t.label}{occupiedTiers.has(t.value) ? ' (ya configurado)' : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-                Cantidad de ganadores
-              </label>
-              <input
-                name="quantity"
-                type="number"
-                min={1}
-                defaultValue={1}
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-              Nombre del premio
-            </label>
-            <input
-              name="label"
-              type="text"
-              required
-              placeholder="Ej. Gift card de $10"
-              className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-              Descripción <span className="text-text-muted">(opcional)</span>
-            </label>
-            <textarea
-              name="description"
-              rows={2}
-              placeholder="Ej. Canjeable por suscripción de 1 mes"
-              className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-                Monto <span className="text-text-muted">(opcional)</span>
-              </label>
-              <input
-                name="amount"
-                type="number"
-                step="0.01"
-                min={0}
-                placeholder="10.00"
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-                Moneda
-              </label>
-              <select
-                name="currency"
-                defaultValue="USD"
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
-              >
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="MXN">MXN</option>
-                <option value="COP">COP</option>
-                <option value="ARS">ARS</option>
-                <option value="CLP">CLP</option>
-                <option value="PEN">PEN</option>
-              </select>
-            </div>
-          </div>
-
-          {state?.error && (
-            <p className="text-sm text-danger">{state.error}</p>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              disabled={pending}
-              className="rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white disabled:opacity-50"
-            >
-              {pending ? 'Guardando…' : 'Guardar premio'}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowForm(false)}
-              className="rounded-lg bg-surface px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-hover"
-            >
-              Cancelar
-            </button>
-          </div>
-        </form>
-      ) : (
-        <button
-          onClick={() => setShowForm(true)}
-          className="rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
-        >
-          Agregar premio
-        </button>
-      ))}
     </div>
   );
 }

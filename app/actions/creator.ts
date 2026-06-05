@@ -100,10 +100,19 @@ export async function getCreatorPickemById(id: string) {
 
   if (!event) return null;
 
-  const { data: prizes } = await supabase
+  const { data: prizes, error: prizesError } = await supabase
     .from('event_prizes')
     .select('*')
-    .eq('event_id', id);
+    .eq('event_id', id)
+    .order('tier', { ascending: true });
+
+  console.log('[getCreatorPickemById] Prizes query', {
+    eventId: id,
+    creatorId,
+    prizesCount: prizes?.length ?? 0,
+    prizes,
+    prizesError: prizesError ? { message: prizesError.message, code: prizesError.code, details: prizesError.details } : null,
+  });
 
   const { data: players } = await supabase
     .from('event_players')
@@ -576,7 +585,12 @@ export async function upsertEventPrize(eventId: string, _prev: unknown, formData
 
   if (!event) return { error: 'Evento no encontrado.' };
 
-  const tier = formData.get('tier') as string;
+  const rawTier = formData.get('tier') as string;
+  const tier = (
+    rawTier === 'subscribers' || rawTier === 'Suscriptores' ? 'subscriber' :
+    rawTier === 'non_subscribers' || rawTier === 'No suscriptores' ? 'nonsubscriber' :
+    rawTier
+  );
   if (!['subscriber', 'nonsubscriber'].includes(tier)) return { error: 'Tipo de premio inválido.' };
 
   const label = (formData.get('label') as string)?.trim();
@@ -594,46 +608,17 @@ export async function upsertEventPrize(eventId: string, _prev: unknown, formData
   const quantity = parseInt(quantityRaw, 10);
   if (isNaN(quantity) || quantity < 1) return { error: 'La cantidad debe ser al menos 1.' };
 
-  console.log('[Prize] Input values', { eventId, tier, label, amount, currency, quantity });
+  const { error: rpcErr } = await supabase.rpc('upsert_event_prize', {
+    p_event_id: eventId,
+    p_tier: tier,
+    p_label: label,
+    p_description: description,
+    p_amount: amount,
+    p_currency: currency,
+    p_quantity: quantity,
+  });
 
-  console.log('[Prize] Searching existing prize', { eventId, tier });
-
-  const { data: existing, error: searchErr } = await supabase
-    .from('event_prizes')
-    .select('id')
-    .eq('event_id', eventId)
-    .eq('tier', tier)
-    .maybeSingle();
-
-  console.log('[Prize] Existing prize result', existing, 'error', searchErr);
-
-  const { data: allPrizes } = await supabase
-    .from('event_prizes')
-    .select('id, event_id, tier, label')
-    .eq('event_id', eventId);
-
-  console.log('[Prize] All prizes for event', allPrizes);
-
-  if (existing) {
-    const { error: uErr } = await supabase
-      .from('event_prizes')
-      .update({
-        label,
-        description,
-        amount,
-        currency,
-        quantity,
-      })
-      .eq('id', existing.id);
-
-    if (uErr) return { error: `Error al actualizar premio: ${uErr.message}` };
-  } else {
-    const { error: iErr } = await supabase
-      .from('event_prizes')
-      .insert(payload);
-
-    if (iErr) return { error: `Error al crear premio: ${iErr.message}` };
-  }
+  if (rpcErr) return { error: `Error al guardar premio: ${rpcErr.message}` };
 
   revalidatePath(`/creator/pickems/${eventId}`);
   return { error: null };
