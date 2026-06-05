@@ -62,6 +62,62 @@ export async function createCreatorProfile(formData: FormData) {
   redirect('/inicio');
 }
 
+export async function requestCreatorAccess(): Promise<{ error: string | null }> {
+  const user = await getUser();
+  if (!user) return { error: 'Debes iniciar sesión.' };
+
+  const supabase = await createServerClient();
+
+  const { data: existing } = await supabase
+    .from('creator_profiles')
+    .select('id, status')
+    .eq('profile_id', user.id)
+    .maybeSingle();
+
+  if (existing && existing.status !== 'reopened') {
+    return { error: 'Ya tienes una solicitud de acceso.' };
+  }
+
+  if (existing && existing.status === 'reopened') {
+    const { error: updateErr } = await supabase
+      .from('creator_profiles')
+      .update({ status: 'pending' })
+      .eq('id', existing.id);
+
+    if (updateErr) return { error: `Error al reactivar solicitud: ${updateErr.message}` };
+
+    revalidatePath('/inicio');
+    return { error: null };
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('display_name')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const base = (profile?.display_name || user.email?.split('@')[0] || 'creador')
+    .toLowerCase()
+    .replace(/[^\w]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+    .slice(0, 20);
+
+  const suffix = Math.random().toString(36).slice(2, 6);
+  const handle = `${base}_${suffix}`;
+
+  const { error: rpcError } = await supabase.rpc('create_creator_profile', {
+    p_profile_id: user.id,
+    p_handle: handle,
+    p_bio: null,
+  });
+
+  if (rpcError) return { error: `Error al solicitar acceso: ${rpcError.message}` };
+
+  revalidatePath('/inicio');
+  return { error: null };
+}
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -114,6 +170,12 @@ export async function getCreatorPickemById(id: string) {
     prizesError: prizesError ? { message: prizesError.message, code: prizesError.code, details: prizesError.details } : null,
   });
 
+  const { data: creatorProfile } = await supabase
+    .from('creator_profiles')
+    .select('handle, display_name, avatar_url')
+    .eq('id', creatorId)
+    .maybeSingle();
+
   const { data: players } = await supabase
     .from('event_players')
     .select('*')
@@ -123,7 +185,7 @@ export async function getCreatorPickemById(id: string) {
 
   const { data: questions } = await supabase
     .from('prediction_questions')
-    .select('id, title, description, question_type, pick_type, max_selections, points_per_correct, sort_order, is_active, created_at')
+    .select('id, title, description, question_type, pick_type, max_selections, points_per_correct, sort_order, is_active, created_at, template_type, config')
     .eq('event_id', id)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
@@ -150,7 +212,7 @@ export async function getCreatorPickemById(id: string) {
     }));
   }
 
-  return { ...event, prizes: prizes ?? [], players: players ?? [], predictions };
+  return { ...event, creator: creatorProfile ?? null, prizes: prizes ?? [], players: players ?? [], predictions };
 }
 
 export async function createPickem(formData: FormData) {
@@ -228,33 +290,54 @@ export async function createPredictionQuestion(eventId: string, _prev: unknown, 
   if (!title) return { error: 'El título de la predicción es obligatorio.' };
 
   const description = (formData.get('description') as string)?.trim() || null;
-  const questionType = formData.get('question_type') as string;
-  const pickType = formData.get('pick_type') as string;
+  const templateType = formData.get('template_type') as string;
 
-  if (!['single', 'multiple'].includes(questionType)) {
-    return { error: 'Tipo de pregunta inválido.' };
-  }
+  let questionType: string;
+  let pickType: string;
+  let maxSelections: number;
+  let pointsPerCorrect: number;
+  let config: Record<string, unknown> = {};
 
-  if (!['player', 'custom'].includes(pickType)) {
-    return { error: 'Tipo de selección inválido.' };
-  }
+  if (templateType === 'top8_ordered') {
+    if (description === null) {
+      return { error: 'La descripción es obligatoria para la plantilla Top 8 ordenado.' };
+    }
+    questionType = 'ranking';
+    pickType = 'player';
+    maxSelections = 8;
+    pointsPerCorrect = 1;
+    config = { template: 'top8_ordered', positions: 8 };
+  } else {
+    const rawQuestionType = formData.get('question_type') as string;
+    const rawPickType = formData.get('pick_type') as string;
 
-  const maxSelections = parseInt(formData.get('max_selections') as string, 10);
-  if (isNaN(maxSelections) || maxSelections < 1) {
-    return { error: 'El número máximo de selecciones debe ser al menos 1.' };
-  }
+    if (!['single', 'multiple'].includes(rawQuestionType)) {
+      return { error: 'Tipo de pregunta inválido.' };
+    }
+    if (!['player', 'custom'].includes(rawPickType)) {
+      return { error: 'Tipo de selección inválido.' };
+    }
 
-  if (questionType === 'single' && maxSelections !== 1) {
-    return { error: 'Para preguntas de tipo single, max_selections debe ser 1.' };
-  }
+    questionType = rawQuestionType;
+    pickType = rawPickType;
 
-  if (questionType === 'multiple' && maxSelections < 2) {
-    return { error: 'Para preguntas de tipo multiple, max_selections debe ser mayor a 1.' };
-  }
+    const rawMax = parseInt(formData.get('max_selections') as string, 10);
+    if (isNaN(rawMax) || rawMax < 1) {
+      return { error: 'El número máximo de selecciones debe ser al menos 1.' };
+    }
+    if (questionType === 'single' && rawMax !== 1) {
+      return { error: 'Para preguntas de tipo single, max_selections debe ser 1.' };
+    }
+    if (questionType === 'multiple' && rawMax < 2) {
+      return { error: 'Para preguntas de tipo multiple, max_selections debe ser mayor a 1.' };
+    }
+    maxSelections = rawMax;
 
-  const pointsPerCorrect = parseInt(formData.get('points_per_correct') as string, 10);
-  if (isNaN(pointsPerCorrect) || pointsPerCorrect < 1) {
-    return { error: 'Los puntos por acierto deben ser al menos 1.' };
+    const rawPts = parseInt(formData.get('points_per_correct') as string, 10);
+    if (isNaN(rawPts) || rawPts < 1) {
+      return { error: 'Los puntos por acierto deben ser al menos 1.' };
+    }
+    pointsPerCorrect = rawPts;
   }
 
   const { data: question, error: qErr } = await supabase
@@ -267,6 +350,8 @@ export async function createPredictionQuestion(eventId: string, _prev: unknown, 
       pick_type: pickType,
       max_selections: maxSelections,
       points_per_correct: pointsPerCorrect,
+      template_type: templateType || null,
+      config,
     })
     .select('id')
     .single();
@@ -285,6 +370,11 @@ export async function createPredictionQuestion(eventId: string, _prev: unknown, 
     if (!activePlayers || activePlayers.length === 0) {
       await supabase.from('prediction_questions').delete().eq('id', question.id);
       return { error: 'Debe existir al menos un jugador activo en el evento.' };
+    }
+
+    if (templateType === 'top8_ordered' && activePlayers.length < 8) {
+      await supabase.from('prediction_questions').delete().eq('id', question.id);
+      return { error: 'El Top 8 ordenado necesita al menos 8 jugadores activos en el evento.' };
     }
 
     options = activePlayers.map((p) => ({
@@ -437,7 +527,7 @@ export async function updatePredictionQuestion(questionId: string, eventId: stri
 
   const { data: question } = await supabase
     .from('prediction_questions')
-    .select('id, pick_type')
+    .select('id, pick_type, template_type')
     .eq('id', questionId)
     .eq('event_id', eventId)
     .single();
@@ -448,19 +538,37 @@ export async function updatePredictionQuestion(questionId: string, eventId: stri
   if (!title) return { error: 'El título de la predicción es obligatorio.' };
 
   const description = (formData.get('description') as string)?.trim() || null;
-  const questionType = formData.get('question_type') as string;
-  const pickType = formData.get('pick_type') as string;
 
-  if (!['single', 'multiple'].includes(questionType)) return { error: 'Tipo de pregunta inválido.' };
-  if (!['player', 'custom'].includes(pickType)) return { error: 'Tipo de selección inválido.' };
+  let questionType: string;
+  let pickType: string;
+  let maxSelections: number;
+  let pointsPerCorrect: number;
 
-  const maxSelections = parseInt(formData.get('max_selections') as string, 10);
-  if (isNaN(maxSelections) || maxSelections < 1) return { error: 'El número máximo de selecciones debe ser al menos 1.' };
-  if (questionType === 'single' && maxSelections !== 1) return { error: 'Para preguntas de tipo single, max_selections debe ser 1.' };
-  if (questionType === 'multiple' && maxSelections < 2) return { error: 'Para preguntas de tipo multiple, max_selections debe ser mayor a 1.' };
+  if (question.template_type === 'top8_ordered') {
+    questionType = 'ranking';
+    pickType = 'player';
+    maxSelections = 8;
+    pointsPerCorrect = 1;
+  } else {
+    const rawQuestionType = formData.get('question_type') as string;
+    const rawPickType = formData.get('pick_type') as string;
 
-  const pointsPerCorrect = parseInt(formData.get('points_per_correct') as string, 10);
-  if (isNaN(pointsPerCorrect) || pointsPerCorrect < 1) return { error: 'Los puntos por acierto deben ser al menos 1.' };
+    if (!['single', 'multiple'].includes(rawQuestionType)) return { error: 'Tipo de pregunta inválido.' };
+    if (!['player', 'custom'].includes(rawPickType)) return { error: 'Tipo de selección inválido.' };
+
+    questionType = rawQuestionType;
+    pickType = rawPickType;
+
+    const rawMax = parseInt(formData.get('max_selections') as string, 10);
+    if (isNaN(rawMax) || rawMax < 1) return { error: 'El número máximo de selecciones debe ser al menos 1.' };
+    if (questionType === 'single' && rawMax !== 1) return { error: 'Para preguntas de tipo single, max_selections debe ser 1.' };
+    if (questionType === 'multiple' && rawMax < 2) return { error: 'Para preguntas de tipo multiple, max_selections debe ser mayor a 1.' };
+    maxSelections = rawMax;
+
+    const rawPts = parseInt(formData.get('points_per_correct') as string, 10);
+    if (isNaN(rawPts) || rawPts < 1) return { error: 'Los puntos por acierto deben ser al menos 1.' };
+    pointsPerCorrect = rawPts;
+  }
 
   const { error: uErr } = await supabase
     .from('prediction_questions')
@@ -705,10 +813,37 @@ export async function publishPickem(eventId: string): Promise<{ error: string | 
 
   const { error: updateErr } = await supabase
     .from('events')
-    .update({ status: 'published' })
+    .update({ status: 'open' })
     .eq('id', eventId);
 
   if (updateErr) return { error: `Error al publicar: ${updateErr.message}` };
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function closePredictions(eventId: string): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id, status')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+  if (event.status !== 'open') return { error: 'Solo se pueden cerrar predicciones de un Pick\'em abierto.' };
+
+  const { error: updateErr } = await supabase
+    .from('events')
+    .update({ status: 'predictions_closed' })
+    .eq('id', eventId);
+
+  if (updateErr) return { error: `Error al cerrar predicciones: ${updateErr.message}` };
 
   revalidatePath(`/creator/pickems/${eventId}`);
   return { error: null };

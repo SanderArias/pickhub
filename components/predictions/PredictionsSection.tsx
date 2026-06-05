@@ -24,6 +24,8 @@ interface Prediction {
   sort_order: number;
   is_active: boolean;
   created_at: string;
+  template_type: string | null;
+  config: Record<string, unknown>;
   options: Option[];
 }
 
@@ -40,6 +42,7 @@ export function PredictionsSection({
   const [pickType, setPickType] = useState('player');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Prediction | null>(null);
+  const [templateMode, setTemplateMode] = useState<'template' | 'custom'>('custom');
 
   const [state, formAction, pending] = useActionState(
     async (prev: { error: string | null }, formData: FormData) => {
@@ -55,12 +58,14 @@ export function PredictionsSection({
   const handleEdit = useCallback((q: Prediction) => {
     setEditing(q);
     setPickType(q.pick_type);
+    setTemplateMode(q.template_type ? 'template' : 'custom');
     setShowForm(true);
   }, []);
 
   const handleCancelEdit = useCallback(() => {
     setEditing(null);
     setShowForm(false);
+    setTemplateMode('custom');
   }, []);
 
   const handleDelete = useCallback(async (questionId: string) => {
@@ -70,6 +75,13 @@ export function PredictionsSection({
     if (result?.error) {
       alert(result.error);
     }
+  }, []);
+
+  const handleStartCreate = useCallback(() => {
+    setEditing(null);
+    setTemplateMode('custom');
+    setPickType('player');
+    setShowForm(true);
   }, []);
 
   const count = predictions.length;
@@ -90,7 +102,7 @@ export function PredictionsSection({
 
         {!atLimit && !readOnly && (
           <button
-            onClick={() => setShowForm(true)}
+            onClick={handleStartCreate}
             className="rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
           >
             Crear predicción
@@ -148,10 +160,16 @@ export function PredictionsSection({
               )}
             </div>
             <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-muted">
-              <span>Tipo: {q.question_type === 'single' ? 'Única' : 'Múltiple'}</span>
-              <span>Selección: {q.pick_type === 'player' ? 'Jugadores' : 'Personalizada'}</span>
-              <span>Max: {q.max_selections}</span>
-              <span>Puntos: {q.points_per_correct}</span>
+              {q.template_type === 'top8_ordered' ? (
+                <span>Plantilla: Top 8 ordenado</span>
+              ) : (
+                <>
+                  <span>Tipo: {q.question_type === 'single' ? 'Única' : 'Múltiple'}</span>
+                  <span>Selección: {q.pick_type === 'player' ? 'Jugadores' : 'Personalizada'}</span>
+                  <span>Max: {q.max_selections}</span>
+                  <span>Puntos: {q.points_per_correct}</span>
+                </>
+              )}
               <span>Opciones: {q.options.length}</span>
             </div>
           </div>
@@ -169,6 +187,43 @@ export function PredictionsSection({
           className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-4"
         >
           <input type="hidden" name="_editing_id" value={editing?.id ?? ''} />
+
+          {/* Template type selector (only for new predictions) */}
+          {!editing && (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-text-secondary">
+                Tipo de predicción
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setTemplateMode('custom')}
+                  className={`flex-1 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                    templateMode === 'custom'
+                      ? 'border-purple-primary bg-purple-surface text-purple-primary'
+                      : 'border-border text-text-secondary hover:border-border-hover'
+                  }`}
+                >
+                  Predicción personalizada
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTemplateMode('template')}
+                  className={`flex-1 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                    templateMode === 'template'
+                      ? 'border-purple-primary bg-purple-surface text-purple-primary'
+                      : 'border-border text-text-secondary hover:border-border-hover'
+                  }`}
+                >
+                  Plantilla PickHub
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Hidden field for template_type */}
+          <input type="hidden" name="template_type" value={templateMode === 'template' ? 'top8_ordered' : ''} />
+
           <div>
             <label className="mb-1.5 block text-sm font-medium text-text-secondary">
               Título de la predicción
@@ -177,8 +232,8 @@ export function PredictionsSection({
               name="title"
               type="text"
               required
-              defaultValue={editing?.title ?? ''}
-              placeholder="Ej. ¿Quién ganará la final?"
+              defaultValue={editing?.title ?? (templateMode === 'template' ? 'Predice el Top 8' : '')}
+              placeholder={templateMode === 'template' ? 'Predice el Top 8' : 'Ej. ¿Quién ganará la final?'}
               className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
             />
           </div>
@@ -190,91 +245,119 @@ export function PredictionsSection({
             <textarea
               name="description"
               rows={2}
-              defaultValue={editing?.description ?? ''}
-              placeholder="Contexto adicional para la predicción…"
+              required={templateMode === 'template'}
+              defaultValue={editing?.description ?? (templateMode === 'template' ? 'Ordena los jugadores del puesto 1 al 8.' : '')}
+              placeholder={templateMode === 'template' ? 'Ordena los jugadores del puesto 1 al 8.' : 'Contexto adicional para la predicción…'}
               className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-                Tipo de respuesta
-              </label>
-              <select
-                name="question_type"
-                defaultValue={editing?.question_type ?? 'single'}
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
-              >
-                <option value="single">Única opción</option>
-                <option value="multiple">Múltiples opciones</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-                Origen de opciones
-              </label>
-              <select
-                name="pick_type"
-                value={pickType}
-                onChange={(e) => setPickType(e.target.value)}
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
-              >
-                <option value="player">Jugadores del evento</option>
-                <option value="custom">Personalizadas</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-                Selecciones máximas
-              </label>
-              <input
-                name="max_selections"
-                type="number"
-                min={1}
-                defaultValue={editing?.max_selections ?? 1}
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
-              />
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-                Puntos por acierto
-              </label>
-              <input
-                name="points_per_correct"
-                type="number"
-                min={1}
-                defaultValue={editing?.points_per_correct ?? 1}
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
-              />
-            </div>
-          </div>
-
-          {pickType === 'custom' && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-text-secondary">
-                Opciones personalizadas
-              </label>
-              <textarea
-                name="custom_options"
-                rows={4}
-                defaultValue={
-                  editing?.pick_type === 'custom'
-                    ? editing.options.map((o) => o.label).join('\n')
-                    : ''
-                }
-                placeholder="Una opción por línea&#10;Ej:&#10;Opción A&#10;Opción B&#10;Opción C"
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
-              />
-              <p className="mt-1 text-xs text-text-muted">
-                Escribe una opción por línea. Mínimo 2 opciones.
+          {/* Template card preview */}
+          {templateMode === 'template' && (
+            <div className="rounded-lg border border-purple-border bg-purple-surface/30 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="rounded-md bg-purple-primary/20 px-2 py-0.5 text-xs font-medium text-purple-primary">
+                  Plantilla
+                </span>
+                <span className="text-sm font-medium text-text-primary">Top 8 ordenado</span>
+              </div>
+              <p className="text-xs text-text-secondary">
+                Los participantes ordenan 8 jugadores del puesto 1 al 8. El sistema calcula automáticamente el porcentaje de aciertos comparando posición exacta.
               </p>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs text-text-muted">
+                <span>8 posiciones</span>
+                <span>·</span>
+                <span>Scoring: acierto por posición exacta</span>
+                <span>·</span>
+                <span>Máx. 8 puntos</span>
+              </div>
             </div>
+          )}
+
+          {/* Custom prediction fields */}
+          {templateMode === 'custom' && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">
+                    Tipo de respuesta
+                  </label>
+                  <select
+                    name="question_type"
+                    defaultValue={editing?.question_type ?? 'single'}
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
+                  >
+                    <option value="single">Única opción</option>
+                    <option value="multiple">Múltiples opciones</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">
+                    Origen de opciones
+                  </label>
+                  <select
+                    name="pick_type"
+                    value={pickType}
+                    onChange={(e) => setPickType(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
+                  >
+                    <option value="player">Jugadores del evento</option>
+                    <option value="custom">Personalizadas</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">
+                    Selecciones máximas
+                  </label>
+                  <input
+                    name="max_selections"
+                    type="number"
+                    min={1}
+                    defaultValue={editing?.max_selections ?? 1}
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">
+                    Puntos por acierto
+                  </label>
+                  <input
+                    name="points_per_correct"
+                    type="number"
+                    min={1}
+                    defaultValue={editing?.points_per_correct ?? 1}
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary"
+                  />
+                </div>
+              </div>
+
+              {pickType === 'custom' && (
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-text-secondary">
+                    Opciones personalizadas
+                  </label>
+                  <textarea
+                    name="custom_options"
+                    rows={4}
+                    defaultValue={
+                      editing?.pick_type === 'custom'
+                        ? editing.options.map((o) => o.label).join('\n')
+                        : ''
+                    }
+                    placeholder="Una opción por línea&#10;Ej:&#10;Opción A&#10;Opción B&#10;Opción C"
+                    className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
+                  />
+                  <p className="mt-1 text-xs text-text-muted">
+                    Escribe una opción por línea. Mínimo 2 opciones.
+                  </p>
+                </div>
+              )}
+            </>
           )}
 
           {state?.error && (
@@ -293,7 +376,7 @@ export function PredictionsSection({
             </button>
             <button
               type="button"
-              onClick={editing ? handleCancelEdit : () => setShowForm(false)}
+              onClick={editing ? handleCancelEdit : () => { setShowForm(false); setTemplateMode('custom'); }}
               className="rounded-lg bg-surface px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-hover"
             >
               Cancelar
@@ -302,7 +385,7 @@ export function PredictionsSection({
         </form>
       ) : !readOnly ? (
         <button
-          onClick={() => setShowForm(true)}
+          onClick={handleStartCreate}
           className="rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
         >
           Crear predicción

@@ -1,78 +1,6 @@
 import { createServerClient } from '@/services/supabase';
 import { requireAdmin } from '@/lib/auth';
-import { approveCreator, rejectCreator, suspendCreator } from '@/app/actions/admin';
-
-const STATUS_COLORS: Record<string, string> = {
-  pending: 'text-warning',
-  approved: 'text-success',
-  rejected: 'text-danger',
-  suspended: 'text-orange-400',
-};
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Pendiente',
-  approved: 'Aprobado',
-  rejected: 'Rechazado',
-  suspended: 'Suspendido',
-};
-
-function CreatorRow({
-  creator,
-}: {
-  creator: {
-    id: string;
-    profile_id: string;
-    handle: string;
-    status: string;
-    created_at: string;
-    display_name: string | null;
-  };
-}) {
-  return (
-    <tr className="border-b border-border text-sm">
-      <td className="px-4 py-3 font-mono text-text-primary">{creator.handle}</td>
-      <td className="px-4 py-3 text-text-secondary">{creator.display_name ?? '—'}</td>
-      <td className={`px-4 py-3 font-medium ${STATUS_COLORS[creator.status] ?? ''}`}>
-        {STATUS_LABELS[creator.status] ?? creator.status}
-      </td>
-      <td className="px-4 py-3 text-text-muted">
-        {new Date(creator.created_at).toLocaleDateString()}
-      </td>
-      <td className="flex gap-2 px-4 py-3">
-        {creator.status !== 'approved' && (
-          <form action={approveCreator.bind(null, creator.profile_id)}>
-            <button
-              type="submit"
-              className="rounded-lg bg-surface px-3 py-1 text-xs font-medium text-success transition-colors hover:bg-surface-hover"
-            >
-              Aprobar
-            </button>
-          </form>
-        )}
-        {creator.status !== 'rejected' && (
-          <form action={rejectCreator.bind(null, creator.profile_id)}>
-            <button
-              type="submit"
-              className="rounded-lg bg-surface px-3 py-1 text-xs font-medium text-danger transition-colors hover:bg-surface-hover"
-            >
-              Rechazar
-            </button>
-          </form>
-        )}
-        {creator.status !== 'suspended' && (
-          <form action={suspendCreator.bind(null, creator.profile_id)}>
-            <button
-              type="submit"
-              className="rounded-lg bg-surface px-3 py-1 text-xs font-medium text-warning transition-colors hover:bg-surface-hover"
-            >
-              Suspender
-            </button>
-          </form>
-        )}
-      </td>
-    </tr>
-  );
-}
+import { AdminCreatorRow } from './AdminCreatorRow';
 
 export default async function AdminPage() {
   await requireAdmin();
@@ -111,32 +39,24 @@ export default async function AdminPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs font-medium tracking-wider text-text-muted">
-            Usuarios
-          </p>
+          <p className="text-xs font-medium tracking-wider text-text-muted">Usuarios</p>
           <p className="mt-1 text-2xl font-bold text-text-primary">{totalUsers ?? 0}</p>
         </div>
         <div className="rounded-lg border border-border bg-surface p-4">
-          <p className="text-xs font-medium tracking-wider text-text-muted">
-            Creadores
-          </p>
+          <p className="text-xs font-medium tracking-wider text-text-muted">Creadores</p>
           <p className="mt-1 text-2xl font-bold text-text-primary">{totalCreators ?? 0}</p>
         </div>
         <div className="rounded-lg border border-warning-border bg-surface p-4">
-          <p className="text-xs font-medium tracking-wider text-text-muted">
-            Pendientes
-          </p>
+          <p className="text-xs font-medium tracking-wider text-text-muted">Pendientes</p>
           <p className="mt-1 text-2xl font-bold text-warning">{pendingCreators ?? 0}</p>
         </div>
         <div className="rounded-lg border border-purple-border bg-surface p-4">
-          <p className="text-xs font-medium tracking-wider text-text-muted">
-            Aprobados
-          </p>
+          <p className="text-xs font-medium tracking-wider text-text-muted">Aprobados</p>
           <p className="mt-1 text-2xl font-bold text-purple-primary">{approvedCreators ?? 0}</p>
         </div>
       </div>
 
-      <div className="rounded-lg border border-border bg-surface">
+      <div className="overflow-x-auto rounded-lg border border-border bg-surface">
         <table className="w-full text-left">
           <thead>
             <tr className="border-b border-border bg-surface-elevated text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -148,14 +68,30 @@ export default async function AdminPage() {
             </tr>
           </thead>
           <tbody>
-            {creators?.length === 0 && (
+            {!creators || creators.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-sm text-text-muted">
                   No hay creadores registrados.
                 </td>
               </tr>
+            ) : (
+              creators.map((c) => {
+                const profile = Array.isArray(c.profile) ? c.profile[0] : c.profile;
+                return (
+                  <AdminCreatorRow
+                    key={c.id}
+                    creator={{
+                      id: c.id,
+                      profile_id: c.profile_id,
+                      handle: c.handle,
+                      status: c.status,
+                      created_at: c.created_at,
+                      display_name: profile?.display_name ?? null,
+                    }}
+                  />
+                );
+              })
             )}
-            {creators?.map((c) => <CreatorRow key={c.id} creator={c as unknown as { id: string; profile_id: string; handle: string; status: string; created_at: string; display_name: string | null }} />)}
           </tbody>
         </table>
       </div>

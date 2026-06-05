@@ -7,6 +7,7 @@ import { useUser } from '@/hooks/useUser';
 import { createClient as createBrowserClient } from '@/services/supabase/client';
 import { signOut } from '@/app/actions/auth';
 import { Logo } from '@/components/ui/Logo';
+import { CreatorWelcomeModal } from '@/components/pickem/CreatorWelcomeModal';
 
 interface NavItem {
   label: string;
@@ -93,6 +94,25 @@ export function Sidebar({ children }: { children: React.ReactNode }) {
 
     const isCreator = profile.role === 'creator' && profile.creator_status === 'approved';
     const isAdmin = profile.role === 'admin';
+    const isUser = profile.role === 'user';
+
+    if (isUser) {
+      groups.push({
+        label: "Pick'ems",
+        items: [
+          { label: 'Mis participaciones', href: '/participaciones' },
+          { label: 'Explorar', href: '#', placeholder: true },
+        ],
+      });
+
+      groups.push({
+        label: 'Configuración',
+        items: [
+          { label: 'Perfil', href: '#', placeholder: true },
+          { label: 'Cuenta', href: '#', placeholder: true },
+        ],
+      });
+    }
 
     if (isCreator) {
       groups.push({
@@ -185,6 +205,7 @@ export function Sidebar({ children }: { children: React.ReactNode }) {
       <div className="md:ml-60 flex min-h-screen flex-col bg-bg">
         <main className="mx-auto w-full max-w-5xl px-8 py-10">{children}</main>
       </div>
+      <CreatorWelcomeModal />
     </>
   );
 }

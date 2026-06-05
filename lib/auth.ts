@@ -7,7 +7,8 @@ export type CreatorProfile = {
   profile_id: string;
   handle: string;
   bio: string | null;
-  status: 'pending' | 'approved' | 'rejected' | 'suspended';
+  status: 'pending' | 'approved' | 'rejected' | 'suspended' | 'reopened';
+  reason: string | null;
   created_at: string;
   updated_at: string;
 };

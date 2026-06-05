@@ -1,0 +1,326 @@
+'use server';
+
+import { createServerClient } from '@/services/supabase';
+import { requireCreator } from '@/lib/auth';
+import { revalidatePath } from 'next/cache';
+
+export async function getEventResults(eventId: string) {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) throw new Error('Evento no encontrado.');
+
+  const { data: results } = await supabase
+    .from('prediction_results')
+    .select('id, question_id, option_id, is_correct, position')
+    .eq('event_id', eventId);
+
+  return results ?? [];
+}
+
+export async function saveResults(
+  eventId: string,
+  results: Record<string, string[]>,
+): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+
+  const questionIds = Object.keys(results);
+
+  const { data: questions } = await supabase
+    .from('prediction_questions')
+    .select('id, question_type')
+    .eq('event_id', eventId)
+    .in('id', questionIds);
+
+  if (!questions || questions.length === 0) return { error: 'No se encontraron preguntas.' };
+
+  for (const q of questions) {
+    const selected = results[q.id] ?? [];
+    if (q.question_type === 'single' && selected.length > 1) {
+      return { error: `La pregunta "${q.id}" es de tipo single y solo permite una opción correcta.` };
+    }
+  }
+
+  const { error: delErr } = await supabase
+    .from('prediction_results')
+    .delete()
+    .eq('event_id', eventId);
+
+  if (delErr) return { error: `Error al limpiar resultados: ${delErr.message}` };
+
+  const rows: { event_id: string; question_id: string; option_id: string; is_correct: boolean }[] = [];
+  for (const questionId of questionIds) {
+    for (const optionId of results[questionId] ?? []) {
+      rows.push({ event_id: eventId, question_id: questionId, option_id: optionId, is_correct: true });
+    }
+  }
+
+  if (rows.length > 0) {
+    const { error: insErr } = await supabase.from('prediction_results').insert(rows);
+    if (insErr) return { error: `Error al guardar resultados: ${insErr.message}` };
+  }
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function saveRankingResults(
+  eventId: string,
+  results: Record<string, { position: number; option_id: string }[]>,
+): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+
+  const { error: delErr } = await supabase
+    .from('prediction_results')
+    .delete()
+    .eq('event_id', eventId);
+
+  if (delErr) return { error: `Error al limpiar resultados: ${delErr.message}` };
+
+  const rows: { event_id: string; question_id: string; option_id: string; position: number; is_correct: boolean }[] = [];
+  for (const [questionId, positions] of Object.entries(results)) {
+    for (const { position, option_id } of positions) {
+      rows.push({ event_id: eventId, question_id: questionId, option_id, position, is_correct: true });
+    }
+  }
+
+  if (rows.length > 0) {
+    const { error: insErr } = await supabase.from('prediction_results').insert(rows);
+    if (insErr) return { error: `Error al guardar resultados: ${insErr.message}` };
+  }
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function calculateScores(
+  eventId: string,
+): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+
+  const { data: results } = await supabase
+    .from('prediction_results')
+    .select('question_id, option_id, position')
+    .eq('event_id', eventId)
+    .eq('is_correct', true);
+
+  if (!results || results.length === 0) {
+    return { error: 'Debes guardar los resultados correctos antes de calcular puntuaciones.' };
+  }
+
+  // Build correct answers map: for ranking questions, position -> option_id; for others, set of option_ids
+  const correctSet = new Map<string, Set<string>>();
+  const correctPositionMap = new Map<string, Map<number, string>>();
+  for (const r of results) {
+    if (r.position !== null && r.position !== undefined) {
+      if (!correctPositionMap.has(r.question_id)) correctPositionMap.set(r.question_id, new Map());
+      correctPositionMap.get(r.question_id)!.set(r.position, r.option_id);
+    } else {
+      if (!correctSet.has(r.question_id)) correctSet.set(r.question_id, new Set());
+      correctSet.get(r.question_id)!.add(r.option_id);
+    }
+  }
+
+  const { data: questions } = await supabase
+    .from('prediction_questions')
+    .select('id, points_per_correct, question_type, template_type')
+    .eq('event_id', eventId);
+
+  const pointsMap = new Map<string, number>();
+  const isRankingMap = new Map<string, boolean>();
+  for (const q of questions ?? []) {
+    pointsMap.set(q.id, q.points_per_correct);
+    isRankingMap.set(q.id, q.question_type === 'ranking' || q.template_type === 'top8_ordered');
+  }
+
+  const { data: submissions } = await supabase
+    .from('submissions')
+    .select('id, participant_id')
+    .eq('event_id', eventId)
+    .eq('status', 'submitted');
+
+  if (!submissions || submissions.length === 0) {
+    return { error: 'No hay participaciones para puntuar.' };
+  }
+
+  const submissionIds = submissions.map((s) => s.id);
+
+  const { data: answers } = await supabase
+    .from('prediction_answers')
+    .select('submission_id, question_id, option_id, position')
+    .in('submission_id', submissionIds);
+
+  interface AnswerRow { submission_id: string; question_id: string; option_id: string; position: number | null }
+  const answersBySubmission = new Map<string, AnswerRow[]>();
+  for (const a of (answers ?? []) as AnswerRow[]) {
+    if (!answersBySubmission.has(a.submission_id)) answersBySubmission.set(a.submission_id, []);
+    answersBySubmission.get(a.submission_id)!.push(a);
+  }
+
+  const participantSubMap = new Map<string, string>();
+  for (const s of submissions) {
+    participantSubMap.set(s.participant_id, s.id);
+  }
+
+  const { data: participants } = await supabase
+    .from('event_participants')
+    .select('id, profile_id')
+    .in('id', Array.from(participantSubMap.keys()));
+
+  const profileIdMap = new Map<string, string>();
+  for (const p of participants ?? []) {
+    profileIdMap.set(p.id, p.profile_id);
+  }
+
+  const scoreRows: {
+    event_id: string;
+    profile_id: string;
+    submission_id: string;
+    question_id: string;
+    correct_count: number;
+    total_points: number;
+  }[] = [];
+
+  const submissionTotals = new Map<string, number>();
+
+  for (const submission of submissions) {
+    const participantId = submission.participant_id;
+    const profileId = profileIdMap.get(participantId);
+    if (!profileId) continue;
+
+    const userAnswers = answersBySubmission.get(submission.id) ?? [];
+    const answersByQuestion = new Map<string, Set<string>>();
+    const answersByPosition = new Map<string, Map<number, string>>();
+    for (const a of userAnswers) {
+      if (a.position !== null && a.position !== undefined) {
+        if (!answersByPosition.has(a.question_id)) answersByPosition.set(a.question_id, new Map());
+        answersByPosition.get(a.question_id)!.set(a.position, a.option_id);
+      } else {
+        if (!answersByQuestion.has(a.question_id)) answersByQuestion.set(a.question_id, new Set());
+        answersByQuestion.get(a.question_id)!.add(a.option_id);
+      }
+    }
+
+    let totalScore = 0;
+
+    for (const [qId, correctOptions] of correctSet) {
+      const userSelected = answersByQuestion.get(qId) ?? new Set();
+      let correctCount = 0;
+      for (const opt of userSelected) {
+        if (correctOptions.has(opt)) correctCount++;
+      }
+      const points = pointsMap.get(qId) ?? 1;
+      const questionPoints = correctCount * points;
+      totalScore += questionPoints;
+
+      scoreRows.push({
+        event_id: eventId,
+        profile_id: profileId,
+        submission_id: submission.id,
+        question_id: qId,
+        correct_count: correctCount,
+        total_points: questionPoints,
+      });
+    }
+
+    // Handle ranking questions (exact position match)
+    for (const [qId, correctPositions] of correctPositionMap) {
+      const userPositions = answersByPosition.get(qId);
+      let correctCount = 0;
+      if (userPositions) {
+        for (const [pos, correctOptId] of correctPositions) {
+          if (userPositions.get(pos) === correctOptId) correctCount++;
+        }
+      }
+      totalScore += correctCount;
+
+      scoreRows.push({
+        event_id: eventId,
+        profile_id: profileId,
+        submission_id: submission.id,
+        question_id: qId,
+        correct_count: correctCount,
+        total_points: correctCount,
+      });
+    }
+
+    submissionTotals.set(submission.id, totalScore);
+  }
+
+  const { error: delScoreErr } = await supabase
+    .from('prediction_scores')
+    .delete()
+    .eq('event_id', eventId);
+
+  if (delScoreErr) return { error: `Error al limpiar puntuaciones: ${delScoreErr.message}` };
+
+  if (scoreRows.length > 0) {
+    const { error: insScoreErr } = await supabase.from('prediction_scores').insert(scoreRows);
+    if (insScoreErr) return { error: `Error al guardar puntuaciones: ${insScoreErr.message}` };
+  }
+
+  for (const [subId, total] of submissionTotals) {
+    const { error: upErr } = await supabase
+      .from('submissions')
+      .update({ status: 'scored', total_score: total })
+      .eq('id', subId);
+
+    if (upErr) return { error: `Error al actualizar participación: ${upErr.message}` };
+  }
+
+  // Mark event as completed
+  const { error: statusErr } = await supabase
+    .from('events')
+    .update({ status: 'completed' })
+    .eq('id', eventId);
+
+  if (statusErr) return { error: `Error al actualizar estado: ${statusErr.message}` };
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}

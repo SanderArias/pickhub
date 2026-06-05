@@ -15,9 +15,9 @@ export default async function OnboardingCreatorPage() {
       <div className="w-full max-w-sm">
         <div className="mb-6 text-center">
           <Logo />
-          <h1 className="mt-4 text-xl font-bold text-text-primary">Convertirme en creador</h1>
+          <h1 className="mt-4 text-xl font-bold text-text-primary">Solicitar acceso al modo creador</h1>
           <p className="mt-1 text-sm text-text-muted">
-            Crea tu perfil público para empezar a organizar dinámicas
+            Crea tu perfil público para empezar a crear Pick&apos;ems y dinámicas para tu comunidad
           </p>
         </div>
 

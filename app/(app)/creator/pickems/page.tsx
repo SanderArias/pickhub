@@ -4,9 +4,9 @@ import { StatusBadge, EmptyState } from '@/components/ui';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'Borrador',
-  published: 'Publicado',
-  active: 'Activo',
-  closed: 'Cerrado',
+  open: 'Abierto',
+  predictions_closed: 'Predicciones cerradas',
+  completed: 'Completado',
   archived: 'Archivado',
 };
 

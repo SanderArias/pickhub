@@ -4,16 +4,112 @@ import { revalidatePath } from 'next/cache';
 import { createServerClient } from '@/services/supabase';
 import { requireAdmin } from '@/lib/auth';
 
-export async function approveCreator(profileId: string) {
-  await requireAdmin();
+export async function approveCreator(profileId: string): Promise<{ error: string | null }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: 'Acceso denegado.' };
+  }
+
   const supabase = await createServerClient();
 
-  const { error: cpErr } = await supabase
+  const { data: cp, error: cpSelErr } = await supabase
     .from('creator_profiles')
-    .update({ status: 'approved' })
-    .eq('profile_id', profileId);
+    .select('id, status')
+    .eq('profile_id', profileId)
+    .maybeSingle();
 
-  if (cpErr) throw new Error(`Error al aprobar: ${cpErr.message}`);
+  console.log('[creator moderation] approveCreator', { profileId, foundCp: !!cp, cpSelErr });
+
+  if (cpSelErr) {
+    return { error: `Error al buscar perfil: ${cpSelErr.message}` };
+  }
+  if (!cp) return { error: 'Perfil de creador no encontrado.' };
+  if (cp.status !== 'pending') {
+    return { error: 'Solo se puede aprobar un perfil pendiente.' };
+  }
+
+  const { data: updatedCp, error: cpErr } = await supabase
+    .from('creator_profiles')
+    .update({ status: 'approved', reason: null })
+    .eq('id', cp.id)
+    .select('id');
+
+  console.log('[creator moderation] approveCreator update cp', { updatedCp: !!updatedCp, cpErr });
+
+  if (cpErr) {
+    return { error: `Error al aprobar: ${cpErr.message}` };
+  }
+  if (!updatedCp || updatedCp.length === 0) {
+    return { error: 'No se pudo actualizar el perfil de creador (0 filas afectadas). Verifica permisos RLS.' };
+  }
+
+  const { data: profile, error: pSelErr } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', profileId)
+    .single();
+
+  if (pSelErr) {
+    return { error: `Error al buscar perfil: ${pSelErr.message}` };
+  }
+
+  if (profile && profile.role !== 'admin') {
+    const { data: updatedProfile, error: pErr } = await supabase
+      .from('profiles')
+      .update({ role: 'creator' })
+      .eq('id', profileId)
+      .select('id');
+
+    console.log('[creator moderation] approveCreator update profile', { updatedProfile: !!updatedProfile, pErr });
+
+    if (pErr) {
+      return { error: `Error al actualizar rol: ${pErr.message}` };
+    }
+    if (!updatedProfile || updatedProfile.length === 0) {
+      return { error: 'No se pudo actualizar el rol (0 filas afectadas). Verifica permisos RLS.' };
+    }
+  }
+
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+export async function rejectCreator(profileId: string, formData: FormData): Promise<{ error: string | null }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: 'Acceso denegado.' };
+  }
+
+  const reason = (formData.get('reason') as string)?.trim();
+  if (!reason) return { error: 'El motivo de rechazo es obligatorio.' };
+
+  const supabase = await createServerClient();
+
+  const { data: cp } = await supabase
+    .from('creator_profiles')
+    .select('id, status')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+
+  if (!cp) return { error: 'Perfil de creador no encontrado.' };
+  if (cp.status !== 'pending') return { error: 'Solo se puede rechazar un perfil pendiente.' };
+
+  console.log('[creator moderation] rejectCreator', { profileId, reason });
+
+  const { data: updatedCp, error: cpErr } = await supabase
+    .from('creator_profiles')
+    .update({ status: 'rejected', reason })
+    .eq('id', cp.id)
+    .select('id');
+
+  console.log('[creator moderation] rejectCreator update cp', { updatedCp: !!updatedCp, cpErr });
+
+  if (cpErr) return { error: `Error al rechazar: ${cpErr.message}` };
+  if (!updatedCp || updatedCp.length === 0) {
+    return { error: 'No se pudo rechazar el perfil (0 filas afectadas). Verifica permisos RLS.' };
+  }
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -21,74 +117,200 @@ export async function approveCreator(profileId: string) {
     .eq('id', profileId)
     .single();
 
-  if (profile && profile.role === 'user') {
-    const { error: pErr } = await supabase
+  if (profile && profile.role !== 'admin') {
+    const { data: updatedProfile, error: pErr } = await supabase
+      .from('profiles')
+      .update({ role: 'user' })
+      .eq('id', profileId)
+      .select('id');
+
+    console.log('[creator moderation] rejectCreator update profile', { updatedProfile: !!updatedProfile, pErr });
+
+    if (pErr) return { error: `Error al actualizar rol: ${pErr.message}` };
+    if (!updatedProfile || updatedProfile.length === 0) {
+      return { error: 'No se pudo actualizar el rol (0 filas afectadas). Verifica permisos RLS.' };
+    }
+  }
+
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+export async function suspendCreator(profileId: string, formData: FormData): Promise<{ error: string | null }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: 'Acceso denegado.' };
+  }
+
+  const reason = (formData.get('reason') as string)?.trim();
+  if (!reason) return { error: 'El motivo de suspensión es obligatorio.' };
+
+  const supabase = await createServerClient();
+
+  const { data: cp } = await supabase
+    .from('creator_profiles')
+    .select('id, status')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+
+  if (!cp) return { error: 'Perfil de creador no encontrado.' };
+  if (cp.status !== 'approved') return { error: 'Solo se puede suspender un perfil aprobado.' };
+
+  console.log('[creator moderation] suspendCreator', { profileId, reason });
+
+  const { data: updatedCp, error: cpErr } = await supabase
+    .from('creator_profiles')
+    .update({ status: 'suspended', reason })
+    .eq('id', cp.id)
+    .select('id');
+
+  console.log('[creator moderation] suspendCreator update cp', { updatedCp: !!updatedCp, cpErr });
+
+  if (cpErr) return { error: `Error al suspender: ${cpErr.message}` };
+  if (!updatedCp || updatedCp.length === 0) {
+    return { error: 'No se pudo suspender el perfil (0 filas afectadas). Verifica permisos RLS.' };
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', profileId)
+    .single();
+
+  if (profile && profile.role !== 'admin') {
+    const { data: updatedProfile, error: pErr } = await supabase
+      .from('profiles')
+      .update({ role: 'user' })
+      .eq('id', profileId)
+      .select('id');
+
+    console.log('[creator moderation] suspendCreator update profile', { updatedProfile: !!updatedProfile, pErr });
+
+    if (pErr) return { error: `Error al actualizar rol: ${pErr.message}` };
+    if (!updatedProfile || updatedProfile.length === 0) {
+      return { error: 'No se pudo actualizar el rol (0 filas afectadas). Verifica permisos RLS.' };
+    }
+  }
+
+  revalidatePath('/admin');
+  return { error: null };
+}
+
+export async function reactivateCreator(profileId: string): Promise<{ error: string | null }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: 'Acceso denegado.' };
+  }
+
+  const supabase = await createServerClient();
+
+  const { data: cp } = await supabase
+    .from('creator_profiles')
+    .select('id, status')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+
+  if (!cp) return { error: 'Perfil de creador no encontrado.' };
+  if (cp.status !== 'suspended') return { error: 'Solo se puede reactivar un perfil suspendido.' };
+
+  console.log('[creator moderation] reactivateCreator', { profileId });
+
+  const { data: updatedCp, error: cpErr } = await supabase
+    .from('creator_profiles')
+    .update({ status: 'approved', reason: null })
+    .eq('id', cp.id)
+    .select('id');
+
+  console.log('[creator moderation] reactivateCreator update cp', { updatedCp: !!updatedCp, cpErr });
+
+  if (cpErr) return { error: `Error al reactivar: ${cpErr.message}` };
+  if (!updatedCp || updatedCp.length === 0) {
+    return { error: 'No se pudo reactivar el perfil (0 filas afectadas). Verifica permisos RLS.' };
+  }
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', profileId)
+    .single();
+
+  if (profile && profile.role !== 'admin') {
+    const { data: updatedProfile, error: pErr } = await supabase
       .from('profiles')
       .update({ role: 'creator' })
-      .eq('id', profileId);
+      .eq('id', profileId)
+      .select('id');
 
-    if (pErr) throw new Error(`Error al actualizar rol: ${pErr.message}`);
+    console.log('[creator moderation] reactivateCreator update profile', { updatedProfile: !!updatedProfile, pErr });
+
+    if (pErr) return { error: `Error al actualizar rol: ${pErr.message}` };
+    if (!updatedProfile || updatedProfile.length === 0) {
+      return { error: 'No se pudo actualizar el rol (0 filas afectadas). Verifica permisos RLS.' };
+    }
   }
 
   revalidatePath('/admin');
+  return { error: null };
 }
 
-export async function rejectCreator(profileId: string) {
-  await requireAdmin();
+export async function reopenCreatorRequest(profileId: string): Promise<{ error: string | null }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: 'Acceso denegado.' };
+  }
+
   const supabase = await createServerClient();
 
-  const { error: cpErr } = await supabase
+  const { data: cp } = await supabase
     .from('creator_profiles')
-    .update({ status: 'rejected' })
-    .eq('profile_id', profileId);
+    .select('id, status')
+    .eq('profile_id', profileId)
+    .maybeSingle();
 
-  if (cpErr) throw new Error(`Error al rechazar: ${cpErr.message}`);
+  if (!cp) return { error: 'Perfil de creador no encontrado.' };
+  if (cp.status !== 'rejected') return { error: 'Solo se puede reabrir un perfil rechazado.' };
 
-  const { data: rejectProfile } = await supabase
+  console.log('[creator moderation] reopenCreatorRequest', { profileId });
+
+  const { data: updatedCp, error: cpErr } = await supabase
+    .from('creator_profiles')
+    .update({ status: 'reopened', reason: null })
+    .eq('id', cp.id)
+    .select('id');
+
+  console.log('[creator moderation] reopenCreatorRequest update cp', { updatedCp: !!updatedCp, cpErr });
+
+  if (cpErr) return { error: `Error al reabrir solicitud: ${cpErr.message}` };
+  if (!updatedCp || updatedCp.length === 0) {
+    return { error: 'No se pudo reabrir la solicitud (0 filas afectadas). Verifica permisos RLS.' };
+  }
+
+  const { data: profile } = await supabase
     .from('profiles')
     .select('role')
     .eq('id', profileId)
     .single();
 
-  if (rejectProfile && rejectProfile.role !== 'admin') {
-    const { error: pErr } = await supabase
+  if (profile && profile.role !== 'admin') {
+    const { data: updatedProfile, error: pErr } = await supabase
       .from('profiles')
       .update({ role: 'user' })
-      .eq('id', profileId);
+      .eq('id', profileId)
+      .select('id');
 
-    if (pErr) throw new Error(`Error al actualizar rol: ${pErr.message}`);
+    console.log('[creator moderation] reopenCreatorRequest update profile', { updatedProfile: !!updatedProfile, pErr });
+
+    if (pErr) return { error: `Error al actualizar rol: ${pErr.message}` };
+    if (!updatedProfile || updatedProfile.length === 0) {
+      return { error: 'No se pudo actualizar el rol (0 filas afectadas). Verifica permisos RLS.' };
+    }
   }
 
   revalidatePath('/admin');
-}
-
-export async function suspendCreator(profileId: string) {
-  await requireAdmin();
-  const supabase = await createServerClient();
-
-  const { error: cpErr } = await supabase
-    .from('creator_profiles')
-    .update({ status: 'suspended' })
-    .eq('profile_id', profileId);
-
-  if (cpErr) throw new Error(`Error al suspender: ${cpErr.message}`);
-
-  const { data: suspendProfile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', profileId)
-    .single();
-
-  if (suspendProfile && suspendProfile.role !== 'admin') {
-    const { error: pErr } = await supabase
-      .from('profiles')
-      .update({ role: 'user' })
-      .eq('id', profileId);
-
-    if (pErr) throw new Error(`Error al actualizar rol: ${pErr.message}`);
-  }
-
-  revalidatePath('/admin');
+  return { error: null };
 }
 
 function parseFormText(formData: FormData, key: string): string | null {

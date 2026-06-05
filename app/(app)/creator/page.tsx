@@ -26,10 +26,13 @@ export default async function CreatorPage() {
           <span className="text-text-muted">Handle:</span>{' '}
           <span className="font-mono text-text-primary">{creator.handle}</span>
         </p>
-        <p>
-          <span className="text-text-muted">Estado:</span>{' '}
-          <span className="font-medium text-purple-primary">Aprobado</span>
-        </p>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-text-muted">Estado:</span>
+          <span className="inline-flex items-center gap-1 rounded-full border border-purple-border px-2 py-0.5 text-xs font-medium text-purple-primary">
+            <span className="h-1 w-1 rounded-full bg-purple-primary" />
+            Modo creador activo
+          </span>
+        </div>
       </Card>
 
       <div>
