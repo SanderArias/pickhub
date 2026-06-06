@@ -9,12 +9,18 @@ import { signOut } from '@/app/actions/auth';
 import { Logo } from '@/components/ui/Logo';
 import { CreatorWelcomeModal } from '@/components/pickem/CreatorWelcomeModal';
 
+function formatBadgeCount(count: number): string | undefined {
+  if (count <= 0) return undefined;
+  if (count > 9) return '+9';
+  return String(count);
+}
+
 interface NavItem {
   label: string;
   href: string;
   exact?: boolean;
   placeholder?: boolean;
-  badge?: number | boolean;
+  badge?: number | string | boolean;
 }
 
 interface NavGroup {
@@ -70,15 +76,38 @@ function useGroups(profile: ProfileData | null, pathname: string) {
   useEffect(() => {
     if (!profile || !(profile.role === 'creator' && profile.creator_status === 'approved')) return;
     const supabase = createBrowserClient();
-    supabase
-      .from('events')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'predictions_closed')
-      .eq('creator_id', profile.creator_profile_id ?? '')
-      .then(({ count }) => {
-        if (count !== null) setAttentionCount(count);
-      });
-  }, [profile]);
+    (async () => {
+      // 1. Get creator's events
+      const { data: events } = await supabase
+        .from('events')
+        .select('id')
+        .eq('creator_id', profile.creator_profile_id ?? '');
+      const eventIds = (events ?? []).map((e) => e.id);
+      if (eventIds.length === 0) {
+        setAttentionCount(0);
+        return;
+      }
+
+      // 2. Get user's last_seen_at (RLS restricts to own record)
+      const { data: readMarker } = await supabase
+        .from('creator_activity_reads')
+        .select('last_seen_at')
+        .maybeSingle();
+
+      // 3. Count unread submissions (after last_seen_at, or all if never visited)
+      let query = supabase
+        .from('submissions')
+        .select('*', { count: 'exact', head: true })
+        .in('event_id', eventIds);
+
+      if (readMarker?.last_seen_at) {
+        query = query.gt('submitted_at', readMarker.last_seen_at);
+      }
+
+      const { count } = await query;
+      if (count !== null) setAttentionCount(count);
+    })();
+  }, [profile, pathname]);
 
   const groups: NavGroup[] = [];
   if (!profile) return groups;
@@ -110,7 +139,7 @@ function useGroups(profile: ProfileData | null, pathname: string) {
         {
           label: 'Actividad',
           href: '/creator/activity',
-          badge: attentionCount > 0 ? attentionCount : undefined,
+          badge: formatBadgeCount(attentionCount),
         },
       ],
     });
@@ -169,12 +198,12 @@ function NavLink({
       {item.badge !== undefined && (
         <span
           className={`flex shrink-0 items-center justify-center rounded-full ${
-            typeof item.badge === 'number'
+            typeof item.badge === 'number' || typeof item.badge === 'string'
               ? 'min-w-[18px] bg-purple-primary px-1.5 py-0.5 text-[10px] font-bold text-white'
               : 'size-2 bg-green-500'
           }`}
         >
-          {typeof item.badge === 'number' ? item.badge : ''}
+          {typeof item.badge === 'number' || typeof item.badge === 'string' ? item.badge : ''}
         </span>
       )}
     </Link>

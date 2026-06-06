@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -358,6 +358,36 @@ export function Top8DnD({
     if (index === -1) return null;
     return top8[index];
   }, [activeDragId, allItems, top8]);
+
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) {
+    return (
+      <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
+        <div className="sm:w-1/2">
+          <div className="rounded-xl border border-border bg-surface p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-medium text-text-secondary">Mi Top 8</p>
+              <span className="text-xs text-text-muted">(0/8)</span>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2.5 opacity-40">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-hover text-xs font-bold text-text-muted">{i + 1}</span>
+                  <span className="text-xs text-text-muted">—</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="sm:w-1/2">
+          <div className="rounded-xl border border-border bg-surface p-5 opacity-40">
+            <p className="text-xs font-medium text-text-secondary">Jugadores disponibles</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">

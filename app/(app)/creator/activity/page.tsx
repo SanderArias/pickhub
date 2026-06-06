@@ -2,26 +2,8 @@ import { redirect } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
 import { getCurrentProfile } from '@/lib/auth';
 import { createServerClient } from '@/services/supabase';
-
-interface ActivityEntry {
-  type: 'submission';
-  actorName: string | null;
-  eventTitle: string;
-  eventSlug: string;
-  timestamp: string;
-}
-
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Ahora';
-  if (mins < 60) return `Hace ${mins} min`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `Hace ${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `Hace ${days}d`;
-  return new Date(dateStr).toLocaleDateString('es-ES', { year: 'numeric', month: 'short', day: 'numeric' });
-}
+import { getActivityLastSeenAt, updateActivityLastSeenAt } from '@/app/actions/activity';
+import { ActivityFeed } from '@/components/activity/ActivityFeed';
 
 export default async function ActivityPage({
   searchParams,
@@ -55,7 +37,17 @@ export default async function ActivityPage({
   const safeEvents = events ?? [];
   const eventIds = safeEvents.map((e) => e.id);
 
-  let activities: ActivityEntry[] = [];
+  // Get previous last_seen_at before updating it
+  const previousLastSeenAt = await getActivityLastSeenAt();
+
+  let activities: Array<{
+    type: 'submission';
+    actorName: string | null;
+    eventTitle: string;
+    eventSlug: string;
+    timestamp: string;
+    isNew: boolean;
+  }> = [];
 
   if (eventIds.length > 0) {
     if (activeFilter === 'todo' || activeFilter === 'participaciones') {
@@ -86,9 +78,13 @@ export default async function ActivityPage({
         eventTitle: r.events?.title ?? '',
         eventSlug: r.events?.slug ?? '',
         timestamp: r.submitted_at ?? '',
+        isNew: previousLastSeenAt ? r.submitted_at > previousLastSeenAt : true,
       }));
     }
   }
+
+  // Mark as seen server-side so sidebar badge updates on next render
+  await updateActivityLastSeenAt();
 
   return (
     <div className="flex flex-col gap-8">
@@ -124,38 +120,7 @@ export default async function ActivityPage({
       </div>
 
       {/* Feed */}
-      {activities.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-border bg-surface p-10 text-center">
-          <p className="text-sm text-text-muted">No hay actividad registrada todavía.</p>
-          <p className="mt-1 text-xs text-text-secondary">
-            Cuando tu comunidad participe en tus Pick'ems, aparecerá aquí.
-          </p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {activities.map((entry, i) => (
-            <a
-              key={`${entry.eventSlug}-${entry.timestamp}-${i}`}
-              href={`/pickems/${entry.eventSlug}`}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 transition-colors hover:bg-surface-hover"
-            >
-              <div className="min-w-0">
-                <p className="text-sm text-text-primary truncate">
-                  <span className="font-medium">{entry.actorName ?? 'Alguien'}</span>
-                  <span className="text-text-muted"> participó en </span>
-                  <span className="font-medium">{entry.eventTitle}</span>
-                </p>
-              </div>
-              <div className="shrink-0 flex items-center gap-3">
-                <span className="rounded-full bg-surface-elevated px-2.5 py-0.5 text-[11px] text-text-muted">
-                  Participación
-                </span>
-                <span className="text-xs text-text-muted">{timeAgo(entry.timestamp)}</span>
-              </div>
-            </a>
-          ))}
-        </div>
-      )}
+      <ActivityFeed activities={activities} />
     </div>
   );
 }

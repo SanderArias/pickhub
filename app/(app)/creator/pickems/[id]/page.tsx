@@ -17,8 +17,8 @@ import { PrizesSection } from '@/components/picks/PrizesSection';
 import { Top8Readonly } from '@/components/pickem/Top8Readonly';
 import { CompletedRightPanel } from '@/components/pickem/CompletedRightPanel';
 import { PublishSection } from './PublishSection';
-import { ClosePredictionsButton } from './ClosePredictionsButton';
 import { SharePickemSection } from './SharePickemSection';
+import { StatusTimeline } from './StatusTimeline';
 
 export default async function PickemDashboardPage({
   params,
@@ -95,6 +95,9 @@ export default async function PickemDashboardPage({
         backLabel="Mis Pick'ems"
         actions={<StatusBadge status={event.status} />}
       />
+
+      {/* Status timeline for non-draft states */}
+      {!isDraft && <StatusTimeline eventId={id} status={event.status} />}
 
       {/* ===== DRAFT: Full configuration ===== */}
       {isDraft && (
@@ -190,8 +193,6 @@ export default async function PickemDashboardPage({
       {/* ===== OPEN: Operational phase ===== */}
       {isOpen && (
         <>
-          <SharePickemSection slug={event.slug} />
-
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="rounded-lg border border-border bg-surface p-4">
               <p className="text-xs text-text-muted">Participaciones</p>
@@ -207,9 +208,7 @@ export default async function PickemDashboardPage({
             </div>
           </div>
 
-          <SectionCard title="Cerrar predicciones" subtitle="Una vez cerradas, los usuarios no podrán participar más">
-            <ClosePredictionsButton eventId={id} />
-          </SectionCard>
+          <SharePickemSection slug={event.slug} />
         </>
       )}
 

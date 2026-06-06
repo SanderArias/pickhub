@@ -103,7 +103,7 @@ export function CountryCombobox({
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
     const spacing = 4;
-    const estimatedHeight = 300;
+    const estimatedHeight = 420;
     const spaceBelow = window.innerHeight - rect.bottom;
     const top =
       spaceBelow >= estimatedHeight
@@ -120,10 +120,8 @@ export function CountryCombobox({
   useEffect(() => {
     if (!isOpen) return;
     updateMenuPosition();
-    window.addEventListener('scroll', updateMenuPosition, true);
     window.addEventListener('resize', updateMenuPosition);
     return () => {
-      window.removeEventListener('scroll', updateMenuPosition, true);
       window.removeEventListener('resize', updateMenuPosition);
     };
   }, [isOpen, updateMenuPosition]);
@@ -190,14 +188,6 @@ export function CountryCombobox({
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isOpen]);
-
-  useEffect(() => {
-    if (!isOpen || !listRef.current) return;
-    const listbox = listRef.current.querySelector('[role="listbox"]');
-    if (!listbox) return;
-    const item = listbox.children[safeFocusedIndex] as HTMLElement | undefined;
-    item?.scrollIntoView({ block: 'nearest' });
-  }, [safeFocusedIndex, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -302,7 +292,7 @@ export function CountryCombobox({
             <ul
               id={`${id}-listbox`}
               role="listbox"
-              className="pickhub-scrollbar max-h-[360px] md:max-h-[520px] overflow-auto"
+              className="pickhub-scrollbar max-h-[420px] overflow-auto"
               aria-label="Países"
               {...(compact ? { 'data-compact': '' as string } : {})}
             >

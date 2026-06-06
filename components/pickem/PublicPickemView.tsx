@@ -1,7 +1,8 @@
 ﻿'use client';
 
-import { useActionState, useState, useMemo } from 'react';
+import { useActionState, useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { signInWithTwitch } from '@/app/actions/auth';
 import { submitPredictions } from '@/app/actions/participant';
 import type { PublicEventData, EventPlayer, PredictionQuestion, Prize, Submission } from '@/app/actions/participant';
@@ -47,6 +48,15 @@ export function PublicPickemView({
   );
 
   const [showModal, setShowModal] = useState(false);
+  const router = useRouter();
+
+  // Redirect to success page on successful submission
+  useEffect(() => {
+    if (state.success) {
+      router.replace(`/pickems/${event.slug}/success`);
+    }
+  }, [state.success, event.slug, router]);
+
   const activePlayers = players.filter((p) => p.is_active);
 
   const rankedPlayers = useMemo(() => {
@@ -74,13 +84,15 @@ export function PublicPickemView({
   const hasPrizes = prizes.length > 0;
   const isOpen = event.status === 'open';
 
-  if (state.success) {
-    return <SubmissionReceipt event={event} predictions={predictions} players={activePlayers} />;
-  }
-
   const resolvedTies = Object.keys(drawsMap).length > 0;
 
-  return (
+  return state.success ? (
+    <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8">
+      <div className="flex min-h-[30vh] items-center justify-center">
+        <p className="text-sm text-text-muted">Redirigiendo...</p>
+      </div>
+    </div>
+  ) : (
     <div className="flex flex-col gap-8">
       {/* Hero */}
       <section className="flex flex-col gap-4">
@@ -438,50 +450,6 @@ export function PublicPickemView({
         submittedAt={mySubmission?.submitted_at ?? null}
         rankedPlayers={rankedPlayers}
       />
-    </div>
-  );
-}
-
-function SubmissionReceipt({
-  event,
-  predictions,
-  players,
-}: {
-  event: PublicEventData;
-  predictions: PredictionQuestion[];
-  players: EventPlayer[];
-}) {
-  return (
-    <div className="flex flex-col gap-8">
-      <section className="rounded-xl border border-purple-border bg-surface p-8 text-center">
-        <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-full bg-purple-primary/20">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M20 6L9 17L4 12" stroke="#A855F7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </div>
-        <h2 className="text-xl font-bold text-purple-primary">Tu Pick'em fue enviado</h2>
-        <p className="mt-2 text-sm text-text-secondary">
-          Tus predicciones para <strong className="text-text-primary">{event.title}</strong> se guardaron correctamente.
-        </p>
-        <p className="mt-1 text-xs text-text-muted">
-          {predictions.length} predicción{predictions.length !== 1 ? 'es' : ''} respondida{predictions.length !== 1 ? 's' : ''}
-        </p>
-      </section>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Link
-          href={`/pickems/${event.slug}/receipt`}
-          className="rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
-        >
-          Ver mi comprobante
-        </Link>
-        <Link
-          href="/inicio"
-          className="rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-text-secondary transition-colors hover:bg-surface"
-        >
-          Ir al inicio
-        </Link>
-      </div>
     </div>
   );
 }
