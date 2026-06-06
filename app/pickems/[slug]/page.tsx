@@ -5,6 +5,7 @@ import { getLeaderboard, getMyScore } from '@/app/actions/leaderboard';
 import { getTiebreakerDraws } from '@/app/actions/tiebreaker';
 import { PublicPickemView } from '@/components/pickem/PublicPickemView';
 import { createServerClient } from '@/services/supabase';
+import { getTwitchAccountInfo } from '@/lib/getTwitchAccountInfo';
 
 export default async function PickemPublicPage({
   params,
@@ -23,14 +24,17 @@ export default async function PickemPublicPage({
   const isClosed = event.status === 'predictions_closed' || event.status === 'completed';
 
   let participantName: string | undefined;
+  let participantTwitchStatus: 'connected' | 'not_connected' = 'not_connected';
   if (user) {
     const supabase = await createServerClient();
     const { data: profile } = await supabase
       .from('profiles')
-      .select('display_name')
+      .select('display_name, twitch_username, twitch_id, twitch_avatar_url')
       .eq('id', user.id)
       .maybeSingle();
     participantName = profile?.display_name ?? user.email ?? undefined;
+    const twitchInfo = getTwitchAccountInfo(profile, user);
+    participantTwitchStatus = twitchInfo.isConnected ? 'connected' : 'not_connected';
   }
 
   const [leaderboard, myScore] = await Promise.all([
@@ -55,6 +59,7 @@ export default async function PickemPublicPage({
         isAuthenticated={!!user}
         isClosed={isClosed}
         participantName={participantName}
+        participantTwitchStatus={participantTwitchStatus}
         leaderboard={leaderboard}
         drawsMap={drawsMap}
         tiebreakerWinners={tiebreakerWinners}

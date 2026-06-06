@@ -20,7 +20,7 @@ export default async function PickemResultsPage({
   }
 
   if (event.status === 'completed') {
-    redirect(`/creator/pickems/${id}`);
+    redirect(`/creator/pickems/${id}?tab=summary`);
   }
 
   if (event.status === 'open') {

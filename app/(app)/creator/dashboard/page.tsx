@@ -145,21 +145,40 @@ export default async function CreatorDashboardPage() {
       .limit(5);
 
     if (raw && raw.length > 0) {
-      const profileIds = (raw as { event_participants?: { profile_id?: string }[] }[])
-        .map((r) => r.event_participants?.[0]?.profile_id)
-        .filter((id): id is string => !!id);
+      type RawRow = { event_participants?: { profile_id?: string }; events?: { title?: string; slug?: string }; submitted_at?: string };
+      const rows = raw as RawRow[];
+
+      const profileIds: string[] = [];
+      for (const r of rows) {
+        const pid = r.event_participants?.profile_id;
+        if (pid) profileIds.push(pid);
+      }
+
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, display_name')
         .in('id', profileIds);
       const profileMap = new Map((profiles ?? []).map((p: { id: string; display_name: string | null }) => [p.id, p.display_name]));
 
-      creatorActivities = (raw as { event_participants?: { profile_id?: string }[]; events?: { title?: string; slug?: string }[]; submitted_at?: string }[]).map((r) => ({
-        display_name: profileMap.get(r.event_participants?.[0]?.profile_id ?? '') ?? null,
-        event_title: r.events?.[0]?.title ?? '',
-        event_slug: r.events?.[0]?.slug ?? '',
-        submitted_at: r.submitted_at ?? '',
-      }));
+      creatorActivities = rows.map((r) => {
+        const name = profileMap.get(r.event_participants?.profile_id ?? '') ?? null;
+        const title = r.events?.title ?? '';
+        return {
+          display_name: name,
+          event_title: title,
+          event_slug: r.events?.slug ?? '',
+          submitted_at: r.submitted_at ?? '',
+        };
+      });
+
+      if (process.env.NODE_ENV === 'development') {
+        const diagnostics = creatorActivities.map((a) => ({
+          hasActor: a.display_name !== null,
+          hasEvent: a.event_title !== '',
+          profileId: rows.map((r) => r.event_participants?.profile_id),
+        }));
+        console.info('[dashboard/activity] Mapped activities', { count: creatorActivities.length, diagnostics });
+      }
     }
   }
 

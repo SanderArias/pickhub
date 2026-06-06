@@ -7,6 +7,7 @@ import {
   type CreatorTwitchConnection,
   getTwitchVerificationStatus,
 } from '@/lib/twitch';
+import { getTwitchAccountInfo } from '@/lib/getTwitchAccountInfo';
 
 export async function getCreatorTwitchVerificationStatus(): Promise<{
   status: TwitchVerificationStatus;
@@ -34,4 +35,19 @@ export async function getCreatorTwitchVerificationStatus(): Promise<{
       connection as CreatorTwitchConnection | null,
     ),
   };
+}
+
+export async function checkParticipantTwitchStatus(): Promise<'connected' | 'not_connected'> {
+  const user = await getUser();
+  if (!user) return 'not_connected';
+
+  const supabase = await createServerClient();
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('twitch_username, twitch_id, twitch_avatar_url')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const info = getTwitchAccountInfo(profile, user);
+  return info.isConnected ? 'connected' : 'not_connected';
 }

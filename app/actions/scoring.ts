@@ -3,6 +3,9 @@
 import { createServerClient } from '@/services/supabase';
 import { requireCreator } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { assignPrizes } from '@/lib/prize-assignment';
+import type { PrizeEligibilityType, PrizeStackingPolicy } from '@/lib/prize-types';
+import { assignEventPrizes } from './results-data';
 
 export async function getEventResults(eventId: string) {
   const profile = await requireCreator();
@@ -313,7 +316,61 @@ export async function publishResultsAndCalculateScores(
 
   if (statusErr) return { error: `Error al actualizar estado del Pick\'em: ${statusErr.message}` };
 
-  // 12. Revalidate paths
+  // 12. Auto-assign prizes for new-style events (skip legacy detection here)
+  try {
+    const { data: newPrizes } = await supabase
+      .from('event_prizes')
+      .select('id, prize_category, eligibility_type, eligible_rank_start, quantity, sort_order')
+      .eq('event_id', eventId)
+      .not('prize_category', 'is', null)
+      .order('sort_order', { ascending: true });
+
+    if (newPrizes && newPrizes.length > 0) {
+      const { data: lb } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
+      const leaderboardEntries = (lb ?? []) as Array<{ rank: number; profile_id: string; total_score: number }>;
+
+      if (leaderboardEntries.length > 0) {
+        const { data: eventData } = await supabase
+          .from('events')
+          .select('prize_stacking_policy')
+          .eq('id', eventId)
+          .single();
+
+        const participants = leaderboardEntries.map((e) => ({
+          profile_id: e.profile_id,
+          rank: e.rank,
+          is_verified_subscriber: false,
+          is_verified_non_subscriber: false,
+        }));
+
+        const prizeDefs = newPrizes.map((p) => ({
+          id: p.id,
+          sort_order: p.sort_order,
+          eligibility_type: p.eligibility_type as PrizeEligibilityType,
+          eligible_rank_start: p.eligible_rank_start,
+          winner_count: p.quantity,
+        }));
+
+        const policy: PrizeStackingPolicy =
+          (eventData?.prize_stacking_policy as PrizeStackingPolicy) ?? 'single_prize_per_participant';
+
+        const result = assignPrizes(participants, prizeDefs, policy);
+
+        if (result.winners.length > 0) {
+          const rows = result.winners.map((w) => ({
+            event_prize_id: w.prize_id,
+            profile_id: w.profile_id,
+            rank_achieved: w.rank,
+          }));
+          await assignEventPrizes(eventId, rows);
+        }
+      }
+    }
+  } catch (prizeErr) {
+    console.error('[publishResults] prize assignment error:', prizeErr);
+  }
+
+  // 13. Revalidate paths
   revalidatePath(`/creator/pickems/${eventId}`);
   revalidatePath(`/creator/pickems/${eventId}/results`);
   revalidatePath(`/pickems/[slug]`);

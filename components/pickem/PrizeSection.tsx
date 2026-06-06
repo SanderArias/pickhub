@@ -8,7 +8,6 @@ import {
   CURRENCIES,
 } from '@/lib/prize-types';
 import { type TwitchVerificationStatus } from '@/lib/twitch';
-import { type SerializableActionError } from '@/lib/action-errors';
 
 type PrizeCategory = 'general_ranking' | 'subscriber_bonus';
 
@@ -124,7 +123,15 @@ function toDrafts(p: Prize): PrizeDraft[] {
   return drafts;
 }
 
-function getSaveErrorUserMessage(error: SerializableActionError): string {
+type FlatPrizeError = {
+  message: string;
+  code: string | null;
+  details: string | null;
+  hint: string | null;
+  operation: string | null;
+};
+
+function getSaveErrorUserMessage(error: FlatPrizeError): string {
   if (!error || !error.message) {
     return 'No pudimos guardar los premios. La configuración no se perdió.';
   }
@@ -132,12 +139,6 @@ function getSaveErrorUserMessage(error: SerializableActionError): string {
     return 'No tienes permisos para modificar los premios de este Pick\u2019em.';
   }
   if (error.code === '23505') {
-    if (error.constraint === 'event_prizes_event_id_tier_key' || error.constraint === 'event_prizes_tier_key') {
-      if (process.env.NODE_ENV === 'development') {
-        return 'La base de datos aún utiliza la restricción anterior de premios por tier. Aplica la migración 00035.';
-      }
-      return 'No pudimos guardar los premios por un problema de configuración.';
-    }
     return 'Ya existe un premio con esa configuración. Revisa los datos e inténtalo nuevamente.';
   }
   if (error.code === '23514') {
@@ -589,6 +590,7 @@ function PrizeSectionInner({
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [lastServerError, setLastServerError] = useState<Record<string, unknown> | null>(null);
   const [errors, setErrors] = useState<Record<string, Record<string, string>>>({});
   const [expandedLocalId, setExpandedLocalId] = useState<string | null>(null);
   const originalsRef = useRef<Map<string, PrizeDraft>>(new Map());
@@ -728,13 +730,6 @@ function PrizeSectionInner({
     expandAndFocus(draft.localId);
   }, [markDirty, expandAndFocus]);
 
-  const handleAddBestSub = useCallback(() => {
-    markDirty();
-    const draft = emptySubDraft(1);
-    setSubPrizes((prev) => [...prev, draft]);
-    expandAndFocus(draft.localId);
-  }, [markDirty, expandAndFocus]);
-
   const handleSave = useCallback(async () => {
     const allErrors: Record<string, Record<string, string>> = {};
     let hasError = false;
@@ -826,16 +821,37 @@ function PrizeSectionInner({
         });
       }
 
-      const result = await updateEventPrizes(eventId, payload, stackingPolicy);
+      const rawResult = await updateEventPrizes(eventId, payload, stackingPolicy);
+
+      if (!rawResult || typeof rawResult !== 'object' || typeof rawResult.success !== 'boolean') {
+        console.error('[prizes/save:client] Invalid server response', { rawResult, eventId });
+        setFormError('No pudimos guardar los premios. La respuesta del servidor no fue válida.');
+        return;
+      }
+
+      const result = rawResult as { success: boolean; saved?: Array<{ clientId: string; id: string }>; errorMessage?: string | null; errorCode?: string | null; errorDetails?: string | null; errorHint?: string | null; errorOperation?: string | null };
+
       if (!result.success) {
+        const errorInfo = {
+          message: result.errorMessage ?? 'Error desconocido',
+          code: result.errorCode ?? null,
+          details: result.errorDetails ?? null,
+          hint: result.errorHint ?? null,
+          operation: result.errorOperation ?? null,
+        };
         console.error('[prizes/save:client] Failed to save prizes', {
-          ...result.error,
+          ...errorInfo,
           eventId,
           prizeCount: payload.length,
         });
-        setFormError(getSaveErrorUserMessage(result.error));
-      } else {
-        const savedMap = new Map(result.saved.map((s) => [s.clientId, s.id]));
+        setLastServerError(errorInfo as unknown as Record<string, unknown>);
+        setFormError(getSaveErrorUserMessage(errorInfo));
+        return;
+      }
+
+      setLastServerError(null);
+      if (result.saved) {
+        const savedMap = new Map(result.saved.map((s: { clientId: string; id: string }) => [s.clientId, s.id]));
         setGeneralPrizes((prev) => prev.map((d) => {
           const dbId = savedMap.get(d.localId);
           return dbId ? { ...d, persistedId: dbId } : d;
@@ -844,13 +860,13 @@ function PrizeSectionInner({
           const dbId = savedMap.get(d.localId);
           return dbId ? { ...d, persistedId: dbId } : d;
         }));
-        setDirty(false);
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
       }
+      setDirty(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     } catch (err) {
-      const serialized = { message: err instanceof Error ? err.message : 'Error desconocido', code: 'UNEXPECTED' };
-      console.error('[prizes/save:client] Unexpected error saving prizes', { ...serialized, eventId, prizeCount: generalPrizes.length + subPrizes.length });
+      const serialized = { message: err instanceof Error ? err.message : 'Error desconocido', code: 'UNEXPECTED' as const, details: null as string | null, hint: null as string | null, operation: null as string | null };
+      console.error('[prizes/save:client] Unexpected error saving prizes', serialized);
       setFormError(getSaveErrorUserMessage(serialized));
     } finally {
       setSaving(false);
@@ -865,10 +881,20 @@ function PrizeSectionInner({
     [],
   );
 
+  const completedGeneral = generalPrizes.filter((d) => {
+    const e = errors[d.localId];
+    return !e || Object.keys(e).length === 0;
+  }).length;
+  const completedSub = subPrizes.filter((d) => {
+    const e = errors[d.localId];
+    return !e || Object.keys(e).length === 0;
+  }).length;
+  const totalIncomplete = totalCount - (completedGeneral + completedSub);
+
   let summaryText: string;
   if (totalCount === 0) {
     summaryText = 'Sin premios configurados';
-  } else {
+  } else if (totalIncomplete === 0) {
     const parts: string[] = [];
     if (generalPrizes.length > 0) {
       parts.push(`${generalPrizes.length} premio${generalPrizes.length !== 1 ? 's' : ''} general${generalPrizes.length !== 1 ? 'es' : ''}`);
@@ -877,6 +903,8 @@ function PrizeSectionInner({
       parts.push(`${subPrizes.length} beneficio${subPrizes.length !== 1 ? 's' : ''} para subs`);
     }
     summaryText = parts.join(' · ');
+  } else {
+    summaryText = `${totalCount} premio${totalCount !== 1 ? 's' : ''} · ${totalCount - totalIncomplete} configurado${totalCount - totalIncomplete !== 1 ? 's' : ''} · ${totalIncomplete} incompleto${totalIncomplete !== 1 ? 's' : ''}`;
   }
 
   return (
@@ -1028,12 +1056,18 @@ function PrizeSectionInner({
           </div>
           <button
             type="button"
-            onClick={() => setFormError(null)}
+            onClick={() => { setFormError(null); setLastServerError(null); }}
             className="shrink-0 rounded-lg border border-danger-border px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
           >
             Reintentar
           </button>
         </div>
+      )}
+
+      {process.env.NODE_ENV === 'development' && lastServerError && (
+        <pre className="overflow-auto rounded-lg border border-danger-border bg-danger/5 p-3 text-[11px] leading-relaxed text-text-muted">
+          {JSON.stringify(lastServerError, null, 2)}
+        </pre>
       )}
 
       {/* Save */}

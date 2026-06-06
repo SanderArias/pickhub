@@ -6,7 +6,7 @@ import { createServerClient } from '@/services/supabase';
 import { getUser } from './auth';
 import { requireCreator } from '@/lib/auth';
 import { normalizeTwitchChannel } from '@/lib/twitch';
-import { serializeActionError, type SerializableActionError } from '@/lib/action-errors';
+
 
 export async function getCreatorProfile() {
   const user = await getUser();
@@ -189,7 +189,7 @@ export async function getCreatorPickemById(id: string) {
     .from('event_prizes')
     .select('*')
     .eq('event_id', id)
-    .order('tier', { ascending: true });
+    .order('sort_order', { ascending: true });
 
   const { data: creatorProfile } = await supabase
     .from('creator_profiles')
@@ -944,6 +944,62 @@ export async function deleteEventPrize(eventId: string, prizeId: string): Promis
   return { error: null };
 }
 
+export type UpdateEventPrizesResult =
+  | {
+      success: true;
+      savedCount: number;
+      saved: Array<{ clientId: string; id: string }>;
+      errorMessage: null;
+      errorCode: null;
+      errorDetails: null;
+      errorHint: null;
+      errorOperation: null;
+    }
+  | {
+      success: false;
+      savedCount: 0;
+      saved: [];
+      errorMessage: string;
+      errorCode: string | null;
+      errorDetails: string | null;
+      errorHint: string | null;
+      errorOperation: string | null;
+    };
+
+function createPrizeFailureResult(error: unknown, operation: string): UpdateEventPrizesResult {
+  let message = 'Error desconocido';
+  let code: string | null = null;
+  let details: string | null = null;
+  let hint: string | null = null;
+
+  if (error instanceof Error) {
+    message = error.message;
+  }
+
+  if (typeof error === 'object' && error !== null) {
+    const candidate = error as Record<string, unknown>;
+    if (typeof candidate.message === 'string') message = candidate.message;
+    if (typeof candidate.code === 'string') code = candidate.code;
+    if (typeof candidate.details === 'string') details = candidate.details;
+    if (typeof candidate.hint === 'string') hint = candidate.hint;
+  }
+
+  if (typeof error === 'string') {
+    message = error;
+  }
+
+  return {
+    success: false,
+    savedCount: 0,
+    saved: [],
+    errorMessage: message,
+    errorCode: code,
+    errorDetails: details,
+    errorHint: hint,
+    errorOperation: operation,
+  };
+}
+
 export async function updateEventPrizes(
   eventId: string,
   prizes: Array<{
@@ -961,112 +1017,126 @@ export async function updateEventPrizes(
     assignment_method?: string;
   }>,
   stackingPolicy?: string,
-): Promise<
-  | { success: true; saved: Array<{ clientId: string; id: string }>; error: null }
-  | { success: false; saved: []; error: SerializableActionError }
-> {
-  const saveAttemptId = crypto.randomUUID();
-  const profile = await requireCreator();
-  const creatorId = profile.creator_profile!.id;
+): Promise<UpdateEventPrizesResult> {
+  try {
+    const saveAttemptId = crypto.randomUUID();
+    const profile = await requireCreator();
+    const creatorId = profile.creator_profile!.id;
 
-  const supabase = await createServerClient();
+    const supabase = await createServerClient();
 
-  const { data: event } = await supabase
-    .from('events')
-    .select('id')
-    .eq('id', eventId)
-    .eq('creator_id', creatorId)
-    .single();
-
-  if (!event) {
-    const err: SerializableActionError = { message: 'Evento no encontrado.', operation: 'verify_event' };
-    return { success: false, saved: [], error: err };
-  }
-
-  const existingIds = new Set<string>();
-  const { data: existing } = await supabase
-    .from('event_prizes')
-    .select('id')
-    .eq('event_id', eventId);
-  for (const p of existing ?? []) existingIds.add(p.id);
-
-  const incomingIds = new Set(prizes.filter((p) => p.id).map((p) => p.id!));
-  const toDelete = [...existingIds].filter((id) => !incomingIds.has(id));
-
-  const saved: Array<{ clientId: string; id: string }> = [];
-
-  for (const prize of prizes) {
-    const payload: Record<string, unknown> = {
-      label: prize.label,
-      description: prize.description,
-      amount: prize.amount,
-      currency: prize.currency,
-      quantity: prize.quantity,
-      eligibility_type: prize.eligibility_type,
-      eligible_rank_start: prize.eligible_rank_start,
-      sort_order: prize.sort_order,
-      assignment_method: prize.assignment_method ?? 'ranking',
-    };
-    if (prize.prize_category) {
-      payload.prize_category = prize.prize_category;
-    }
-
-    if (prize.id && existingIds.has(prize.id)) {
-      const { data: updated, error: uErr } = await supabase
-        .from('event_prizes')
-        .update(payload)
-        .eq('id', prize.id)
-        .eq('event_id', eventId)
-        .select('id')
-        .single();
-      if (uErr) {
-        const serialized = serializeActionError(uErr, 'update_prize');
-        console.error('[prizes/save:server] Failed to update prize', { saveAttemptId, ...serialized, eventId, prizeId: prize.id });
-        return { success: false, saved: [], error: serialized };
-      }
-      saved.push({ clientId: prize.clientId ?? '', id: updated.id });
-    } else {
-      const { data: inserted, error: iErr } = await supabase.from('event_prizes').insert({
-        event_id: eventId,
-        ...payload,
-      } as Record<string, unknown>).select('id').single();
-      if (iErr) {
-        const serialized = serializeActionError(iErr, 'insert_prize');
-        console.error('[prizes/save:server] Failed to insert prize', { saveAttemptId, ...serialized, eventId, prizeLabel: prize.label });
-        return { success: false, saved: [], error: serialized };
-      }
-      saved.push({ clientId: prize.clientId ?? '', id: inserted.id });
-    }
-  }
-
-  if (toDelete.length > 0) {
-    const { error: dErr } = await supabase
-      .from('event_prizes')
-      .delete()
-      .in('id', toDelete)
-      .eq('event_id', eventId);
-    if (dErr) {
-      const serialized = serializeActionError(dErr, 'delete_prizes');
-      console.error('[prizes/save:server] Failed to delete prizes', { saveAttemptId, ...serialized, eventId, deletedIds: toDelete });
-      return { success: false, saved: [], error: serialized };
-    }
-  }
-
-  if (stackingPolicy !== undefined) {
-    const { error: spErr } = await supabase
+    const { data: event } = await supabase
       .from('events')
-      .update({ prize_stacking_policy: stackingPolicy })
+      .select('id')
       .eq('id', eventId)
-      .eq('creator_id', creatorId);
-    if (spErr) {
-      const serialized = serializeActionError(spErr, 'update_stacking_policy');
-      console.error('[prizes/save:server] Failed to update stacking policy', { saveAttemptId, ...serialized, eventId });
-      return { success: false, saved: [], error: serialized };
-    }
-  }
+      .eq('creator_id', creatorId)
+      .single();
 
-  revalidatePath(`/creator/pickems/${eventId}`);
-  return { success: true, saved, error: null };
+    if (!event) {
+      const failure = createPrizeFailureResult('Evento no encontrado.', 'verify_event');
+      console.error('[prizes/save:server] Event not found', { saveAttemptId, eventId });
+      return failure;
+    }
+
+    const existingIds = new Set<string>();
+    const { data: existing } = await supabase
+      .from('event_prizes')
+      .select('id')
+      .eq('event_id', eventId);
+    for (const p of existing ?? []) existingIds.add(p.id);
+
+    const incomingIds = new Set(prizes.filter((p) => p.id).map((p) => p.id!));
+    const toDelete = [...existingIds].filter((id) => !incomingIds.has(id));
+
+    const saved: Array<{ clientId: string; id: string }> = [];
+
+    for (const prize of prizes) {
+      const payload: Record<string, unknown> = {
+        label: prize.label,
+        description: prize.description,
+        amount: prize.amount,
+        currency: prize.currency,
+        quantity: prize.quantity,
+        eligibility_type: prize.eligibility_type,
+        eligible_rank_start: prize.eligible_rank_start,
+        sort_order: prize.sort_order,
+        assignment_method: prize.assignment_method ?? 'ranking',
+      };
+      if (prize.prize_category) {
+        payload.prize_category = prize.prize_category;
+      }
+
+      if (prize.id && existingIds.has(prize.id)) {
+        const { data: updated, error: uErr } = await supabase
+          .from('event_prizes')
+          .update(payload)
+          .eq('id', prize.id)
+          .eq('event_id', eventId)
+          .select('id')
+          .single();
+        if (uErr) {
+          const failure = createPrizeFailureResult(uErr, 'update_prize');
+          console.error('[prizes/save:server] Failed to update prize', { saveAttemptId, ...failure, eventId, prizeId: prize.id });
+          return failure;
+        }
+        saved.push({ clientId: prize.clientId ?? '', id: updated.id });
+      } else {
+        const { data: inserted, error: iErr } = await supabase.from('event_prizes').insert({
+          event_id: eventId,
+          ...payload,
+        } as Record<string, unknown>).select('id').single();
+        if (iErr) {
+          const failure = createPrizeFailureResult(iErr, 'insert_prize');
+          console.error('[prizes/save:server] Failed to insert prize', { saveAttemptId, ...failure, eventId, prizeLabel: prize.label });
+          return failure;
+        }
+        saved.push({ clientId: prize.clientId ?? '', id: inserted.id });
+      }
+    }
+
+    if (toDelete.length > 0) {
+      const { error: dErr } = await supabase
+        .from('event_prizes')
+        .delete()
+        .in('id', toDelete)
+        .eq('event_id', eventId);
+      if (dErr) {
+        const failure = createPrizeFailureResult(dErr, 'delete_prizes');
+        console.error('[prizes/save:server] Failed to delete prizes', { saveAttemptId, ...failure, eventId, deletedIds: toDelete });
+        return failure;
+      }
+    }
+
+    if (stackingPolicy !== undefined) {
+      const { error: spErr } = await supabase
+        .from('events')
+        .update({ prize_stacking_policy: stackingPolicy })
+        .eq('id', eventId)
+        .eq('creator_id', creatorId);
+      if (spErr) {
+        const failure = createPrizeFailureResult(spErr, 'update_stacking_policy');
+        console.error('[prizes/save:server] Failed to update stacking policy', { saveAttemptId, ...failure, eventId });
+        return failure;
+      }
+    }
+
+    revalidatePath(`/creator/pickems/${eventId}`);
+    const okResult: UpdateEventPrizesResult = {
+      success: true,
+      savedCount: saved.length,
+      saved,
+      errorMessage: null,
+      errorCode: null,
+      errorDetails: null,
+      errorHint: null,
+      errorOperation: null,
+    };
+    return okResult;
+  } catch (error) {
+    const failure = createPrizeFailureResult(error, 'unexpected');
+    console.error('[prizes/save:server] Unexpected error', { ...failure });
+    return failure;
+  }
 }
 
 export async function updatePrizeStackingPolicy(

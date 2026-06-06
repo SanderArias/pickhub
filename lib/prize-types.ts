@@ -5,7 +5,6 @@ export type PrizeStackingPolicy = 'single_prize_per_participant' | 'allow_multip
 export interface Prize {
   id: string;
   event_id: string;
-  tier: string;
   label: string;
   description: string | null;
   amount: number | null;

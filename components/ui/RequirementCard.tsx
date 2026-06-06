@@ -1,3 +1,6 @@
+import Link from 'next/link';
+import { Card } from './Card';
+
 const STATE_STYLES = {
   configured: {
     variant: 'success' as const,
@@ -19,26 +22,27 @@ const LABEL_COLORS: Record<string, string> = {
   warning: 'text-warning',
 };
 
-import { Card } from './Card';
-
 export function RequirementCard({
   title,
   state,
   description,
   current,
-  requirement,
+  href,
 }: {
   title: string;
   state: 'configured' | 'missing' | 'optional';
   description: string;
-  requirement: string;
   current: string;
+  href?: string;
 }) {
-  void requirement;
   const styles = STATE_STYLES[state];
 
-  return (
-    <Card variant={styles.variant} className="flex flex-col justify-between">
+  const content = (
+    <Card
+      variant={styles.variant}
+      hover={!!href}
+      className={`flex flex-col justify-between ${href ? '' : ''}`}
+    >
       <div>
         <div className="flex items-center justify-between gap-3">
           <h4 className="text-sm font-medium text-text-primary">{title}</h4>
@@ -48,11 +52,32 @@ export function RequirementCard({
         </div>
         <p className="mt-1 text-xs text-text-secondary">{description}</p>
       </div>
-      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
-        <span className="text-text-muted">
-          <span className="text-text-secondary">{current}</span>
-        </span>
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <span className="text-xs text-text-muted line-clamp-2">{current}</span>
+        {href && (
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            className="shrink-0 text-text-muted"
+          >
+            <path
+              d="M6 4L10 8L6 12"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        )}
       </div>
     </Card>
   );
+
+  if (href) {
+    return <Link href={href} className="block">{content}</Link>;
+  }
+
+  return content;
 }

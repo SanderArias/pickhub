@@ -56,9 +56,13 @@ export function RecentActivitySection({
               className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface px-4 py-3 transition-colors hover:bg-surface-hover"
             >
               <p className="min-w-0 truncate text-sm text-text-primary">
-                <span className="font-semibold">{a.display_name ?? 'Alguien'}</span>
+                <span className="font-semibold">{a.display_name ?? 'Un participante'}</span>
                 <span className="text-text-muted"> particip&oacute; en </span>
-                <span className="font-semibold">{a.event_title}</span>
+                {a.event_title ? (
+                  <span className="font-semibold">{a.event_title}</span>
+                ) : (
+                  <span className="text-text-muted">un Pick&rsquo;em</span>
+                )}
               </p>
               <span className="shrink-0 text-xs text-text-muted">{timeAgo(a.submitted_at)}</span>
             </Link>

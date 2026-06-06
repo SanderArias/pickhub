@@ -64,9 +64,13 @@ export function ActivityFeed({ activities }: { activities: ActivityEntry[] }) {
           >
             <div className="min-w-0">
               <p className="text-sm text-text-primary truncate">
-                <span className="font-medium">{entry.actorName ?? 'Alguien'}</span>
+                <span className="font-medium">{entry.actorName ?? 'Un participante'}</span>
                 <span className="text-text-muted"> participó en </span>
-                <span className="font-medium">{entry.eventTitle}</span>
+                {entry.eventTitle ? (
+                  <span className="font-medium">{entry.eventTitle}</span>
+                ) : (
+                  <span className="text-text-muted">un Pick'em</span>
+                )}
               </p>
             </div>
             <div className="shrink-0 flex items-center gap-3">

@@ -14,7 +14,7 @@ export default async function PickemSuccessPage({
     notFound();
   }
 
-  const { event, predictions } = result;
+  const { event } = result;
 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-8">
@@ -28,9 +28,6 @@ export default async function PickemSuccessPage({
           <h2 className="text-xl font-bold text-purple-primary">Tu Pick'em fue enviado</h2>
           <p className="mt-2 text-sm text-text-secondary">
             Tus predicciones para <strong className="text-text-primary">{event.title}</strong> se guardaron correctamente.
-          </p>
-          <p className="mt-1 text-xs text-text-muted">
-            {predictions.length} predicción{predictions.length !== 1 ? 'es' : ''} respondida{predictions.length !== 1 ? 's' : ''}
           </p>
         </section>
 

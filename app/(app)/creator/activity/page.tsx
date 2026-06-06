@@ -59,22 +59,28 @@ export default async function ActivityPage({
         .order('submitted_at', { ascending: false })
         .limit(50);
 
-      const profileIds = [
-        ...new Set((submissions ?? []).map((r: any) => r.event_participants?.profile_id).filter(Boolean)),
-      ];
+      type SubmissionRow = { event_participants?: { profile_id?: string }; events?: { title?: string; slug?: string }; submitted_at?: string };
+      const rows = (submissions ?? []) as SubmissionRow[];
+
+      const profileIds: string[] = [];
+      for (const r of rows) {
+        const pid = r.event_participants?.profile_id;
+        if (pid) profileIds.push(pid);
+      }
+
       const { data: profiles } = await supabase
         .from('profiles')
         .select('id, display_name')
         .in('id', profileIds);
       const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
 
-      activities = (submissions ?? []).map((r: any) => ({
+      activities = rows.map((r) => ({
         type: 'submission' as const,
-        actorName: profileMap.get(r.event_participants?.profile_id) ?? null,
+        actorName: profileMap.get(r.event_participants?.profile_id ?? '') ?? null,
         eventTitle: r.events?.title ?? '',
         eventSlug: r.events?.slug ?? '',
         timestamp: r.submitted_at ?? '',
-        isNew: previousLastSeenAt ? r.submitted_at > previousLastSeenAt : true,
+        isNew: previousLastSeenAt && r.submitted_at ? r.submitted_at > previousLastSeenAt : true,
       }));
     }
   }

@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation';
 import { getCreatorPickemById } from '@/app/actions/creator';
 import { getCreatorTwitchVerificationStatus } from '@/app/actions/twitch-status';
-import { getEventResults } from '@/app/actions/scoring';
-import { getLeaderboard } from '@/app/actions/leaderboard';
+import { getCompletedSummary, getOfficialResults } from '@/app/actions/results-data';
 import { getTiebreakerDraws, getTieGroups } from '@/app/actions/tiebreaker';
+import { getPredictionConfigurationSummary, getPrizeConfigurationSummary } from '@/lib/summary';
 import {
   PageHeader,
   SectionCard,
@@ -13,16 +13,17 @@ import { PlayersSection } from '@/components/players/PlayersSection';
 import { PredictionsSection } from '@/components/predictions/PredictionsSection';
 import { GeneralInfoSection } from '@/components/pickem/GeneralInfoSection';
 import { PrizeSection } from '@/components/pickem/PrizeSection';
-import { Top8Readonly } from '@/components/pickem/Top8Readonly';
-import { CompletedRightPanel } from '@/components/pickem/CompletedRightPanel';
 import { PickemStatusCard } from '@/components/pickem/PickemStatusCard';
+import { CompletedResultsClient } from '@/components/completed/CompletedResultsClient';
 import { PublishSection } from './PublishSection';
 import { SharePickemSection } from './SharePickemSection';
 
 export default async function PickemDashboardPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
   const event = await getCreatorPickemById(id);
@@ -53,13 +54,8 @@ export default async function PickemDashboardPage({
 
   const { status: twitchStatus } = await getCreatorTwitchVerificationStatus();
 
-  const existingResults = await getEventResults(id);
-  const leaderboard = await getLeaderboard(id);
-
-  const hasFinalResults = isCompleted || (isPredictionsClosed && leaderboard.length > 0);
-
-  const drawsMap = hasFinalResults ? await getTiebreakerDraws(id) : {};
-  const tieGroups = hasFinalResults ? await getTieGroups(id) : [];
+  const drawsMap = !isDraft && !isCompleted ? await getTiebreakerDraws(id) : {};
+  const tieGroups = !isDraft && !isCompleted ? await getTieGroups(id) : [];
   const allTiedProfileIds = new Set<string>();
   for (const g of tieGroups) {
     for (const p of g.participants) {
@@ -70,23 +66,9 @@ export default async function PickemDashboardPage({
     ? [...allTiedProfileIds].filter((pid) => !(pid in drawsMap)).length
     : 0;
 
-  const top8Question = hasFinalResults
-    ? activePredictions.find((p: { template_type: string | null }) => p.template_type === 'top8_ordered')
-    : null;
-  const top8Results = top8Question && existingResults
-    ? existingResults
-        .filter((r: { question_id: string; position: number | null }) => r.question_id === top8Question.id && r.position !== null)
-        .sort((a: { position: number | null }, b: { position: number | null }) => (a.position ?? 0) - (b.position ?? 0))
-        .map((r: { option_id: string; position: number | null }) => {
-          const opt = top8Question.options.find((o: { id: string }) => o.id === r.option_id);
-          return {
-            position: r.position ?? 0,
-            optionId: r.option_id,
-            label: opt?.label ?? '',
-            playerId: opt?.player_id ?? null,
-          };
-        })
-    : [];
+  const [summary, officialResults] = isCompleted
+    ? await Promise.all([getCompletedSummary(id), getOfficialResults(id)])
+    : [null, null];
 
   const canPublish =
     isDraft &&
@@ -94,6 +76,9 @@ export default async function PickemDashboardPage({
     hasMinPredictions &&
     allPredictionsHaveOptions &&
     hasValidClosure;
+
+  const sp = await searchParams;
+  const initialTab = (sp.tab as string) ?? 'summary';
 
   return (
     <div className="flex flex-col gap-6">
@@ -104,7 +89,7 @@ export default async function PickemDashboardPage({
         backLabel="Mis Pick'ems"
       />
 
-      {/* Status card for non-draft states — replaces timeline, badges, stats cards, and action buttons */}
+      {/* Status card for non-draft states */}
       {!isDraft && (
         <PickemStatusCard
           eventId={id}
@@ -112,18 +97,8 @@ export default async function PickemDashboardPage({
           submissionCount={event.submissionCount}
           closeDate={event.ends_at}
           pendingTiebreakerCount={pendingTiebreakerCount}
+          compact={isCompleted}
         />
-      )}
-
-      {/* Secondary metrics — subdued, below status card */}
-      {!isDraft && (
-        <div className="flex items-center gap-6 text-xs text-text-muted">
-          <span>{event.submissionCount} participación{event.submissionCount !== 1 ? 'es' : ''}</span>
-          <span className="text-border">|</span>
-          <span>{activePredictionCount} prediccione{activePredictionCount !== 1 ? 's' : ''}</span>
-          <span className="text-border">|</span>
-          <span>{activePlayerCount} jugadore{activePlayerCount !== 1 ? 's' : ''}</span>
-        </div>
       )}
 
       {/* ===== DRAFT: Full configuration ===== */}
@@ -134,55 +109,48 @@ export default async function PickemDashboardPage({
               title="Información general"
               state={hasValidClosure ? 'configured' : 'missing'}
               description="Título y fecha de cierre."
-              requirement={hasValidClosure ? 'Configurado' : 'Revisar fecha'}
               current={event.ends_at ? `Cierre: ${new Date(event.ends_at).toLocaleString()}` : 'Cierre manual'}
+              href="#informacion-general"
             />
             <RequirementCard
               title="Pool de jugadores"
               state={hasMinActivePlayers ? 'configured' : 'missing'}
               description="Participantes activos para las predicciones."
-              requirement="Al menos 2 jugadores activos"
               current={`${activePlayerCount} activo${activePlayerCount !== 1 ? 's' : ''}`}
+              href="#pool-de-jugadores"
             />
             <RequirementCard
               title="Predicciones"
               state={hasMinPredictions && allPredictionsHaveOptions ? 'configured' : 'missing'}
               description="Preguntas con opciones de predicción."
-              requirement={hasMinPredictions ? 'Con opciones' : 'Al menos 1 predicción'}
-              current={`${activePredictionCount} prediccione${activePredictionCount !== 1 ? 's' : ''}${activePredictionCount > 0 && !allPredictionsHaveOptions ? ' (faltan opciones)' : ''}`}
+              current={getPredictionConfigurationSummary(event.predictions)}
+              href="#predicciones"
             />
             <RequirementCard
               title="Premios"
               state={hasPrizes ? 'configured' : 'optional'}
               description="Incentivos para los ganadores."
-              requirement={hasPrizes ? `${event.prizes.length} configurados` : 'No obligatorio'}
-              current={
-                hasPrizes
-                  ? event.prizes
-                      .map(
-                        (p: { label: string; amount: number | null; currency: string | null }) =>
-                          `${p.label} (${p.amount ?? '—'} ${p.currency ?? 'USD'})`,
-                      )
-                      .join(', ')
-                  : 'Sin premios configurados'
-              }
+              current={hasPrizes ? getPrizeConfigurationSummary(event.prizes).primary : 'Sin premios configurados'}
+              href="#premios"
             />
           </div>
 
-          <SectionCard title="Información general" subtitle="Detalles básicos del Pick'em">
+          <SectionCard id="informacion-general" title="Información general" subtitle="Detalles básicos del Pick'em">
             <GeneralInfoSection eventId={id} event={event} isDraft={isDraft} />
           </SectionCard>
 
-          <SectionCard
-            title="Pool de jugadores"
-            subtitle="Agrega los participantes del evento"
-            action={<span className="text-xs text-text-muted">{activePlayerCount} activo{activePlayerCount !== 1 ? 's' : ''}</span>}
-            accent={hasMinActivePlayers ? 'success' : 'error'}
-          >
-            <PlayersSection eventId={id} players={event.players} readOnly={false} />
-          </SectionCard>
+          <div id="pool-de-jugadores">
+            <PlayersSection
+              eventId={id}
+              players={event.players}
+              activePlayerCount={activePlayerCount}
+              hasMinActivePlayers={hasMinActivePlayers}
+              readOnly={false}
+            />
+          </div>
 
           <SectionCard
+            id="predicciones"
             title="Predicciones"
             subtitle="Preguntas y opciones para las predicciones"
             action={<span className="text-xs text-text-muted">{activePredictionCount} activa{activePredictionCount !== 1 ? 's' : ''}</span>}
@@ -192,6 +160,7 @@ export default async function PickemDashboardPage({
           </SectionCard>
 
           <SectionCard
+            id="premios"
             title="Premios"
             subtitle="Configura los premios para los ganadores"
             action={<span className="text-xs text-text-muted">{hasPrizes ? `${event.prizes.length} configurado${event.prizes.length !== 1 ? 's' : ''}` : 'Opcional'}</span>}
@@ -228,73 +197,14 @@ export default async function PickemDashboardPage({
         <SharePickemSection slug={event.slug} />
       )}
 
-      {/* ===== PREDICTIONS CLOSED (no results yet): Nothing extra needed — status card handles this ===== */}
-      {isPredictionsClosed && !hasFinalResults && null}
-
-      {/* ===== FINAL RESULTS: Combined view ===== */}
-      {hasFinalResults && (
-        <>
-          {/* Prizes */}
-          {hasPrizes && (() => {
-            type PrizeShape = { id: string; label: string; amount: number | null; currency: string | null; quantity: number; eligibility_type: string; sort_order?: number };
-            const prizes = event.prizes as PrizeShape[];
-
-            return (
-              <section className="flex flex-col gap-2">
-                <h2 className="text-sm font-semibold text-text-primary">Premios</h2>
-                <div className="flex flex-wrap items-center gap-2">
-                  {prizes.sort((a: { sort_order?: number }, b: { sort_order?: number }) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map((p) => (
-                    <div
-                      key={p.id}
-                      className={`inline-flex flex-col gap-0.5 rounded-lg border px-3 py-2 w-fit min-w-[150px] max-w-[220px] ${
-                        p.eligibility_type === 'subscribers'
-                          ? 'border-yellow-600/30 bg-yellow-500/5'
-                          : 'border-border bg-surface'
-                      }`}
-                    >
-                      {p.eligibility_type === 'subscribers' ? (
-                        <p className="text-[11px] font-semibold text-yellow-400 tracking-wide">★ Subs</p>
-                      ) : p.eligibility_type === 'non_subscribers' ? (
-                        <p className="text-[11px] font-medium text-text-secondary">No subs</p>
-                      ) : null}
-                      <p className="text-xs font-medium text-text-primary">{p.label}</p>
-                      {p.amount !== null && (
-                        <p className={`text-xs font-bold ${p.eligibility_type === 'subscribers' ? 'text-yellow-400' : 'text-text-primary'}`}>
-                          {p.amount.toLocaleString('es-ES')} {p.currency ?? 'USD'}
-                        </p>
-                      )}
-                      <p className="text-[11px] text-text-muted">
-                        {p.quantity} ganador{p.quantity !== 1 ? 'es' : ''}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            );
-          })()}
-
-          {/* Two-column layout on desktop */}
-          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:gap-6">
-            {top8Results.length > 0 ? (
-              <div className="flex flex-col gap-6">
-                <div className="rounded-xl border border-border bg-surface p-5">
-                  <h3 className="mb-4 text-sm font-semibold text-text-primary">Resultados oficiales</h3>
-                  <Top8Readonly rankedPlayers={top8Results} activePlayers={event.players} />
-                </div>
-              </div>
-            ) : null}
-
-            <div>
-              <CompletedRightPanel
-                eventId={id}
-                initialLeaderboard={leaderboard}
-                initialTieGroups={tieGroups}
-                initialDrawsMap={drawsMap}
-                myProfileId={undefined}
-              />
-            </div>
-          </div>
-        </>
+      {/* ===== COMPLETED: Tabs inline ===== */}
+      {isCompleted && summary && (
+        <CompletedResultsClient
+          eventId={id}
+          initialSummary={summary}
+          initialOfficialResults={officialResults ?? []}
+          initialTab={initialTab}
+        />
       )}
     </div>
   );

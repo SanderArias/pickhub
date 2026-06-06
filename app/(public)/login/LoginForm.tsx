@@ -1,83 +1,20 @@
 ﻿'use client';
 
-import { useActionState, useState, useRef, useEffect } from 'react';
+import { useState, useActionState } from 'react';
 import { signInWithEmail, signUpWithEmail } from '@/app/actions/auth';
 import { PasswordField } from '@/components/auth/PasswordField';
-
-function validateEmail(v: string): string | null {
-  if (!v.trim()) return 'El correo es obligatorio.';
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim())) return 'Introduce un correo válido.';
-  return null;
-}
-
-function validatePassword(v: string): string | null {
-  if (!v) return 'La contraseña es obligatoria.';
-  if (v.length < 6) return 'La contraseña debe tener al menos 6 caracteres.';
-  return null;
-}
 
 export function AuthForm({ isConfirmed }: { isConfirmed?: boolean }) {
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [loginState, loginAction, loginPending] = useActionState(signInWithEmail, null);
   const [signupState, signupAction, signupPending] = useActionState(signUpWithEmail, null);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const formRef = useRef<HTMLFormElement>(null);
 
   const isLogin = tab === 'login';
   const state = isLogin ? loginState : signupState;
-  const action = isLogin ? loginAction : signupAction;
+  const formAction = isLogin ? loginAction : signupAction;
   const pending = isLogin ? loginPending : signupPending;
 
-  const showSuccess = !isLogin && signupState?.success;
-
-  // Clear field errors when tab changes
-  useEffect(() => {
-    setFieldErrors({});
-  }, [tab]);
-
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const formData = new FormData(form);
-    const email = (formData.get('email') as string) ?? '';
-    const password = (formData.get('password') as string) ?? '';
-    const username = (formData.get('username') as string) ?? '';
-    const confirmPassword = (formData.get('confirmPassword') as string) ?? '';
-
-    const errs: Record<string, string> = {};
-
-    const emailErr = validateEmail(email);
-    if (emailErr) errs.email = emailErr;
-
-    const passErr = validatePassword(password);
-    if (passErr) errs.password = passErr;
-
-    if (!isLogin) {
-      if (!username.trim()) errs.username = 'El nombre de usuario es obligatorio.';
-      if (!confirmPassword) errs.confirmPassword = 'Confirma tu contraseña.';
-      if (password && confirmPassword && password !== confirmPassword) {
-        errs.confirmPassword = 'Las contraseñas no coinciden.';
-      }
-    }
-
-    setFieldErrors(errs);
-
-    if (Object.keys(errs).length > 0) return;
-
-    // Use the server action
-    action(formData);
-  }
-
-  // Map server error to field errors
-  const serverError = state?.error;
-  const allFieldErrors = { ...fieldErrors };
-  if (serverError && !isLogin) {
-    if (serverError.toLowerCase().includes('email')) {
-      if (!allFieldErrors.email) allFieldErrors.email = serverError;
-    } else if (serverError.toLowerCase().includes('contraseña') || serverError.toLowerCase().includes('password')) {
-      if (!allFieldErrors.password) allFieldErrors.password = serverError;
-    }
-  }
+  const showSuccess = !isLogin && !!signupState?.success;
 
   return (
     <div>
@@ -138,7 +75,7 @@ export function AuthForm({ isConfirmed }: { isConfirmed?: boolean }) {
           </a>
         </div>
       ) : (
-        <form ref={formRef} onSubmit={handleSubmit} className="flex flex-col gap-4" noValidate>
+        <form action={formAction} className="flex flex-col gap-4" noValidate>
           {tab === 'signup' && (
             <div>
               <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-text-secondary">
@@ -153,9 +90,6 @@ export function AuthForm({ isConfirmed }: { isConfirmed?: boolean }) {
                 placeholder="tunombre"
                 className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none focus:ring-1 focus:ring-purple-primary/30 transition-colors"
               />
-              {allFieldErrors.username && (
-                <p className="mt-1 text-xs text-danger" role="alert">{allFieldErrors.username}</p>
-              )}
             </div>
           )}
 
@@ -172,9 +106,6 @@ export function AuthForm({ isConfirmed }: { isConfirmed?: boolean }) {
               placeholder="tu@email.com"
               className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none focus:ring-1 focus:ring-purple-primary/30 transition-colors"
             />
-            {allFieldErrors.email && (
-              <p className="mt-1 text-xs text-danger" role="alert">{allFieldErrors.email}</p>
-            )}
           </div>
 
           <div>
@@ -197,7 +128,6 @@ export function AuthForm({ isConfirmed }: { isConfirmed?: boolean }) {
               label=""
               autoComplete={isLogin ? 'current-password' : 'new-password'}
               placeholder={isLogin ? 'Tu contraseña' : 'Mínimo 8 caracteres'}
-              error={allFieldErrors.password}
             />
           </div>
 
@@ -215,15 +145,11 @@ export function AuthForm({ isConfirmed }: { isConfirmed?: boolean }) {
                 placeholder="Repite tu contraseña"
                 className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none focus:ring-1 focus:ring-purple-primary/30 transition-colors"
               />
-              {allFieldErrors.confirmPassword && (
-                <p className="mt-1 text-xs text-danger" role="alert">{allFieldErrors.confirmPassword}</p>
-              )}
             </div>
           )}
 
-          {/* General server error */}
-          {serverError && Object.keys(allFieldErrors).length === 0 && (
-            <p className="text-sm text-danger" role="alert">{serverError}</p>
+          {state?.error && (
+            <p className="text-sm text-danger" role="alert">{state.error}</p>
           )}
 
           <button

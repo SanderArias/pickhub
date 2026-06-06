@@ -14,7 +14,8 @@ export interface PublicEventData {
   created_at: string;
   logo_url: string | null;
   twitch_channel: string | null;
-  creator: { display_name: string | null; handle: string | null } | null;
+  prize_stacking_policy: string | null;
+  creator: { display_name: string | null; handle: string | null; avatar_url: string | null } | null;
 }
 
 export interface EventPlayer {
@@ -50,7 +51,6 @@ export interface PredictionQuestion {
 export interface Prize {
   id: string;
   event_id: string;
-  tier: string;
   label: string;
   description: string | null;
   amount: number | null;
@@ -106,33 +106,41 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
     return { event: null, players: [], predictions: [], prizes: [], mySubmission: null, error: 'Este Pick\'em todavía no está disponible.' };
   }
 
-  let creatorInfo: { display_name: string | null; handle: string | null } | null = null;
+  let creatorInfo: { display_name: string | null; handle: string | null; avatar_url: string | null } | null = null;
   let players: EventPlayer[] = [];
   let predictions: PredictionQuestion[] = [];
   let prizes: Prize[] = [];
   let mySubmission: Submission | null = null;
 
+  // Load prizes for everyone (including unauthenticated users).
+  // RLS on event_prizes now allows reading prizes for visible events.
+  const { data: prizesData } = await supabase
+    .from('event_prizes')
+    .select('*')
+    .eq('event_id', event.id)
+    .order('sort_order', { ascending: true });
+  prizes = (prizesData ?? []) as Prize[];
+
   if (user) {
-    const [cpRes, playersRes, questionsRes, prizesRes] = await Promise.all([
+    const [cpRes, playersRes, questionsRes] = await Promise.all([
       supabase.from('creator_profiles').select('id, profile_id, handle').eq('id', event.creator_id).maybeSingle(),
       supabase.from('event_players').select('id, name, is_active, country_code').eq('event_id', event.id).order('sort_order', { ascending: true }),
       supabase.from('prediction_questions').select('*').eq('event_id', event.id).eq('is_active', true).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
-      supabase.from('event_prizes').select('*').eq('event_id', event.id).order('tier', { ascending: true }),
     ]);
 
     players = (playersRes.data ?? []) as EventPlayer[];
-    prizes = (prizesRes.data ?? []) as Prize[];
 
     if (cpRes.data) {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('display_name')
+        .select('display_name, avatar_url')
         .eq('id', cpRes.data.profile_id)
         .maybeSingle();
 
       creatorInfo = {
         display_name: profile?.display_name ?? null,
         handle: cpRes.data.handle,
+        avatar_url: profile?.avatar_url ?? null,
       };
     }
 
@@ -593,13 +601,13 @@ export async function getSubmissionReceipt(
     supabase.from('creator_profiles').select('id, profile_id, handle').eq('id', event.creator_id).maybeSingle(),
     supabase.from('event_players').select('id, name, is_active, country_code').eq('event_id', event.id).order('sort_order', { ascending: true }),
     supabase.from('prediction_questions').select('*').eq('event_id', event.id).eq('is_active', true).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
-    supabase.from('event_prizes').select('*').eq('event_id', event.id).order('tier', { ascending: true }),
+    supabase.from('event_prizes').select('*').eq('event_id', event.id).order('sort_order', { ascending: true }),
   ]);
 
   const players = (playersRes.data ?? []) as EventPlayer[];
   const prizes = (prizesRes.data ?? []) as Prize[];
 
-  let creatorInfo: { display_name: string | null; handle: string | null } | null = null;
+  let creatorInfo: { display_name: string | null; handle: string | null; avatar_url: string | null } | null = null;
   if (cpRes.data) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -609,6 +617,7 @@ export async function getSubmissionReceipt(
     creatorInfo = {
       display_name: profile?.display_name ?? null,
       handle: cpRes.data.handle,
+      avatar_url: null,
     };
   }
 
