@@ -195,7 +195,7 @@ export async function submitPredictions(
 
   const { data: event } = await supabase
     .from('events')
-    .select('id, status')
+    .select('id, status, creator_id')
     .eq('id', eventId)
     .neq('status', 'draft')
     .maybeSingle();
@@ -272,6 +272,82 @@ export async function submitPredictions(
       return { error: `Error al registrarte en el evento: ${insertErr?.message}`, success: false, submissionId: null };
     }
     participantId = newParticipant.id;
+  }
+
+  // Subscriber verification for creators with active sub verification
+  if (event.creator_id) {
+    try {
+      const { data: creatorConn } = await supabase
+        .from('creator_twitch_connections')
+        .select('twitch_user_id, access_token_encrypted, refresh_token_encrypted, expires_at')
+        .eq('profile_id', event.creator_id)
+        .eq('subscriber_verification_enabled', true)
+        .is('revoked_at', null)
+        .maybeSingle();
+
+      if (creatorConn) {
+        const participantProfile = await supabase
+          .from('profiles')
+          .select('twitch_id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        const participantTwitchId = participantProfile?.data?.twitch_id;
+
+        if (participantTwitchId) {
+          const { decrypt } = await import('@/lib/twitch-crypto');
+          const { checkSubscription, refreshAccessToken } = await import('@/lib/twitch-api');
+
+          let accessToken = decrypt(creatorConn.access_token_encrypted);
+
+          if (creatorConn.expires_at && new Date(creatorConn.expires_at) < new Date()) {
+            if (creatorConn.refresh_token_encrypted) {
+              const refreshToken = decrypt(creatorConn.refresh_token_encrypted);
+              const refreshed = await refreshAccessToken(refreshToken);
+              accessToken = refreshed.access_token;
+              const newEncrypted = (await import('@/lib/twitch-crypto')).encrypt(accessToken);
+              await supabase
+                .from('creator_twitch_connections')
+                .update({
+                  access_token_encrypted: newEncrypted,
+                  refresh_token_encrypted: refreshed.refresh_token
+                    ? (await import('@/lib/twitch-crypto')).encrypt(refreshed.refresh_token)
+                    : undefined,
+                  expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+                })
+                .eq('profile_id', event.creator_id);
+            }
+          }
+
+          const subResult = await checkSubscription(accessToken, creatorConn.twitch_user_id, participantTwitchId);
+
+          await supabase
+            .from('event_participants')
+            .update({
+              is_subscriber: subResult.is_subscriber,
+              subscriber_verified_at: new Date().toISOString(),
+              subscription_tier: subResult.tier,
+              subscription_source: 'twitch',
+              subscriber_verification_status: subResult.is_subscriber ? 'verified_sub' : 'verified_non_sub',
+            })
+            .eq('id', participantId);
+        } else {
+          await supabase
+            .from('event_participants')
+            .update({
+              subscriber_verification_status: 'unavailable',
+            })
+            .eq('id', participantId);
+        }
+      }
+    } catch {
+      await supabase
+        .from('event_participants')
+        .update({
+          subscriber_verification_status: 'failed',
+        })
+        .eq('id', participantId);
+    }
   }
 
   // Check for existing submission
