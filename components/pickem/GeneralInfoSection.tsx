@@ -2,7 +2,8 @@
 
 import { useRef, useState, useEffect, useActionState, useTransition } from 'react';
 import { updatePickemGeneralInfo, uploadEventLogo, removeEventLogo } from '@/app/actions/creator';
-import { DateTimePickerField } from '@/components/ui/DateTimePicker';
+import { PredictionCloseScheduler } from '@/components/ui/PredictionCloseScheduler';
+import { splitDatetimeForTimezone, detectTimezone } from '@/lib/timezones';
 
 export function GeneralInfoSection({
   eventId,
@@ -10,15 +11,15 @@ export function GeneralInfoSection({
   isDraft,
 }: {
   eventId: string;
-  event: { title: string; description: string | null; ends_at: string | null; logo_url: string | null };
+  event: { title: string; description: string | null; ends_at: string | null; logo_url: string | null; predictions_close_timezone: string | null };
   isDraft: boolean;
 }) {
   const [editing, setEditing] = useState(false);
-  const [closureMode, setClosureMode] = useState(event.ends_at ? 'auto' : 'manual');
-  const [dateValue, setDateValue] = useState(
-    event.ends_at ? new Date(event.ends_at).toISOString().slice(0, 16) : '',
-  );
-  const [dateError, setDateError] = useState<string | null>(null);
+
+  const initialSchedule = event.ends_at
+    ? splitDatetimeForTimezone(event.ends_at, event.predictions_close_timezone)
+    : { date: '', time: '', tz: detectTimezone() };
+
   const [state, formAction, pending] = useActionState(
     updatePickemGeneralInfo.bind(null, eventId),
     { error: null as string | null },
@@ -37,19 +38,6 @@ export function GeneralInfoSection({
     }
     prevPending.current = pending;
   }, [pending, state.error]);
-
-  const minDatetime = new Date().toISOString().slice(0, 16);
-
-  const handleDateChange = (v: string) => {
-    setDateValue(v);
-    setDateError(null);
-    if (v) {
-      const d = new Date(v);
-      if (d <= new Date()) {
-        setDateError('La fecha debe ser posterior a la actual.');
-      }
-    }
-  };
 
   return (
     <div>
@@ -77,7 +65,7 @@ export function GeneralInfoSection({
             <span className="text-text-muted">Cierre de predicciones:</span>{' '}
             <span className="text-text-primary">
               {event.ends_at
-                ? new Date(event.ends_at).toLocaleString()
+                ? `${new Date(event.ends_at).toLocaleString()} (${event.predictions_close_timezone ?? 'UTC'})`
                 : 'Manual'}
             </span>
           </p>
@@ -212,55 +200,12 @@ export function GeneralInfoSection({
               </p>
             </div>
 
-            <div>
-              <label className="mb-2 block text-sm font-medium text-text-secondary">
-                Cierre de predicciones
-              </label>
-              <div className="flex flex-col gap-2">
-                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:border-border-hover">
-                  <input
-                    type="radio"
-                    name="closure_mode"
-                    value="manual"
-                    checked={closureMode === 'manual'}
-                    onChange={() => { setClosureMode('manual'); setDateError(null); }}
-                    className="mt-0.5 accent-purple-primary"
-                  />
-                  <div>
-                    <span className="text-sm text-text-primary">Manual</span>
-                    <p className="mt-0.5 text-xs text-text-muted">
-                      El creador decidirá cuándo cerrar las predicciones.
-                    </p>
-                  </div>
-                </label>
-                <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:border-border-hover">
-                  <input
-                    type="radio"
-                    name="closure_mode"
-                    value="auto"
-                    checked={closureMode === 'auto'}
-                    onChange={() => { setClosureMode('auto'); setDateError(null); }}
-                    className="mt-0.5 accent-purple-primary"
-                  />
-                  <div>
-                    <span className="text-sm text-text-primary">Automático</span>
-                    <p className="mt-0.5 text-xs text-text-muted">
-                      Las predicciones se cerrarán automáticamente en la fecha seleccionada.
-                    </p>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {closureMode === 'auto' && (
-              <DateTimePickerField
-                value={dateValue}
-                onChange={handleDateChange}
-                min={minDatetime}
-                name="ends_at"
-                error={dateError}
-              />
-            )}
+            <PredictionCloseScheduler
+              initialMode={event.ends_at ? 'auto' : 'manual'}
+              initialDate={initialSchedule.date}
+              initialTime={initialSchedule.time}
+              initialTimezone={initialSchedule.tz}
+            />
 
             {state?.error && (
               <p className="text-sm text-danger">{state.error}</p>

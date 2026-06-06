@@ -232,7 +232,10 @@ export async function createPickem(formData: FormData) {
 
   const closureMode = formData.get('closure_mode') as string;
   const endsAtRaw = formData.get('ends_at') as string;
-  const endsAt = closureMode === 'auto' && endsAtRaw ? new Date(endsAtRaw).toISOString() : null;
+  const endsAt = closureMode === 'auto' && endsAtRaw ? endsAtRaw : null;
+  const predictionsCloseTimezone = closureMode === 'auto' && endsAtRaw
+    ? (formData.get('predictions_close_timezone') as string) || null
+    : null;
 
   const slug = slugify(title);
   if (!slug) throw new Error('El título no puede generar un slug válido.');
@@ -260,6 +263,7 @@ export async function createPickem(formData: FormData) {
       slug,
       description,
       ends_at: endsAt,
+      predictions_close_timezone: predictionsCloseTimezone,
       status: 'draft',
       twitch_channel: twitchChannel,
     })
@@ -421,12 +425,16 @@ export async function createPredictionQuestion(eventId: string, _prev: unknown, 
   return { error: null };
 }
 
-export async function createEventPlayer(eventId: string, _prev: unknown, formData: FormData) {
+export async function createEventPlayer(
+  eventId: string,
+  _prev: unknown,
+  formData: FormData,
+): Promise<{ error: string | null; player?: { id: string; created_at: string } }> {
   const profile = await requireCreator();
   const creatorId = profile.creator_profile!.id;
 
   const name = (formData.get('name') as string)?.trim();
-  if (!name) throw new Error('El nombre del jugador es obligatorio.');
+  if (!name) return { error: 'El nombre del jugador es obligatorio.' };
 
   const countryCode = (formData.get('country_code') as string)?.trim() || null;
 
@@ -439,13 +447,13 @@ export async function createEventPlayer(eventId: string, _prev: unknown, formDat
     .eq('creator_id', creatorId)
     .single();
 
-  if (!event) throw new Error('Evento no encontrado.');
+  if (!event) return { error: 'Evento no encontrado.' };
 
-  const { error } = await supabase.from('event_players').insert({
-    event_id: eventId,
-    name,
-    country_code: countryCode,
-  });
+  const { data, error } = await supabase
+    .from('event_players')
+    .insert({ event_id: eventId, name, country_code: countryCode })
+    .select('id, created_at')
+    .single();
 
   if (error) {
     if (error.code === '23505') {
@@ -455,7 +463,7 @@ export async function createEventPlayer(eventId: string, _prev: unknown, formDat
   }
 
   revalidatePath(`/creator/pickems/${eventId}`);
-  return { error: null };
+  return { error: null, player: { id: data.id, created_at: data.created_at } };
 }
 
 export async function updateEventPlayerCountry(
@@ -701,9 +709,11 @@ export async function updatePickemGeneralInfo(eventId: string, _prev: unknown, f
   const closureMode = formData.get('closure_mode') as string;
 
   let endsAt: string | null = null;
+  let predictionsCloseTimezone: string | null = null;
 
   if (closureMode === 'auto') {
     endsAt = formData.get('ends_at') as string;
+    predictionsCloseTimezone = formData.get('predictions_close_timezone') as string || null;
     if (!endsAt) return { error: 'Debes seleccionar una fecha y hora para el cierre automático.' };
   }
 
@@ -716,6 +726,7 @@ export async function updatePickemGeneralInfo(eventId: string, _prev: unknown, f
       title,
       description,
       ends_at: endsAt,
+      predictions_close_timezone: predictionsCloseTimezone,
       twitch_channel: twitchChannel,
     })
     .eq('id', eventId);

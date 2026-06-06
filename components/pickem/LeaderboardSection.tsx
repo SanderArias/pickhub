@@ -19,6 +19,9 @@ export function LeaderboardSection({ entries, myProfileId, tiebreakerWinners }: 
     );
   }
 
+  const maxScore = entries[0]?.total_score;
+  const hasFirstPlaceTie = entries.filter((e) => e.total_score === maxScore).length > 1;
+
   return (
     <div className="flex flex-col gap-1">
       {entries.map((entry, index) => {
@@ -31,8 +34,17 @@ export function LeaderboardSection({ entries, myProfileId, tiebreakerWinners }: 
             : tiebreakerWinners.includes(entry.profile_id)
           : false;
 
-        const showWinnerBadge = isFirstPlace;
-        const hasGreenAccent = isFirstPlace || isTieWinner;
+        const hasResolvedTies = tiebreakerWinners
+          ? tiebreakerWinners instanceof Set
+            ? tiebreakerWinners.size > 0
+            : tiebreakerWinners.length > 0
+          : false;
+
+        const isWinner = hasFirstPlaceTie
+          ? hasResolvedTies && isTieWinner && entry.total_score === maxScore
+          : isFirstPlace;
+        const showWinnerBadge = isWinner;
+        const hasGreenAccent = isWinner;
 
         return (
           <div
