@@ -9,11 +9,12 @@ interface TiebreakerModalProps {
   eventId: string;
   onClose: () => void;
   onDone: () => void;
+  remainingTiebreakerCount?: number;
 }
 
 type Phase = 'idle' | 'rolling' | 'done' | 'error';
 
-export function TiebreakerModal({ group, eventId, onClose, onDone }: TiebreakerModalProps) {
+export function TiebreakerModal({ group, eventId, onClose, onDone, remainingTiebreakerCount }: TiebreakerModalProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [finalDraws, setFinalDraws] = useState<TiebreakerDraw[] | null>(null);
@@ -247,9 +248,17 @@ export function TiebreakerModal({ group, eventId, onClose, onDone }: TiebreakerM
             <button
               type="button"
               onClick={handleCloseAfterDone}
-              className="rounded-lg border border-border px-6 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover"
+              className={
+                remainingTiebreakerCount !== undefined && remainingTiebreakerCount === 0
+                  ? 'rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600'
+                  : 'rounded-lg border border-border px-6 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover'
+              }
             >
-              Cerrar
+              {remainingTiebreakerCount !== undefined && remainingTiebreakerCount > 0
+                ? `Siguiente desempate (${remainingTiebreakerCount})`
+                : remainingTiebreakerCount !== undefined && remainingTiebreakerCount === 0
+                  ? 'Finalizar clasificación'
+                  : 'Cerrar'}
             </button>
           )}
         </div>

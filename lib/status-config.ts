@@ -8,6 +8,36 @@ export interface StatusConfig {
   description: string;
 }
 
+export type SubmissionStatusTone = 'success' | 'warning';
+
+export interface SubmittedStatusConfig {
+  label: string;
+  description: string;
+  contextualMessage: string;
+  tone: SubmissionStatusTone;
+}
+
+export const SUBMITTED_PREDICTION_STATUS_CONFIG: Record<string, SubmittedStatusConfig> = {
+  open: {
+    label: 'Predicción enviada',
+    description: 'Tu Top 8 quedó registrado correctamente.',
+    contextualMessage: "El Pick'em continúa abierto hasta que el creador cierre las predicciones.",
+    tone: 'success',
+  },
+  predictions_closed: {
+    label: 'Predicción enviada',
+    description: 'Tu Top 8 quedó registrado correctamente.',
+    contextualMessage: 'Las predicciones ya están cerradas. Tu selección quedó bloqueada.',
+    tone: 'warning',
+  },
+  completed: {
+    label: 'Resultados disponibles',
+    description: 'Tu predicción ya fue puntuada.',
+    contextualMessage: 'Consulta tus puntos, tu posición y la clasificación final.',
+    tone: 'success',
+  },
+};
+
 export const EVENT_STATUS_CONFIG: Record<EventStatus, StatusConfig> = {
   draft: {
     dot: 'bg-purple-primary',

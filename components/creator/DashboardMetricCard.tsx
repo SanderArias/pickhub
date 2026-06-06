@@ -12,21 +12,23 @@ export function DashboardMetricCard({ metric }: { metric: MetricDef }) {
   const style = TONE_STYLES[metric.tone] ?? TONE_STYLES.neutral;
 
   const inner = (
-    <div className="rounded-xl border border-border bg-surface p-5 transition-colors hover:border-border-hover">
+    <div className="flex h-full flex-col rounded-xl border border-border bg-surface p-5 transition-colors hover:border-border-hover">
       <div className="flex items-center gap-2 text-xs text-text-muted">
         <span className={`size-1.5 rounded-full ${style.dot}`} />
         {metric.label}
       </div>
-      <p className={`mt-1 text-3xl font-bold tracking-tight ${style.value}`}>
+      <p className={`mt-2 text-3xl font-bold tracking-tight ${style.value}`}>
         {metric.value}
       </p>
-      <p className="mt-1 text-xs text-text-muted">{metric.context}</p>
+      <p className="mt-auto pt-2 text-xs text-text-muted line-clamp-2">
+        {metric.context}
+      </p>
     </div>
   );
 
   if (metric.href) {
     return (
-      <Link href={metric.href} className="block cursor-pointer">
+      <Link href={metric.href} className="block h-full cursor-pointer">
         {inner}
       </Link>
     );

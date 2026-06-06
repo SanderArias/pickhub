@@ -1,7 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getCreatorPickemById } from '@/app/actions/creator';
 import { getCreatorTwitchVerificationStatus } from '@/app/actions/twitch-status';
-import { getCompletedSummary, getOfficialResults } from '@/app/actions/results-data';
 import { getTiebreakerDraws, getTieGroups } from '@/app/actions/tiebreaker';
 import { getPredictionConfigurationSummary, getPrizeConfigurationSummary } from '@/lib/summary';
 import {
@@ -54,21 +53,13 @@ export default async function PickemDashboardPage({
 
   const { status: twitchStatus } = await getCreatorTwitchVerificationStatus();
 
-  const drawsMap = !isDraft && !isCompleted ? await getTiebreakerDraws(id) : {};
-  const tieGroups = !isDraft && !isCompleted ? await getTieGroups(id) : [];
-  const allTiedProfileIds = new Set<string>();
-  for (const g of tieGroups) {
-    for (const p of g.participants) {
-      allTiedProfileIds.add(p.profile_id);
-    }
-  }
-  const pendingTiebreakerCount = tieGroups.length > 0
-    ? [...allTiedProfileIds].filter((pid) => !(pid in drawsMap)).length
-    : 0;
-
-  const [summary, officialResults] = isCompleted
-    ? await Promise.all([getCompletedSummary(id), getOfficialResults(id)])
-    : [null, null];
+  // Load tiebreaker data for non-draft events (including completed, to detect pending ties)
+  const drawsMap = !isDraft ? await getTiebreakerDraws(id) : {};
+  const tieGroups = !isDraft ? await getTieGroups(id) : [];
+  const pendingTiebreakerCount = tieGroups.filter(
+    (g) => !g.participants.every((p) => p.profile_id in drawsMap),
+  ).length;
+  const hasPendingTiebreakers = pendingTiebreakerCount > 0;
 
   const canPublish =
     isDraft &&
@@ -97,7 +88,7 @@ export default async function PickemDashboardPage({
           submissionCount={event.submissionCount}
           closeDate={event.ends_at}
           pendingTiebreakerCount={pendingTiebreakerCount}
-          compact={isCompleted}
+          compact={isCompleted && !hasPendingTiebreakers}
         />
       )}
 
@@ -197,13 +188,14 @@ export default async function PickemDashboardPage({
         <SharePickemSection slug={event.slug} />
       )}
 
-      {/* ===== COMPLETED: Tabs inline ===== */}
-      {isCompleted && summary && (
+      {/* ===== COMPLETED: Tabs always visible ===== */}
+      {isCompleted && (
         <CompletedResultsClient
           eventId={id}
-          initialSummary={summary}
-          initialOfficialResults={officialResults ?? []}
           initialTab={initialTab}
+          tieGroups={tieGroups}
+          drawsMap={drawsMap}
+          hasPrizes={hasPrizes}
         />
       )}
     </div>

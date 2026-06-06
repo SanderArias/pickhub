@@ -43,11 +43,67 @@ export default async function CreatorDashboardPage() {
     totalSubmissions = sc ?? 0;
   }
 
+  // Pre-fetch tiebreaker data for completed events
+  const eventsWithPendingTies = new Set<string>();
+  for (const e of safeEvents) {
+    if (e.status !== 'completed') continue;
+    const { count } = await supabase
+      .from('submissions')
+      .select('*', { count: 'exact', head: true })
+      .eq('event_id', e.id)
+      .eq('status', 'scored');
+    if ((count ?? 0) < 2) continue;
+    const { data: draws } = await supabase
+      .from('tiebreaker_draws')
+      .select('profile_id')
+      .eq('event_id', e.id);
+    const drawProfileIds = new Set((draws ?? []).map((d) => d.profile_id));
+    const { data: subs } = await supabase
+      .from('submissions')
+      .select('total_score')
+      .eq('event_id', e.id)
+      .eq('status', 'scored');
+    const scoreMap = new Map<number, number>();
+    for (const s of subs ?? []) {
+      if (s.total_score === null) continue;
+      scoreMap.set(s.total_score, (scoreMap.get(s.total_score) ?? 0) + 1);
+    }
+    let hasTies = false;
+    for (const c of scoreMap.values()) { if (c > 1) { hasTies = true; break; } }
+    if (!hasTies) continue;
+    const { data: tsubs } = await supabase
+      .from('submissions')
+      .select('total_score, participant_id')
+      .eq('event_id', e.id)
+      .eq('status', 'scored');
+    const scoreToPartic = new Map<number, string[]>();
+    for (const s of tsubs ?? []) {
+      if (s.total_score === null) continue;
+      const list = scoreToPartic.get(s.total_score) ?? [];
+      list.push(s.participant_id);
+      scoreToPartic.set(s.total_score, list);
+    }
+    const { data: parts } = await supabase
+      .from('event_participants')
+      .select('id, profile_id')
+      .in('id', [...scoreToPartic.values()].flat());
+    const pidMap = new Map((parts ?? []).map((p) => [p.id, p.profile_id]));
+    let allResolved = true;
+    for (const [, pids] of scoreToPartic) {
+      if (pids.length < 2) continue;
+      const profileIds = pids.map((pid) => pidMap.get(pid) ?? '').filter(Boolean);
+      if (!profileIds.every((pid) => drawProfileIds.has(pid))) { allResolved = false; break; }
+    }
+    if (!allResolved) eventsWithPendingTies.add(e.id);
+  }
+
   // Metrics
   const activeCount = safeEvents.filter((e) => e.status === 'open').length;
   const draftCount = safeEvents.filter((e) => e.status === 'draft').length;
   const closedCount = safeEvents.filter((e) => e.status === 'predictions_closed').length;
-  const completedCount = safeEvents.filter((e) => e.status === 'completed').length;
+  const rawCompletedCount = safeEvents.filter((e) => e.status === 'completed').length;
+  const tiebreakerPendingCount = eventsWithPendingTies.size;
+  const completedCount = rawCompletedCount - tiebreakerPendingCount;
 
   const metrics: MetricDef[] = [
     {
@@ -65,9 +121,9 @@ export default async function CreatorDashboardPage() {
     },
     {
       label: 'Requieren acción',
-      value: closedCount + draftCount,
-      context: `${closedCount} cerrados · ${draftCount} borradores`,
-      tone: closedCount > 0 ? 'warning' : 'neutral',
+      value: closedCount + draftCount + tiebreakerPendingCount,
+      context: `${closedCount} cerrados · ${draftCount} borradores${tiebreakerPendingCount > 0 ? ` · ${tiebreakerPendingCount} desempates` : ''}`,
+      tone: (closedCount + tiebreakerPendingCount) > 0 ? 'warning' : 'neutral',
       href: closedCount > 0 ? '/creator/pickems?status=predictions_closed' : draftCount > 0 ? '/creator/pickems?status=draft' : undefined,
     },
     {
@@ -84,7 +140,15 @@ export default async function CreatorDashboardPage() {
   const pendingIds = new Set<string>();
 
   for (const event of safeEvents) {
-    if (event.status === 'predictions_closed') {
+    if (eventsWithPendingTies.has(event.id)) {
+      pendingIds.add(event.id);
+      attentionItems.push({
+        title: event.title,
+        slug: event.slug,
+        actionType: 'resolve_tiebreaker' as ActionType,
+        href: `/creator/pickems/${event.id}`,
+      });
+    } else if (event.status === 'predictions_closed') {
       pendingIds.add(event.id);
       attentionItems.push({
         title: event.title,
@@ -201,7 +265,7 @@ export default async function CreatorDashboardPage() {
       </div>
 
       {/* Metrics */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {metrics.map((m) => (
           <DashboardMetricCard key={m.label} metric={m} />
         ))}

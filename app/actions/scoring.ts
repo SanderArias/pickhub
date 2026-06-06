@@ -7,6 +7,28 @@ import { assignPrizes } from '@/lib/prize-assignment';
 import type { PrizeEligibilityType, PrizeStackingPolicy } from '@/lib/prize-types';
 import { assignEventPrizes } from './results-data';
 
+async function detectTies(eventId: string): Promise<boolean> {
+  const supabase = await createServerClient();
+  const { data: submissions } = await supabase
+    .from('submissions')
+    .select('total_score')
+    .eq('event_id', eventId)
+    .eq('status', 'scored');
+
+  if (!submissions || submissions.length < 2) return false;
+
+  const scoreCount = new Map<number, number>();
+  for (const s of submissions) {
+    if (s.total_score === null || s.total_score === undefined) continue;
+    scoreCount.set(s.total_score, (scoreCount.get(s.total_score) ?? 0) + 1);
+  }
+
+  for (const count of scoreCount.values()) {
+    if (count > 1) return true;
+  }
+  return false;
+}
+
 export async function getEventResults(eventId: string) {
   const profile = await requireCreator();
   const creatorId = profile.creator_profile!.id;
@@ -308,7 +330,10 @@ export async function publishResultsAndCalculateScores(
     if (upErr) return { error: `Error al actualizar participación: ${upErr.message}` };
   }
 
-  // 11. Mark event as completed
+  // 11. Detect ties before completing
+  const hasTies = await detectTies(eventId);
+
+  // 12. Mark event as completed
   const { error: statusErr } = await supabase
     .from('events')
     .update({ status: 'completed' })
@@ -316,7 +341,135 @@ export async function publishResultsAndCalculateScores(
 
   if (statusErr) return { error: `Error al actualizar estado del Pick\'em: ${statusErr.message}` };
 
-  // 12. Auto-assign prizes for new-style events (skip legacy detection here)
+  // 13. Auto-assign prizes ONLY when no ties exist.
+  //     When ties exist, prizes are assigned after manual tiebreaker resolution via finalizeEventAfterTiebreakers().
+  if (!hasTies) {
+    try {
+      const { data: newPrizes } = await supabase
+        .from('event_prizes')
+        .select('id, prize_category, eligibility_type, eligible_rank_start, quantity, sort_order')
+        .eq('event_id', eventId)
+        .not('prize_category', 'is', null)
+        .order('sort_order', { ascending: true });
+
+      if (newPrizes && newPrizes.length > 0) {
+        const { data: lb } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
+        const leaderboardEntries = (lb ?? []) as Array<{ rank: number; profile_id: string; total_score: number }>;
+
+        if (leaderboardEntries.length > 0) {
+          const { data: eventData } = await supabase
+            .from('events')
+            .select('prize_stacking_policy')
+            .eq('id', eventId)
+            .single();
+
+          const participants = leaderboardEntries.map((e) => ({
+            profile_id: e.profile_id,
+            rank: e.rank,
+            is_verified_subscriber: false,
+            is_verified_non_subscriber: false,
+          }));
+
+          const prizeDefs = newPrizes.map((p) => ({
+            id: p.id,
+            sort_order: p.sort_order,
+            eligibility_type: p.eligibility_type as PrizeEligibilityType,
+            eligible_rank_start: p.eligible_rank_start,
+            winner_count: p.quantity,
+          }));
+
+          const policy: PrizeStackingPolicy =
+            (eventData?.prize_stacking_policy as PrizeStackingPolicy) ?? 'single_prize_per_participant';
+
+          const result = assignPrizes(participants, prizeDefs, policy);
+
+          if (result.winners.length > 0) {
+            const rows = result.winners.map((w) => ({
+              event_prize_id: w.prize_id,
+              profile_id: w.profile_id,
+              rank_achieved: w.rank,
+            }));
+            await assignEventPrizes(eventId, rows);
+          }
+        }
+      }
+    } catch (prizeErr) {
+      console.error('[publishResults] prize assignment error:', prizeErr);
+    }
+  }
+
+  // 14. Revalidate paths
+  revalidatePath(`/creator/pickems/${eventId}`);
+  revalidatePath(`/creator/pickems/${eventId}/results`);
+  revalidatePath(`/pickems/[slug]`);
+
+  return { error: null };
+}
+
+/**
+ * Called after all tiebreakers have been manually resolved by the creator.
+ * Assigns prizes that were deferred during publishResultsAndCalculateScores.
+ */
+export async function finalizeEventAfterTiebreakers(
+  eventId: string,
+): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  // Verify creator owns event
+  const { data: event } = await supabase
+    .from('events')
+    .select('id, status, title')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) return { error: 'Evento no encontrado.' };
+  if (event.status !== 'completed') return { error: 'El evento debe estar completado para finalizar.' };
+
+  // Verify no pending tiebreakers remain
+  const hasTies = await detectTies(eventId);
+  if (hasTies) {
+    const { data: draws } = await supabase
+      .from('tiebreaker_draws')
+      .select('profile_id')
+      .eq('event_id', eventId);
+
+    // Get all tied profile IDs
+    const { data: submissions } = await supabase
+      .from('submissions')
+      .select('total_score, participant_id')
+      .eq('event_id', eventId)
+      .eq('status', 'scored');
+
+    const scoreMap = new Map<number, string[]>();
+    for (const s of submissions ?? []) {
+      if (s.total_score === null) continue;
+      const list = scoreMap.get(s.total_score) ?? [];
+      list.push(s.participant_id);
+      scoreMap.set(s.total_score, list);
+    }
+
+    const { data: participants } = await supabase
+      .from('event_participants')
+      .select('id, profile_id')
+      .in('id', [...scoreMap.values()].flat());
+
+    const pidByPartic = new Map(participants?.map((p) => [p.id, p.profile_id]));
+
+    for (const [, pids] of scoreMap) {
+      if (pids.length < 2) continue;
+      const profileIds = pids.map((pid) => pidByPartic.get(pid) ?? '').filter(Boolean);
+      const resolved = profileIds.every((pid) => draws?.some((d) => d.profile_id === pid));
+      if (!resolved) {
+        return { error: 'Aún hay desempates pendientes. Resuelve todos antes de finalizar.' };
+      }
+    }
+  }
+
+  // Assign prizes
   try {
     const { data: newPrizes } = await supabase
       .from('event_prizes')
@@ -367,10 +520,10 @@ export async function publishResultsAndCalculateScores(
       }
     }
   } catch (prizeErr) {
-    console.error('[publishResults] prize assignment error:', prizeErr);
+    console.error('[finalizeEventAfterTiebreakers] prize assignment error:', prizeErr);
+    return { error: 'Error al asignar premios. Intenta de nuevo.' };
   }
 
-  // 13. Revalidate paths
   revalidatePath(`/creator/pickems/${eventId}`);
   revalidatePath(`/creator/pickems/${eventId}/results`);
   revalidatePath(`/pickems/[slug]`);

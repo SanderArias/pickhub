@@ -38,9 +38,9 @@ const VISUAL_CONFIG: Record<Exclude<VisualState, 'completed'>, {
   },
   tiebreakers_pending: {
     dot: 'bg-yellow-400',
-    title: 'Desempates pendientes',
-    description: 'Se detectaron empates que requieren resoluci\u00f3n.',
-    nextStep: 'Resolver los empates pendientes.',
+    title: 'Desempate pendiente',
+    description: 'La clasificaci\u00f3n est\u00e1 calculada, pero debes resolver un empate antes de publicar el resultado final.',
+    nextStep: '',
   },
 };
 
@@ -90,22 +90,32 @@ export function PickemStatusCard({
     }
   }, [eventId, router]);
 
+  const showCTA = visualState === 'open' || visualState === 'predictions_closed';
+
   return (
     <>
       <div className={`rounded-xl border border-border bg-surface ${compact ? 'p-4' : 'p-5 sm:p-6'}`}>
         <div className="flex items-start gap-3">
-          <span className={`mt-0.5 flex size-3 shrink-0 rounded-full ${config.dot}`} />
+          <span className={`mt-0.5 flex size-3 shrink-0 rounded-full ${visualState === 'tiebreakers_pending' ? nonCompletedConfig?.dot : config.dot}`} />
           <div className="flex-1 min-w-0">
             <h2 className={`font-bold text-text-primary ${compact ? 'text-sm' : 'text-base'}`}>
-              {isCompleted ? config.title : nonCompletedConfig?.title ?? config.title}
+              {visualState === 'tiebreakers_pending' ? nonCompletedConfig?.title : isCompleted ? config.title : nonCompletedConfig?.title ?? config.title}
             </h2>
             <p className={`text-text-secondary ${compact ? 'mt-0.5 text-xs' : 'mt-1 text-sm'}`}>
-              {isCompleted ? config.description : nonCompletedConfig?.description ?? config.description}
+              {visualState === 'tiebreakers_pending'
+                ? nonCompletedConfig?.description
+                : isCompleted
+                  ? config.description
+                  : nonCompletedConfig?.description ?? config.description}
             </p>
 
-            {isCompleted && (
-              <p className={`text-text-muted ${compact ? 'mt-1.5 text-xs' : 'mt-2 text-xs'}`}>
-                {submissionCount} participaci&oacute;n{submissionCount !== 1 ? 'es' : ''}
+            <p className={`text-text-muted ${compact ? 'mt-1.5 text-xs' : 'mt-2 text-xs'}`}>
+              {submissionCount} participaci&oacute;n{submissionCount !== 1 ? 'es' : ''}
+            </p>
+
+            {visualState === 'tiebreakers_pending' && pendingTiebreakerCount > 1 && (
+              <p className="mt-1 text-xs text-text-muted">
+                {pendingTiebreakerCount} desempates pendientes
               </p>
             )}
 
@@ -115,25 +125,13 @@ export function PickemStatusCard({
               </p>
             )}
 
-            {visualState === 'predictions_closed' && (
-              <p className="mt-2 text-xs text-text-muted">
-                {submissionCount} participaci&oacute;n{submissionCount !== 1 ? 'es' : ''} recibida{submissionCount !== 1 ? 's' : ''}
-              </p>
-            )}
-
-            {visualState === 'tiebreakers_pending' && !isCompleted && (
-              <p className="mt-2 text-xs text-text-muted">
-                {pendingTiebreakerCount} empate{pendingTiebreakerCount !== 1 ? 's' : ''} pendiente{pendingTiebreakerCount !== 1 ? 's' : ''} de resolver
-              </p>
-            )}
-
             {closeError && (
               <p className="mt-2 text-xs text-danger">{closeError}</p>
             )}
           </div>
         </div>
 
-        {!compact && (
+        {!compact && showCTA && (
           <>
             <div className="my-4 border-t border-border" />
 
@@ -162,14 +160,6 @@ export function PickemStatusCard({
                     Registrar resultados
                   </Link>
                 )}
-                {visualState === 'tiebreakers_pending' && !isCompleted && (
-                  <a
-                    href="#tiebreaker-section"
-                    className="inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-warning px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-warning/80"
-                  >
-                    Resolver desempates
-                  </a>
-                )}
               </div>
             </div>
           </>
@@ -179,13 +169,13 @@ export function PickemStatusCard({
       {showCloseModal && (
         <ConfirmActionModal
           title="Cerrar predicciones"
-          description="Los participantes ya no podr\u00e1n enviar nuevas predicciones."
+          description="Los participantes ya no podrán enviar nuevas predicciones."
           consequences={[
             'Se bloquean nuevas participaciones',
             'Se conservan las predicciones existentes',
-            'Podr\u00e1s registrar los resultados oficiales despu\u00e9s',
+            'Podrás registrar los resultados oficiales después',
           ]}
-          confirmLabel="S\u00ed, cerrar predicciones"
+          confirmLabel="Sí, cerrar predicciones"
           isPending={closing}
           onConfirm={handleClosePredictions}
           onCancel={() => { setShowCloseModal(false); setCloseError(null); }}

@@ -59,6 +59,7 @@ export interface RankingEntry {
   rank: number;
   profile_id: string;
   display_name: string | null;
+  avatar_url: string | null;
   total_score: number;
   correct_answers: number;
   total_questions: number;
@@ -72,6 +73,8 @@ export interface PaginatedRanking {
   page: number;
   pageSize: number;
   totalPages: number;
+  totalSlots: number;
+  hasPrizes: boolean;
 }
 
 export interface OfficialResultEntry {
@@ -414,14 +417,24 @@ export async function getFinalRanking(
   const supabase = await createServerClient();
 
   const leaderboard = await getRawLeaderboard(eventId);
-  if (leaderboard.length === 0) return { entries: [], totalCount: 0, page, pageSize, totalPages: 0 };
+  if (leaderboard.length === 0) return { entries: [], totalCount: 0, page, pageSize, totalPages: 0, totalSlots: 0, hasPrizes: false };
 
   const { data: draws } = await supabase
     .from('tiebreaker_draws')
     .select('profile_id, draw_order')
     .eq('event_id', eventId);
 
-  const drawSet = new Set((draws ?? []).map((d) => d.profile_id));
+  const drawWinnerSet = new Set(
+    (draws ?? []).filter((d) => d.draw_order === 1).map((d) => d.profile_id),
+  );
+
+  // Total prediction slots (correct denominator for aciertos)
+  const { data: questions } = await supabase
+    .from('prediction_questions')
+    .select('max_selections')
+    .eq('event_id', eventId)
+    .eq('is_active', true);
+  const totalSlots = (questions ?? []).reduce((sum, q) => sum + (q.max_selections ?? 0), 0);
 
   // Prize info per profile
   const { data: prizes } = await supabase
@@ -429,6 +442,7 @@ export async function getFinalRanking(
     .select('id, label, amount, currency, prize_category')
     .eq('event_id', eventId);
 
+  const hasPrizes = (prizes ?? []).length > 0;
   const prizeIds = (prizes ?? []).map((p) => p.id);
 
   const { data: awardRows } = await supabase
@@ -447,12 +461,55 @@ export async function getFinalRanking(
     prizesByProfile.set(a.profile_id, list);
   }
 
+  // Profile avatars
+  const profileIds = leaderboard.map((e) => e.profile_id);
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, avatar_url, twitch_avatar_url')
+    .in('id', profileIds);
+  const avatarMap = new Map((profiles ?? []).map((p) => [p.id, p.twitch_avatar_url ?? p.avatar_url]));
+
+  // Additional fallback: try to get Twitch avatar from auth.identities
+  try {
+    const { data: twitchIdentities } = await supabase
+      .from('identities')
+      .select('user_id, identity_data')
+      .eq('provider', 'twitch')
+      .in('user_id', profileIds);
+    if (twitchIdentities) {
+      for (const id of twitchIdentities) {
+        const idAvatar = id.identity_data?.avatar_url ?? id.identity_data?.picture ?? null;
+        const existing = avatarMap.get(id.user_id);
+        if (idAvatar && !existing) {
+          avatarMap.set(id.user_id, idAvatar);
+        }
+      }
+    }
+  } catch {
+    // auth.identities may not be accessible via public API; silently fall back
+  }
+
   // Build enriched entries
   let entries: RankingEntry[] = leaderboard.map((e) => ({
     ...e,
+    avatar_url: avatarMap.get(e.profile_id) ?? null,
     prizes: prizesByProfile.get(e.profile_id) ?? [],
-    is_tiebreaker_winner: drawSet.has(e.profile_id),
+    is_tiebreaker_winner: drawWinnerSet.has(e.profile_id),
   }));
+
+  // Diagnostic log for avatar/tiebreaker debugging
+  if (process.env.NODE_ENV === 'development') {
+    console.info('[ranking/avatar-debug]', {
+      participants: entries.map((p) => ({
+        profileId: p.profile_id,
+        displayName: p.display_name,
+        avatarUrl: p.avatar_url,
+        finalRank: p.rank,
+        wonTiebreaker: p.is_tiebreaker_winner,
+        prizeLabel: p.prizes.join(', '),
+      })),
+    });
+  }
 
   // Search
   if (search) {
@@ -482,7 +539,7 @@ export async function getFinalRanking(
   const start = (page - 1) * pageSize;
   const paged = entries.slice(start, start + pageSize);
 
-  return { entries: paged, totalCount, page, pageSize, totalPages };
+  return { entries: paged, totalCount, page, pageSize, totalPages, totalSlots, hasPrizes };
 }
 
 /* ------------------------------------------------------------------ */

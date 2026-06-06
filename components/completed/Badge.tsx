@@ -3,6 +3,7 @@ const BADGE_STYLES = {
   prized: 'bg-purple-primary/15 text-purple-primary border-purple-primary/30',
   subscriber: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
   tiebreaker: 'bg-green-500/15 text-green-400 border-green-500/30',
+  tie_pending: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
 };
 
 const BADGE_LABELS = {
@@ -10,6 +11,7 @@ const BADGE_LABELS = {
   prized: 'Premiado',
   subscriber: 'Beneficio de sub',
   tiebreaker: 'Ganador de desempate',
+  tie_pending: 'Empate',
 };
 
 export function Badge({ type }: { type: keyof typeof BADGE_STYLES }) {

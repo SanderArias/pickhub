@@ -2,6 +2,7 @@
 
 import { useActionState, useState, useMemo, useEffect } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signInWithTwitch } from '@/app/actions/auth';
 import { submitPredictions } from '@/app/actions/participant';
@@ -13,6 +14,7 @@ import { ReceiptModal } from '@/components/pickem/ReceiptModal';
 import { PickemParticipationHero } from '@/components/pickem/PickemParticipationHero';
 import { PrizeCarousel } from '@/components/pickem/PrizeCarousel';
 import { PredictionIntro } from '@/components/pickem/PredictionIntro';
+import { SUBMITTED_PREDICTION_STATUS_CONFIG } from '@/lib/status-config';
 import ReactCountryFlag from 'react-country-flag';
 import { SubscriberTwitchEligibilityNotice } from '@/components/pickem/SubscriberTwitchEligibilityNotice';
 import { checkParticipantTwitchStatus } from '@/app/actions/twitch-status';
@@ -152,6 +154,9 @@ export function PublicPickemView({
     const col1 = top8Answers.slice(0, half);
     const col2 = top8Answers.slice(half);
 
+    const statusCopy = SUBMITTED_PREDICTION_STATUS_CONFIG[event.status] ?? SUBMITTED_PREDICTION_STATUS_CONFIG.open;
+    const isCompleted = event.status === 'completed';
+
     return (
       <div className="flex flex-col gap-6">
         {/* Submitted hero */}
@@ -159,10 +164,20 @@ export function PublicPickemView({
           <div className="flex gap-6">
             <div className="min-w-0 flex-1 flex flex-col gap-1.5">
               <div className="flex items-center gap-2">
-                <svg className="size-4 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                <span className="text-xs font-medium text-success">Predicci&oacute;n enviada</span>
+                {statusCopy.tone === 'warning' ? (
+                  <svg className="size-4 text-warning" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                ) : (
+                  <svg className="size-4 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+                <span className={`text-xs font-medium ${statusCopy.tone === 'warning' ? 'text-warning' : 'text-success'}`}>
+                  {statusCopy.label}
+                </span>
               </div>
 
               <h1 className="text-2xl font-bold tracking-tight text-text-primary">{event.title}</h1>
@@ -183,13 +198,23 @@ export function PublicPickemView({
               )}
 
               <p className="text-sm text-text-secondary mt-1">
-                Tu Top 8 qued&oacute; registrado correctamente.
+                {statusCopy.description}
               </p>
               <p className="text-xs text-text-muted">
-                El Pick&rsquo;em contin&uacute;a abierto{event.ends_at ? ` hasta el ${formatDate(event.ends_at)}` : ' hasta que el creador cierre las predicciones'}.
+                {event.status === 'open' && event.ends_at
+                  ? `El Pick'em continúa abierto hasta el ${formatDate(event.ends_at)}.`
+                  : statusCopy.contextualMessage}
               </p>
 
               <div className="flex items-center gap-3 mt-3">
+                {isCompleted && (
+                  <Link
+                    href={`/pickems/${event.slug}`}
+                    className="rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
+                  >
+                    Ver resultados
+                  </Link>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowModal(true)}
