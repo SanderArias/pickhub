@@ -42,7 +42,7 @@ export function PredictionsSection({
   const [pickType, setPickType] = useState('player');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Prediction | null>(null);
-  const [templateMode, setTemplateMode] = useState<'template' | 'custom'>('custom');
+  const [templateMode, setTemplateMode] = useState<'template' | 'custom'>('template');
 
   const [state, formAction, pending] = useActionState(
     async (prev: { error: string | null }, formData: FormData) => {
@@ -60,7 +60,7 @@ export function PredictionsSection({
     if (prevPending.current && !pending && !state.error) {
       setShowForm(false);
       setEditing(null);
-      setTemplateMode('custom');
+      setTemplateMode('template');
     }
     prevPending.current = pending;
   }, [pending, state.error]);
@@ -89,7 +89,7 @@ export function PredictionsSection({
 
   const handleStartCreate = useCallback(() => {
     setEditing(null);
-    setTemplateMode('custom');
+    setTemplateMode('template');
     setPickType('player');
     setShowForm(true);
   }, []);
@@ -207,17 +207,6 @@ export function PredictionsSection({
               <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() => setTemplateMode('custom')}
-                  className={`flex-1 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
-                    templateMode === 'custom'
-                      ? 'border-purple-primary bg-purple-surface text-purple-primary'
-                      : 'border-border text-text-secondary hover:border-border-hover'
-                  }`}
-                >
-                  Predicción personalizada
-                </button>
-                <button
-                  type="button"
                   onClick={() => setTemplateMode('template')}
                   className={`flex-1 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
                     templateMode === 'template'
@@ -226,6 +215,17 @@ export function PredictionsSection({
                   }`}
                 >
                   Plantilla PickHub
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTemplateMode('custom')}
+                  className={`flex-1 rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
+                    templateMode === 'custom'
+                      ? 'border-purple-primary bg-purple-surface text-purple-primary'
+                      : 'border-border text-text-secondary hover:border-border-hover'
+                  }`}
+                >
+                  Predicción personalizada
                 </button>
               </div>
             </div>
