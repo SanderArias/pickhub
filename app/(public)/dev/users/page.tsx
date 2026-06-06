@@ -11,7 +11,7 @@ export default async function DevUsersPage() {
   const user = await getUser();
   if (!user) redirect('/login');
 
-  const profile = await getCurrentProfile();
+  const profile = await getCurrentProfile(user);
 
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-6 px-4 py-8">

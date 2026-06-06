@@ -7,7 +7,7 @@ export default async function SettingsPage() {
   const user = await getUser();
   if (!user) redirect('/login');
 
-  const profile = await getCurrentProfile();
+  const profile = await getCurrentProfile(user);
   if (!profile) redirect('/login');
 
   const { hasLinkedTwitch, twitchUsername, twitchAvatarUrl } = await checkTwitchLinked(user, profile);

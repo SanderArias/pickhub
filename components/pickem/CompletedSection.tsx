@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { getLeaderboard } from '@/app/actions/leaderboard';
 import { getTieGroups, getTiebreakerDraws } from '@/app/actions/tiebreaker';
 import { TiebreakerSection } from './TiebreakerSection';
@@ -24,7 +23,6 @@ export function CompletedSection({
   initialDrawsMap,
   myProfileId,
 }: CompletedSectionProps) {
-  const router = useRouter();
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(initialLeaderboard);
   const [tieGroups, setTieGroups] = useState<TieGroup[]>(initialTieGroups);
   const [drawsMap, setDrawsMap] = useState<Record<string, number>>(initialDrawsMap ?? {});
@@ -45,8 +43,7 @@ export function CompletedSection({
 
   const handleTiebreakerDone = useCallback(async () => {
     await refresh();
-    router.refresh();
-  }, [refresh, router]);
+  }, [refresh]);
 
   // Build set of tiebreaker winners (profile_ids with draw_order === 1)
   const tiebreakerWinners = Object.entries(drawsMap)

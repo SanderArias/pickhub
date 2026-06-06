@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { getUser } from '@/app/actions/auth';
 import { getCurrentProfile } from '@/lib/auth';
 import { createServerClient } from '@/services/supabase';
 import { getActivityLastSeenAt, updateActivityLastSeenAt } from '@/app/actions/activity';
@@ -10,9 +9,6 @@ export default async function ActivityPage({
 }: {
   searchParams: Promise<{ filter?: string }>;
 }) {
-  const user = await getUser();
-  if (!user) redirect('/login');
-
   const profile = await getCurrentProfile();
   if (!profile) redirect('/login');
 

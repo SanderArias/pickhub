@@ -28,33 +28,27 @@ export type Profile = {
   creator_profile: CreatorProfile | null;
 };
 
-export async function getCurrentProfile(): Promise<Profile | null> {
-  const user = await getUser();
+export async function getCurrentProfile(
+  existingUser?: Awaited<ReturnType<typeof getUser>> | null,
+): Promise<Profile | null> {
+  const user = existingUser ?? (await getUser());
   if (!user) return null;
-
-  console.log('[getCurrentProfile] user.id:', user.id);
 
   const supabase = await createServerClient();
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile } = await supabase
     .from('profiles')
     .select('*')
     .eq('id', user.id)
     .maybeSingle();
 
-  console.log('[getCurrentProfile] profile:', profile);
-  console.log('[getCurrentProfile] profileError:', profileError);
-
   if (!profile) return null;
 
-  const { data: creatorProfile, error: creatorError } = await supabase
+  const { data: creatorProfile } = await supabase
     .from('creator_profiles')
     .select('*')
     .eq('profile_id', user.id)
     .maybeSingle();
-
-  console.log('[getCurrentProfile] creatorProfile:', creatorProfile);
-  console.log('[getCurrentProfile] creatorError:', creatorError);
 
   return { ...profile, creator_profile: creatorProfile ?? null } as Profile;
 }

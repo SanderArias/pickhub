@@ -1,6 +1,5 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getUser } from '@/app/actions/auth';
 import { getCurrentProfile } from '@/lib/auth';
 import { createServerClient } from '@/services/supabase';
 
@@ -23,9 +22,6 @@ function timeAgo(dateStr: string): string {
 }
 
 export default async function CreatorDashboardPage() {
-  const user = await getUser();
-  if (!user) redirect('/login');
-
   const profile = await getCurrentProfile();
   if (!profile) redirect('/login');
 

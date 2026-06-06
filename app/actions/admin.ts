@@ -1,4 +1,4 @@
-'use server';
+﻿'use server';
 
 import { revalidatePath } from 'next/cache';
 import { createServerClient } from '@/services/supabase';
@@ -19,8 +19,6 @@ export async function approveCreator(profileId: string): Promise<{ error: string
     .eq('profile_id', profileId)
     .maybeSingle();
 
-  console.log('[creator moderation] approveCreator', { profileId, foundCp: !!cp, cpSelErr });
-
   if (cpSelErr) {
     return { error: `Error al buscar perfil: ${cpSelErr.message}` };
   }
@@ -35,7 +33,7 @@ export async function approveCreator(profileId: string): Promise<{ error: string
     .eq('id', cp.id)
     .select('id');
 
-  console.log('[creator moderation] approveCreator update cp', { updatedCp: !!updatedCp, cpErr });
+
 
   if (cpErr) {
     return { error: `Error al aprobar: ${cpErr.message}` };
@@ -61,7 +59,7 @@ export async function approveCreator(profileId: string): Promise<{ error: string
       .eq('id', profileId)
       .select('id');
 
-    console.log('[creator moderation] approveCreator update profile', { updatedProfile: !!updatedProfile, pErr });
+
 
     if (pErr) {
       return { error: `Error al actualizar rol: ${pErr.message}` };
@@ -96,7 +94,7 @@ export async function rejectCreator(profileId: string, formData: FormData): Prom
   if (!cp) return { error: 'Perfil de creador no encontrado.' };
   if (cp.status !== 'pending') return { error: 'Solo se puede rechazar un perfil pendiente.' };
 
-  console.log('[creator moderation] rejectCreator', { profileId, reason });
+
 
   const { data: updatedCp, error: cpErr } = await supabase
     .from('creator_profiles')
@@ -104,7 +102,7 @@ export async function rejectCreator(profileId: string, formData: FormData): Prom
     .eq('id', cp.id)
     .select('id');
 
-  console.log('[creator moderation] rejectCreator update cp', { updatedCp: !!updatedCp, cpErr });
+
 
   if (cpErr) return { error: `Error al rechazar: ${cpErr.message}` };
   if (!updatedCp || updatedCp.length === 0) {
@@ -124,7 +122,7 @@ export async function rejectCreator(profileId: string, formData: FormData): Prom
       .eq('id', profileId)
       .select('id');
 
-    console.log('[creator moderation] rejectCreator update profile', { updatedProfile: !!updatedProfile, pErr });
+
 
     if (pErr) return { error: `Error al actualizar rol: ${pErr.message}` };
     if (!updatedProfile || updatedProfile.length === 0) {
@@ -144,7 +142,7 @@ export async function suspendCreator(profileId: string, formData: FormData): Pro
   }
 
   const reason = (formData.get('reason') as string)?.trim();
-  if (!reason) return { error: 'El motivo de suspensión es obligatorio.' };
+  if (!reason) return { error: 'El motivo de suspensiÃ³n es obligatorio.' };
 
   const supabase = await createServerClient();
 
@@ -157,7 +155,7 @@ export async function suspendCreator(profileId: string, formData: FormData): Pro
   if (!cp) return { error: 'Perfil de creador no encontrado.' };
   if (cp.status !== 'approved') return { error: 'Solo se puede suspender un perfil aprobado.' };
 
-  console.log('[creator moderation] suspendCreator', { profileId, reason });
+
 
   const { data: updatedCp, error: cpErr } = await supabase
     .from('creator_profiles')
@@ -165,7 +163,7 @@ export async function suspendCreator(profileId: string, formData: FormData): Pro
     .eq('id', cp.id)
     .select('id');
 
-  console.log('[creator moderation] suspendCreator update cp', { updatedCp: !!updatedCp, cpErr });
+
 
   if (cpErr) return { error: `Error al suspender: ${cpErr.message}` };
   if (!updatedCp || updatedCp.length === 0) {
@@ -185,7 +183,7 @@ export async function suspendCreator(profileId: string, formData: FormData): Pro
       .eq('id', profileId)
       .select('id');
 
-    console.log('[creator moderation] suspendCreator update profile', { updatedProfile: !!updatedProfile, pErr });
+
 
     if (pErr) return { error: `Error al actualizar rol: ${pErr.message}` };
     if (!updatedProfile || updatedProfile.length === 0) {
@@ -215,7 +213,7 @@ export async function reactivateCreator(profileId: string): Promise<{ error: str
   if (!cp) return { error: 'Perfil de creador no encontrado.' };
   if (cp.status !== 'suspended') return { error: 'Solo se puede reactivar un perfil suspendido.' };
 
-  console.log('[creator moderation] reactivateCreator', { profileId });
+
 
   const { data: updatedCp, error: cpErr } = await supabase
     .from('creator_profiles')
@@ -223,7 +221,7 @@ export async function reactivateCreator(profileId: string): Promise<{ error: str
     .eq('id', cp.id)
     .select('id');
 
-  console.log('[creator moderation] reactivateCreator update cp', { updatedCp: !!updatedCp, cpErr });
+
 
   if (cpErr) return { error: `Error al reactivar: ${cpErr.message}` };
   if (!updatedCp || updatedCp.length === 0) {
@@ -243,7 +241,7 @@ export async function reactivateCreator(profileId: string): Promise<{ error: str
       .eq('id', profileId)
       .select('id');
 
-    console.log('[creator moderation] reactivateCreator update profile', { updatedProfile: !!updatedProfile, pErr });
+
 
     if (pErr) return { error: `Error al actualizar rol: ${pErr.message}` };
     if (!updatedProfile || updatedProfile.length === 0) {
@@ -273,7 +271,7 @@ export async function reopenCreatorRequest(profileId: string): Promise<{ error: 
   if (!cp) return { error: 'Perfil de creador no encontrado.' };
   if (cp.status !== 'rejected') return { error: 'Solo se puede reabrir un perfil rechazado.' };
 
-  console.log('[creator moderation] reopenCreatorRequest', { profileId });
+
 
   const { data: updatedCp, error: cpErr } = await supabase
     .from('creator_profiles')
@@ -281,7 +279,7 @@ export async function reopenCreatorRequest(profileId: string): Promise<{ error: 
     .eq('id', cp.id)
     .select('id');
 
-  console.log('[creator moderation] reopenCreatorRequest update cp', { updatedCp: !!updatedCp, cpErr });
+
 
   if (cpErr) return { error: `Error al reabrir solicitud: ${cpErr.message}` };
   if (!updatedCp || updatedCp.length === 0) {
@@ -301,7 +299,7 @@ export async function reopenCreatorRequest(profileId: string): Promise<{ error: 
       .eq('id', profileId)
       .select('id');
 
-    console.log('[creator moderation] reopenCreatorRequest update profile', { updatedProfile: !!updatedProfile, pErr });
+
 
     if (pErr) return { error: `Error al actualizar rol: ${pErr.message}` };
     if (!updatedProfile || updatedProfile.length === 0) {
@@ -328,7 +326,7 @@ function parseFormInterval(formData: FormData, key: string): string | null {
   if (!raw || raw.trim().length === 0) return null;
   const cleaned = raw.trim().toLowerCase();
   const match = cleaned.match(/^(\d+)\s*(h|hour|hours|m|min|minute|minutes)?$/);
-  if (!match) throw new Error(`Valor inválido para ${key}. Usa formato como "2h" o "30m".`);
+  if (!match) throw new Error(`Valor invÃ¡lido para ${key}. Usa formato como "2h" o "30m".`);
   const num = parseInt(match[1], 10);
   const unit = match[2]?.[0] ?? 'h';
   return `${num} ${unit === 'm' ? 'minutes' : 'hours'}`;

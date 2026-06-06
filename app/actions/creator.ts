@@ -163,14 +163,6 @@ export async function getCreatorPickemById(id: string) {
     .eq('event_id', id)
     .order('tier', { ascending: true });
 
-  console.log('[getCreatorPickemById] Prizes query', {
-    eventId: id,
-    creatorId,
-    prizesCount: prizes?.length ?? 0,
-    prizes,
-    prizesError: prizesError ? { message: prizesError.message, code: prizesError.code, details: prizesError.details } : null,
-  });
-
   const { data: creatorProfile } = await supabase
     .from('creator_profiles')
     .select('handle, display_name, avatar_url')

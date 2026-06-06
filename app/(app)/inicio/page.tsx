@@ -11,7 +11,7 @@ export default async function InicioPage() {
   const user = await getUser();
   if (!user) redirect('/login');
 
-  const profile = await getCurrentProfile();
+  const profile = await getCurrentProfile(user);
   if (!profile) redirect('/login');
 
   const displayName = getDisplayUser(profile, user);

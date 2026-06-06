@@ -1,13 +1,9 @@
 ﻿import { redirect } from 'next/navigation';
-import { getUser } from '@/app/actions/auth';
 import { getCurrentProfile } from '@/lib/auth';
 import { getUserParticipations } from '@/app/actions/participant';
 import { ParticipacionesClient } from './ParticipacionesClient';
 
 export default async function ParticipacionesPage() {
-  const user = await getUser();
-  if (!user) redirect('/login');
-
   const profile = await getCurrentProfile();
   if (!profile) redirect('/login');
 

@@ -1,7 +1,6 @@
 'use client';
 
 import { useRef, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
 import { uploadEventLogo, removeEventLogo } from '@/app/actions/creator';
 
 const ACCEPT = 'image/png,image/jpeg,image/webp,image/svg+xml';
@@ -13,7 +12,6 @@ export function LogoUploader({
   eventId: string;
   currentUrl: string | null;
 }) {
-  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -55,8 +53,7 @@ export function LogoUploader({
     }
 
     setUploading(false);
-    router.refresh();
-  }, [eventId, validateFile, router]);
+  }, [eventId, validateFile]);
 
   const handleRemove = useCallback(async () => {
     setRemoving(true);
@@ -69,8 +66,7 @@ export function LogoUploader({
       if (inputRef.current) inputRef.current.value = '';
     }
     setRemoving(false);
-    router.refresh();
-  }, [eventId, router]);
+  }, [eventId]);
 
   return (
     <div className="flex flex-col gap-3">
