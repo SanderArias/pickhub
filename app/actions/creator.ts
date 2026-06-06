@@ -1,4 +1,4 @@
-'use server';
+﻿'use server';
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -6,6 +6,7 @@ import { createServerClient } from '@/services/supabase';
 import { getUser } from './auth';
 import { requireCreator } from '@/lib/auth';
 import { normalizeTwitchChannel } from '@/lib/twitch';
+import { serializeActionError, type SerializableActionError } from '@/lib/action-errors';
 
 export async function getCreatorProfile() {
   const user = await getUser();
@@ -133,13 +134,40 @@ export async function getCreatorPickems() {
   const creatorId = profile.creator_profile!.id;
 
   const supabase = await createServerClient();
-  const { data } = await supabase
+
+  const { data: events } = await supabase
     .from('events')
-    .select('id, title, slug, description, status, event_config, created_at, updated_at')
+    .select('id, title, slug, description, status, ends_at, event_config, created_at, updated_at')
     .eq('creator_id', creatorId)
     .order('created_at', { ascending: false });
 
-  return data ?? [];
+  if (!events || events.length === 0) return [];
+
+  const eventIds = events.map((e) => e.id);
+
+  const prizeCounts = new Map<string, number>();
+  const { data: prizeData } = await supabase
+    .from('event_prizes')
+    .select('event_id')
+    .in('event_id', eventIds);
+  for (const p of prizeData ?? []) {
+    prizeCounts.set(p.event_id, (prizeCounts.get(p.event_id) ?? 0) + 1);
+  }
+
+  const subCounts = new Map<string, number>();
+  const { data: partData } = await supabase
+    .from('event_participants')
+    .select('event_id')
+    .in('event_id', eventIds);
+  for (const p of partData ?? []) {
+    subCounts.set(p.event_id, (subCounts.get(p.event_id) ?? 0) + 1);
+  }
+
+  return events.map((e) => ({
+    ...e,
+    prizeCount: prizeCounts.get(e.id) ?? 0,
+    submissionCount: subCounts.get(e.id) ?? 0,
+  }));
 }
 
 export async function getCreatorPickemById(id: string) {
@@ -911,6 +939,152 @@ export async function deleteEventPrize(eventId: string, prizeId: string): Promis
     .eq('event_id', eventId);
 
   if (dErr) return { error: `Error al eliminar premio: ${dErr.message}` };
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { error: null };
+}
+
+export async function updateEventPrizes(
+  eventId: string,
+  prizes: Array<{
+    clientId?: string;
+    id?: string;
+    label: string;
+    description: string | null;
+    amount: number | null;
+    currency: string;
+    quantity: number;
+    eligibility_type: string;
+    prize_category?: string;
+    eligible_rank_start: number;
+    sort_order: number;
+    assignment_method?: string;
+  }>,
+  stackingPolicy?: string,
+): Promise<
+  | { success: true; saved: Array<{ clientId: string; id: string }>; error: null }
+  | { success: false; saved: []; error: SerializableActionError }
+> {
+  const saveAttemptId = crypto.randomUUID();
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id')
+    .eq('id', eventId)
+    .eq('creator_id', creatorId)
+    .single();
+
+  if (!event) {
+    const err: SerializableActionError = { message: 'Evento no encontrado.', operation: 'verify_event' };
+    return { success: false, saved: [], error: err };
+  }
+
+  const existingIds = new Set<string>();
+  const { data: existing } = await supabase
+    .from('event_prizes')
+    .select('id')
+    .eq('event_id', eventId);
+  for (const p of existing ?? []) existingIds.add(p.id);
+
+  const incomingIds = new Set(prizes.filter((p) => p.id).map((p) => p.id!));
+  const toDelete = [...existingIds].filter((id) => !incomingIds.has(id));
+
+  const saved: Array<{ clientId: string; id: string }> = [];
+
+  for (const prize of prizes) {
+    const payload: Record<string, unknown> = {
+      label: prize.label,
+      description: prize.description,
+      amount: prize.amount,
+      currency: prize.currency,
+      quantity: prize.quantity,
+      eligibility_type: prize.eligibility_type,
+      eligible_rank_start: prize.eligible_rank_start,
+      sort_order: prize.sort_order,
+      assignment_method: prize.assignment_method ?? 'ranking',
+    };
+    if (prize.prize_category) {
+      payload.prize_category = prize.prize_category;
+    }
+
+    if (prize.id && existingIds.has(prize.id)) {
+      const { data: updated, error: uErr } = await supabase
+        .from('event_prizes')
+        .update(payload)
+        .eq('id', prize.id)
+        .eq('event_id', eventId)
+        .select('id')
+        .single();
+      if (uErr) {
+        const serialized = serializeActionError(uErr, 'update_prize');
+        console.error('[prizes/save:server] Failed to update prize', { saveAttemptId, ...serialized, eventId, prizeId: prize.id });
+        return { success: false, saved: [], error: serialized };
+      }
+      saved.push({ clientId: prize.clientId ?? '', id: updated.id });
+    } else {
+      const { data: inserted, error: iErr } = await supabase.from('event_prizes').insert({
+        event_id: eventId,
+        ...payload,
+      } as Record<string, unknown>).select('id').single();
+      if (iErr) {
+        const serialized = serializeActionError(iErr, 'insert_prize');
+        console.error('[prizes/save:server] Failed to insert prize', { saveAttemptId, ...serialized, eventId, prizeLabel: prize.label });
+        return { success: false, saved: [], error: serialized };
+      }
+      saved.push({ clientId: prize.clientId ?? '', id: inserted.id });
+    }
+  }
+
+  if (toDelete.length > 0) {
+    const { error: dErr } = await supabase
+      .from('event_prizes')
+      .delete()
+      .in('id', toDelete)
+      .eq('event_id', eventId);
+    if (dErr) {
+      const serialized = serializeActionError(dErr, 'delete_prizes');
+      console.error('[prizes/save:server] Failed to delete prizes', { saveAttemptId, ...serialized, eventId, deletedIds: toDelete });
+      return { success: false, saved: [], error: serialized };
+    }
+  }
+
+  if (stackingPolicy !== undefined) {
+    const { error: spErr } = await supabase
+      .from('events')
+      .update({ prize_stacking_policy: stackingPolicy })
+      .eq('id', eventId)
+      .eq('creator_id', creatorId);
+    if (spErr) {
+      const serialized = serializeActionError(spErr, 'update_stacking_policy');
+      console.error('[prizes/save:server] Failed to update stacking policy', { saveAttemptId, ...serialized, eventId });
+      return { success: false, saved: [], error: serialized };
+    }
+  }
+
+  revalidatePath(`/creator/pickems/${eventId}`);
+  return { success: true, saved, error: null };
+}
+
+export async function updatePrizeStackingPolicy(
+  eventId: string,
+  policy: string,
+): Promise<{ error: string | null }> {
+  const profile = await requireCreator();
+  const creatorId = profile.creator_profile!.id;
+
+  const supabase = await createServerClient();
+
+  const { error: uErr } = await supabase
+    .from('events')
+    .update({ prize_stacking_policy: policy })
+    .eq('id', eventId)
+    .eq('creator_id', creatorId);
+
+  if (uErr) return { error: `Error al actualizar política: ${uErr.message}` };
 
   revalidatePath(`/creator/pickems/${eventId}`);
   return { error: null };

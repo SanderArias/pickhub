@@ -159,42 +159,36 @@ export function PublicPickemView({
 
       {/* Prizes */}
       {hasPrizes && (() => {
-        const subPrizes = prizes.filter((p) => p.tier === 'subscriber');
-        const communityPrizes = prizes.filter((p) => p.tier === 'nonsubscriber');
-
-        const PrizeCard = ({ prize, variant }: { prize: Prize; variant: 'sub' | 'community' }) => (
-          <div
-            className={`inline-flex flex-col gap-0.5 rounded-lg border px-3 py-2 w-fit min-w-[150px] max-w-[220px] ${
-              variant === 'sub'
-                ? 'border-yellow-600/30 bg-yellow-500/5'
-                : 'border-border bg-surface'
-            }`}
-          >
-            {variant === 'sub' ? (
-              <p className="text-[11px] font-semibold text-yellow-400 tracking-wide">★ Subs</p>
-            ) : (
-              <p className="text-[11px] font-medium text-text-secondary">Comunidad</p>
-            )}
-            {prize.amount !== null && (
-              <p className={`text-xs font-bold ${variant === 'sub' ? 'text-yellow-400' : 'text-text-primary'}`}>
-                {prize.amount.toLocaleString('es-ES')} {prize.currency ?? 'USD'}
-              </p>
-            )}
-            <p className="text-[11px] text-text-muted">
-              {prize.quantity} ganador{prize.quantity !== 1 ? 'es' : ''}
-            </p>
-          </div>
-        );
+        const sorted = [...prizes].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 
         return (
           <section className="flex flex-col gap-2">
             <h2 className="text-sm font-semibold text-text-primary">Premios</h2>
             <div className="flex flex-wrap items-center gap-2">
-              {subPrizes.map((p) => (
-                <PrizeCard key={p.id} prize={p} variant="sub" />
-              ))}
-              {communityPrizes.map((p) => (
-                <PrizeCard key={p.id} prize={p} variant="community" />
+              {sorted.map((p) => (
+                <div
+                  key={p.id}
+                  className={`inline-flex flex-col gap-0.5 rounded-lg border px-3 py-2 w-fit min-w-[150px] max-w-[220px] ${
+                    p.eligibility_type === 'subscribers'
+                      ? 'border-yellow-600/30 bg-yellow-500/5'
+                      : 'border-border bg-surface'
+                  }`}
+                >
+                  {p.eligibility_type === 'subscribers' ? (
+                    <p className="text-[11px] font-semibold text-yellow-400 tracking-wide">★ Subs</p>
+                  ) : p.eligibility_type === 'non_subscribers' ? (
+                    <p className="text-[11px] font-medium text-text-secondary">No subs</p>
+                  ) : null}
+                  <p className="text-xs font-medium text-text-primary">{p.label}</p>
+                  {p.amount !== null && (
+                    <p className={`text-xs font-bold ${p.eligibility_type === 'subscribers' ? 'text-yellow-400' : 'text-text-primary'}`}>
+                      {p.amount.toLocaleString('es-ES')} {p.currency ?? 'USD'}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-text-muted">
+                    {p.quantity} ganador{p.quantity !== 1 ? 'es' : ''}
+                  </p>
+                </div>
               ))}
             </div>
           </section>

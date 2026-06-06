@@ -15,3 +15,51 @@ export function normalizeTwitchChannel(raw: string | null): string | null {
   const clean = channel.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
   return clean || null;
 }
+
+export type TwitchVerificationStatus =
+  | 'loading'
+  | 'active'
+  | 'inactive'
+  | 'error'
+  | 'reauthorization_required';
+
+export interface CreatorTwitchConnection {
+  id: string;
+  profile_id: string;
+  twitch_user_id: string;
+  twitch_username: string | null;
+  twitch_avatar_url: string | null;
+  access_token_encrypted: string;
+  refresh_token_encrypted: string | null;
+  expires_at: string | null;
+  scopes: string[] | null;
+  subscriber_verification_enabled: boolean;
+  authorized_at: string | null;
+  revoked_at: string | null;
+}
+
+export function isSubscriberVerificationActive(
+  connection: CreatorTwitchConnection | null,
+): boolean {
+  if (!connection) return false;
+  return (
+    connection.subscriber_verification_enabled === true &&
+    Boolean(connection.twitch_user_id) &&
+    Boolean(connection.access_token_encrypted) &&
+    connection.revoked_at === null
+  );
+}
+
+export function getTwitchVerificationStatus(
+  connection: CreatorTwitchConnection | null,
+): TwitchVerificationStatus {
+  if (!connection) return 'inactive';
+  if (connection.revoked_at !== null) return 'inactive';
+  if (!connection.access_token_encrypted) return 'inactive';
+  if (!connection.subscriber_verification_enabled) return 'inactive';
+  if (connection.expires_at && new Date(connection.expires_at) < new Date()) {
+    if (connection.refresh_token_encrypted) return 'reauthorization_required';
+    return 'inactive';
+  }
+  return 'active';
+}

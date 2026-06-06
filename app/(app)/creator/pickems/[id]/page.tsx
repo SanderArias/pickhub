@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getCreatorPickemById } from '@/app/actions/creator';
+import { getCreatorTwitchVerificationStatus } from '@/app/actions/twitch-status';
 import { getEventResults } from '@/app/actions/scoring';
 import { getLeaderboard } from '@/app/actions/leaderboard';
 import { getTiebreakerDraws, getTieGroups } from '@/app/actions/tiebreaker';
@@ -11,7 +12,7 @@ import {
 import { PlayersSection } from '@/components/players/PlayersSection';
 import { PredictionsSection } from '@/components/predictions/PredictionsSection';
 import { GeneralInfoSection } from '@/components/pickem/GeneralInfoSection';
-import { PrizesSection } from '@/components/picks/PrizesSection';
+import { PrizeSection } from '@/components/pickem/PrizeSection';
 import { Top8Readonly } from '@/components/pickem/Top8Readonly';
 import { CompletedRightPanel } from '@/components/pickem/CompletedRightPanel';
 import { PickemStatusCard } from '@/components/pickem/PickemStatusCard';
@@ -49,6 +50,8 @@ export default async function PickemDashboardPage({
     !event.ends_at || new Date(event.ends_at) > new Date();
 
   const hasPrizes = event.prizes.length > 0;
+
+  const { status: twitchStatus } = await getCreatorTwitchVerificationStatus();
 
   const existingResults = await getEventResults(id);
   const leaderboard = await getLeaderboard(id);
@@ -194,7 +197,13 @@ export default async function PickemDashboardPage({
             action={<span className="text-xs text-text-muted">{hasPrizes ? `${event.prizes.length} configurado${event.prizes.length !== 1 ? 's' : ''}` : 'Opcional'}</span>}
             accent={hasPrizes ? 'success' : 'warning'}
           >
-            <PrizesSection eventId={id} prizes={event.prizes} readOnly={false} />
+            <PrizeSection
+              eventId={id}
+              initialPrizes={event.prizes}
+              initialStackingPolicy={event.prize_stacking_policy ?? 'single_prize_per_participant'}
+              twitchStatus={twitchStatus}
+              readOnly={false}
+            />
           </SectionCard>
 
           <SectionCard title="Publicación">
@@ -227,44 +236,37 @@ export default async function PickemDashboardPage({
         <>
           {/* Prizes */}
           {hasPrizes && (() => {
-            type PrizeShape = { id: string; tier: string; label: string; amount: number | null; currency: string | null; quantity: number };
+            type PrizeShape = { id: string; label: string; amount: number | null; currency: string | null; quantity: number; eligibility_type: string; sort_order?: number };
             const prizes = event.prizes as PrizeShape[];
-            const subPrizes = prizes.filter((p) => p.tier === 'subscriber');
-            const communityPrizes = prizes.filter((p) => p.tier === 'nonsubscriber');
-
-            const PrizeCard = ({ prize, variant }: { prize: PrizeShape; variant: 'sub' | 'community' }) => (
-              <div
-                className={`inline-flex flex-col gap-0.5 rounded-lg border px-3 py-2 w-fit min-w-[150px] max-w-[220px] ${
-                  variant === 'sub'
-                    ? 'border-yellow-600/30 bg-yellow-500/5'
-                    : 'border-border bg-surface'
-                }`}
-              >
-                {variant === 'sub' ? (
-                  <p className="text-[11px] font-semibold text-yellow-400 tracking-wide">★ Subs</p>
-                ) : (
-                  <p className="text-[11px] font-medium text-text-secondary">Comunidad</p>
-                )}
-                {prize.amount !== null && (
-                  <p className={`text-xs font-bold ${variant === 'sub' ? 'text-yellow-400' : 'text-text-primary'}`}>
-                    {prize.amount.toLocaleString('es-ES')} {prize.currency ?? 'USD'}
-                  </p>
-                )}
-                <p className="text-[11px] text-text-muted">
-                  {prize.quantity} ganador{prize.quantity !== 1 ? 'es' : ''}
-                </p>
-              </div>
-            );
 
             return (
               <section className="flex flex-col gap-2">
                 <h2 className="text-sm font-semibold text-text-primary">Premios</h2>
                 <div className="flex flex-wrap items-center gap-2">
-                  {subPrizes.map((p) => (
-                    <PrizeCard key={p.id} prize={p} variant="sub" />
-                  ))}
-                  {communityPrizes.map((p) => (
-                    <PrizeCard key={p.id} prize={p} variant="community" />
+                  {prizes.sort((a: { sort_order?: number }, b: { sort_order?: number }) => (a.sort_order ?? 0) - (b.sort_order ?? 0)).map((p) => (
+                    <div
+                      key={p.id}
+                      className={`inline-flex flex-col gap-0.5 rounded-lg border px-3 py-2 w-fit min-w-[150px] max-w-[220px] ${
+                        p.eligibility_type === 'subscribers'
+                          ? 'border-yellow-600/30 bg-yellow-500/5'
+                          : 'border-border bg-surface'
+                      }`}
+                    >
+                      {p.eligibility_type === 'subscribers' ? (
+                        <p className="text-[11px] font-semibold text-yellow-400 tracking-wide">★ Subs</p>
+                      ) : p.eligibility_type === 'non_subscribers' ? (
+                        <p className="text-[11px] font-medium text-text-secondary">No subs</p>
+                      ) : null}
+                      <p className="text-xs font-medium text-text-primary">{p.label}</p>
+                      {p.amount !== null && (
+                        <p className={`text-xs font-bold ${p.eligibility_type === 'subscribers' ? 'text-yellow-400' : 'text-text-primary'}`}>
+                          {p.amount.toLocaleString('es-ES')} {p.currency ?? 'USD'}
+                        </p>
+                      )}
+                      <p className="text-[11px] text-text-muted">
+                        {p.quantity} ganador{p.quantity !== 1 ? 'es' : ''}
+                      </p>
+                    </div>
                   ))}
                 </div>
               </section>

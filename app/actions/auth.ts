@@ -1,4 +1,4 @@
-'use server';
+﻿'use server';
 
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -98,6 +98,51 @@ export async function signUpWithEmail(_prev: unknown, formData: FormData) {
   }
 
   redirect('/inicio');
+}
+
+export async function resetPasswordForEmail(_prev: unknown, formData: FormData) {
+  const email = formData.get('email') as string;
+
+  if (!email) {
+    return { error: 'Introduce tu correo electrónico.' };
+  }
+
+  const host = (await headers()).get('host') ?? 'localhost:3000';
+  const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
+  const origin = `${protocol}://${host}`;
+
+  const supabase = await createServerClient();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${origin}/update-password`,
+  });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { success: 'Te enviamos un enlace para restablecer tu contraseña.' };
+}
+
+export async function updatePassword(_prev: unknown, formData: FormData) {
+  const password = formData.get('password') as string;
+  const confirmPassword = formData.get('confirmPassword') as string;
+
+  if (!password || password.length < 6) {
+    return { error: 'La contraseña debe tener al menos 6 caracteres.' };
+  }
+
+  if (password !== confirmPassword) {
+    return { error: 'Las contraseñas no coinciden.' };
+  }
+
+  const supabase = await createServerClient();
+  const { error } = await supabase.auth.updateUser({ password });
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { success: 'Contraseña actualizada correctamente.' };
 }
 
 export async function getSession() {

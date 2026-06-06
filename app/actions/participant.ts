@@ -49,12 +49,17 @@ export interface PredictionQuestion {
 
 export interface Prize {
   id: string;
+  event_id: string;
   tier: string;
   label: string;
   description: string | null;
   amount: number | null;
   currency: string | null;
   quantity: number;
+  eligibility_type: string;
+  assignment_method: string;
+  eligible_rank_start: number;
+  sort_order: number;
 }
 
 export interface Answer {

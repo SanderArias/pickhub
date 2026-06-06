@@ -3,6 +3,10 @@
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/services/supabase';
 import { getUser } from './auth';
+import {
+  type CreatorTwitchConnection,
+  isSubscriberVerificationActive,
+} from '@/lib/twitch';
 
 export async function getSubVerificationStatus() {
   const user = await getUser();
@@ -22,7 +26,7 @@ export async function getSubVerificationStatus() {
 
   return {
     connected: true as const,
-    enabled: connection.subscriber_verification_enabled,
+    enabled: isSubscriberVerificationActive(connection as CreatorTwitchConnection),
     twitchUsername: connection.twitch_username,
     twitchAvatarUrl: connection.twitch_avatar_url,
     scopes: connection.scopes,
