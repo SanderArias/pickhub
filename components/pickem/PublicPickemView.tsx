@@ -100,8 +100,22 @@ export function PublicPickemView({
           <div className="pointer-events-none absolute -inset-x-8 -top-8 h-48 bg-gradient-to-b from-purple-primary/[0.04] to-transparent" />
           <div className="relative">
             <div className="mb-3 flex items-center gap-2">
-              <span className={`size-2 rounded-full ${isOpen ? 'bg-green-500' : 'bg-text-muted'}`} />
-              <span className="text-xs font-medium text-text-secondary">
+              <span className={`size-2 rounded-full ${
+                event.status === 'open'
+                  ? 'bg-green-500'
+                  : event.status === 'predictions_closed'
+                    ? 'bg-warning'
+                    : event.status === 'completed'
+                      ? 'bg-success shadow-[0_0_6px_rgba(34,197,94,0.4)]'
+                      : 'bg-text-muted'
+              }`} />
+              <span className={`text-xs font-medium ${
+                event.status === 'completed'
+                  ? 'text-success'
+                  : event.status === 'predictions_closed'
+                    ? 'text-warning'
+                    : 'text-text-secondary'
+              }`}>
                 {event.status === 'open'
                   ? `Abierto${event.ends_at ? ` · Cierra ${new Date(event.ends_at).toLocaleDateString()}` : ''}`
                   : event.status === 'predictions_closed'

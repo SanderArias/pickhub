@@ -1,9 +1,14 @@
 ﻿import { redirect } from 'next/navigation';
 import { getUser, signInWithTwitch } from '@/app/actions/auth';
-import { LoginForm } from './LoginForm';
+import { AuthForm } from './LoginForm';
 import { Logo } from '@/components/ui/Logo';
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ confirmed?: string }>;
+}) {
+  const { confirmed } = await searchParams;
   const user = await getUser();
 
   if (user) {
@@ -21,22 +26,9 @@ export default async function LoginPage() {
         </div>
 
         <div className="rounded-lg border border-border bg-surface p-6">
-          <div className="mb-6">
-            <p className="mb-3 text-xs font-semibold tracking-wider text-text-muted">
-              Entrar con Twitch
-            </p>
-            <form action={signInWithTwitch}>
-              <button
-                type="submit"
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-purple-primary px-4 py-2.5 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
-              >
-                <TwitchIcon />
-                Continuar con Twitch
-              </button>
-            </form>
-          </div>
+          <AuthForm isConfirmed={confirmed === '1'} />
 
-          <div className="relative mb-6">
+          <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-border" />
             </div>
@@ -45,12 +37,15 @@ export default async function LoginPage() {
             </div>
           </div>
 
-          <div>
-            <p className="mb-3 text-xs font-semibold tracking-wider text-text-muted">
-              Entrar como admin / dev
-            </p>
-            <LoginForm />
-          </div>
+          <form action={signInWithTwitch}>
+            <button
+              type="submit"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-purple-primary px-4 py-2.5 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+            >
+              <TwitchIcon />
+              Continuar con Twitch
+            </button>
+          </form>
         </div>
       </div>
     </div>
