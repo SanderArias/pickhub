@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -247,6 +247,18 @@ export function Top8OfficialResults({
 
   const rankedCount = useMemo(() => top8.filter(Boolean).length, [top8]);
 
+  const isInitialRender = useRef(true);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  useEffect(() => {
+    if (isInitialRender.current) {
+      isInitialRender.current = false;
+      return;
+    }
+    const ordered = top8.filter(Boolean).map((p) => p!.optionId);
+    onChangeRef.current(ordered);
+  }, [top8]);
+
   const { setNodeRef: poolDroppableRef, isOver: isPoolOver } = useDroppable({
     id: 'pool-area',
     data: { type: 'pool-area' },
@@ -276,14 +288,6 @@ export function Top8OfficialResults({
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const emitChange = useCallback(
-    (nextTop8: (PlayerInfo | null)[]) => {
-      const ordered = nextTop8.filter(Boolean).map((p) => p!.optionId);
-      onChange(ordered);
-    },
-    [onChange],
-  );
-
   const handleAdd = useCallback(
     (optionId: string) => {
       if (disabled) return;
@@ -294,11 +298,10 @@ export function Top8OfficialResults({
         const item = allItems.find((p) => p.optionId === optionId);
         if (!item) return prev;
         next[emptyIndex] = item;
-        emitChange(next);
         return next;
       });
     },
-    [allItems, disabled, emitChange],
+    [allItems, disabled],
   );
 
   const handleRemove = useCallback(
@@ -309,11 +312,10 @@ export function Top8OfficialResults({
         if (idx === -1) return prev;
         const next = [...prev];
         next[idx] = null;
-        emitChange(next);
         return next;
       });
     },
-    [disabled, emitChange],
+    [disabled],
   );
 
   const handleDragEnd = useCallback(
@@ -340,7 +342,6 @@ export function Top8OfficialResults({
           if (!item) return prev;
           const next = [...prev];
           next[targetIndex] = item;
-          emitChange(next);
           return next;
         });
       } else if (activeType === 'top8-slot') {
@@ -354,19 +355,17 @@ export function Top8OfficialResults({
             if (!prev[activeIndex]) return prev;
             const next = [...prev];
             next[activeIndex] = null;
-            emitChange(next);
             return next;
           });
         } else {
           setTop8((prev) => {
             const next = arrayMove(prev, activeIndex, overIndex);
-            emitChange(next);
             return next;
           });
         }
       }
     },
-    [allItems, disabled, emitChange],
+    [allItems, disabled],
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {

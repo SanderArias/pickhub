@@ -135,138 +135,216 @@ export function ResultsSection({ eventId, predictions, existingResults, status, 
     return <p className="text-sm text-text-muted">No hay predicciones activas en este Pick'em.</p>;
   }
 
-  const hasSelection = Object.values(selection).some((s) => s.length > 0) ||
-    Object.values(rankingSelection).some((arr) => arr.length === 8);
+  const top8Prediction = activePredictions.find((p) => p.template_type === 'top8_ordered');
+  const standardPredictions = activePredictions.filter((p) => p.template_type !== 'top8_ordered');
+
+  const top8Ranked = top8Prediction ? (rankingSelection[top8Prediction.id] ?? []) : [];
+  const top8RankedCount = top8Ranked.length;
+  const isTop8Complete = top8RankedCount === 8;
+
+  const hasStandardSelection = Object.values(selection).some((s) => s.length > 0);
+  const hasAnySelection = hasStandardSelection || (top8Prediction ? isTop8Complete : false);
 
   return (
-    <div className="flex flex-col gap-6">
-      {activePredictions.map((prediction) => {
-        const isTop8 = prediction.template_type === 'top8_ordered';
-
-        if (isTop8) {
-          const ranked = rankingSelection[prediction.id] ?? [];
-          return (
-            <div key={prediction.id} className="rounded-lg border border-border bg-surface p-4">
-              <div className="mb-3">
-                <h3 className="text-sm font-semibold text-text-primary">{prediction.title}</h3>
-                {prediction.description && (
-                  <p className="mt-0.5 text-xs text-text-secondary">{prediction.description}</p>
-                )}
-                <span className="mt-1 inline-block rounded-full border border-purple-border px-2 py-0.5 text-xs text-purple-primary">
-                  Top 8 ordenado · Resultado real
-                </span>
-              </div>
-
-              <Top8OfficialResults
-                options={prediction.options.map((o) => ({ id: o.id, label: o.label, playerId: o.player_id }))}
-                players={players}
-                initialRanked={ranked}
-                disabled={!canEditResults}
-                onChange={(orderedIds) => handleRankingChange(prediction.id, orderedIds)}
-              />
-            </div>
-          );
-        }
-
-        const selected = selection[prediction.id] ?? [];
-
-        return (
-          <div key={prediction.id} className="rounded-lg border border-border bg-surface p-4">
-            <div className="mb-3">
-              <h3 className="text-sm font-semibold text-text-primary">{prediction.title}</h3>
-              {prediction.description && (
-                <p className="mt-0.5 text-xs text-text-secondary">{prediction.description}</p>
-              )}
-              <span className="mt-1 inline-block rounded-full border border-border px-2 py-0.5 text-xs text-text-muted">
-                {prediction.question_type === 'single' ? 'Seleccion unica' : 'Seleccion multiple'}
-                {' · '}
-                {prediction.points_per_correct} pt{prediction.points_per_correct !== 1 ? 's' : ''} c/u
-              </span>
-            </div>
-
-            {prediction.options.length === 0 ? (
-              <p className="text-xs text-text-muted">Sin opciones configuradas.</p>
-            ) : (
-              <div className="flex flex-col gap-1.5">
-                {prediction.options.map((option) => {
-                  const isSelected = selected.includes(option.id);
-                  if (prediction.question_type === 'single') {
-                    return (
-                      <button
-                        key={option.id}
-                        type="button"
-                        onClick={() => handleSingleSelect(prediction.id, option.id)}
-                        disabled={!canEditResults}
-                        className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                          isSelected
-                            ? 'border-purple-primary bg-purple-surface text-text-primary'
-                            : 'border-border text-text-secondary hover:border-border-hover'
-                        } disabled:cursor-not-allowed disabled:opacity-50`}
-                      >
-                        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                          isSelected ? 'border-purple-primary bg-purple-primary' : 'border-border'
-                        }`}>
-                          {isSelected && (
-                            <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                              <circle cx="4" cy="4" r="4" fill="white" />
-                            </svg>
-                          )}
-                        </span>
-                        {option.label}
-                      </button>
-                    );
-                  }
-
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => handleMultipleSelect(prediction.id, option.id)}
-                      disabled={!canEditResults}
-                      className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
-                        isSelected
-                          ? 'border-purple-primary bg-purple-surface text-text-primary'
-                          : 'border-border text-text-secondary hover:border-border-hover'
-                      } disabled:cursor-not-allowed disabled:opacity-50`}
-                    >
-                      <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-                        isSelected ? 'border-purple-primary bg-purple-primary' : 'border-border'
-                      }`}>
-                        {isSelected && (
-                          <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
-                            <path d="M2 4.5L3.5 6L7 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        )}
-                      </span>
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+    <div className="flex flex-col gap-8">
+      {/* Standard predictions — answer selection */}
+      {standardPredictions.length > 0 && (
+        <section className="flex flex-col gap-4">
+          <div>
+            <h2 className="text-sm font-semibold text-text-primary">Resultados de predicciones</h2>
+            <p className="mt-0.5 text-xs text-text-secondary">Marca las opciones correctas para cada predicción.</p>
           </div>
-        );
-      })}
 
+          {standardPredictions.map((prediction) => {
+            const selected = selection[prediction.id] ?? [];
+
+            return (
+              <div key={prediction.id}>
+                <div className="mb-2.5">
+                  <h3 className="text-sm font-medium text-text-primary">{prediction.title}</h3>
+                  {prediction.description && (
+                    <p className="mt-0.5 text-xs text-text-secondary">{prediction.description}</p>
+                  )}
+                  <span className="mt-1 inline-block text-xs text-text-muted">
+                    {prediction.question_type === 'single' ? 'Selección única' : 'Selección múltiple'}
+                    {' · '}
+                    {prediction.points_per_correct} pt{prediction.points_per_correct !== 1 ? 's' : ''} c/u
+                  </span>
+                </div>
+
+                {prediction.options.length === 0 ? (
+                  <p className="text-xs text-text-muted">Sin opciones configuradas.</p>
+                ) : (
+                  <div className="flex flex-col gap-1.5">
+                    {prediction.options.map((option) => {
+                      const isSelected = selected.includes(option.id);
+                      if (prediction.question_type === 'single') {
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            onClick={() => handleSingleSelect(prediction.id, option.id)}
+                            disabled={!canEditResults}
+                            className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                              isSelected
+                                ? 'border-purple-primary bg-purple-surface text-text-primary'
+                                : 'border-border text-text-secondary hover:border-border-hover'
+                            } disabled:cursor-not-allowed disabled:opacity-50`}
+                          >
+                            <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                              isSelected ? 'border-purple-primary bg-purple-primary' : 'border-border'
+                            }`}>
+                              {isSelected && (
+                                <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
+                                  <circle cx="4" cy="4" r="4" fill="white" />
+                                </svg>
+                              )}
+                            </span>
+                            {option.label}
+                          </button>
+                        );
+                      }
+
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onClick={() => handleMultipleSelect(prediction.id, option.id)}
+                          disabled={!canEditResults}
+                          className={`flex items-center gap-3 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                            isSelected
+                              ? 'border-purple-primary bg-purple-surface text-text-primary'
+                              : 'border-border text-text-secondary hover:border-border-hover'
+                          } disabled:cursor-not-allowed disabled:opacity-50`}
+                        >
+                          <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                            isSelected ? 'border-purple-primary bg-purple-primary' : 'border-border'
+                          }`}>
+                            {isSelected && (
+                              <svg width="9" height="9" viewBox="0 0 9 9" fill="none">
+                                <path d="M2 4.5L3.5 6L7 2.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
+                          </span>
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {/* Top 8 oficial — DnD */}
+      {top8Prediction && (
+        <section>
+          <div className="mb-3">
+            <h2 className="text-sm font-semibold text-text-primary">Top 8 oficial</h2>
+            <p className="mt-0.5 text-xs text-text-secondary">
+              Ordena a los jugadores en la posición final que ocuparon.
+            </p>
+          </div>
+
+          <Top8OfficialResults
+            options={top8Prediction.options.map((o) => ({ id: o.id, label: o.label, playerId: o.player_id }))}
+            players={players}
+            initialRanked={top8Ranked}
+            disabled={!canEditResults}
+            onChange={(orderedIds) => handleRankingChange(top8Prediction.id, orderedIds)}
+          />
+        </section>
+      )}
+
+      {/* Validation block */}
+      {canEditResults && (
+        <div className="rounded-xl border border-border bg-surface p-5">
+          <div className="flex items-start gap-3">
+            {top8Prediction && (
+              <span className={`mt-0.5 flex size-3 shrink-0 rounded-full ${
+                isTop8Complete ? 'bg-success' : 'bg-text-muted'
+              }`} />
+            )}
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-text-primary">Estado de publicación</h3>
+              <p className="mt-1 text-xs text-text-secondary">
+                {top8Prediction
+                  ? isTop8Complete
+                    ? 'Todas las posiciones del Top 8 han sido registradas.'
+                    : `Faltan ${8 - top8RankedCount} posiciones por completar en el Top 8.`
+                  : 'Revisa las opciones correctas antes de publicar.'}
+              </p>
+
+              {/* Progress for Top 8 */}
+              {top8Prediction && (
+                <div className="mt-3">
+                  <div className="flex items-center gap-2 text-xs">
+                    {isTop8Complete ? (
+                      <span className="flex items-center gap-1.5 font-medium text-success">
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                          <path d="M4 8L6.5 10.5L12 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                        Resultados completos
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1.5 font-medium text-text-muted">
+                        <span className="size-2 rounded-full bg-text-muted" />
+                        {top8RankedCount} de 8 posiciones registradas
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!hasAnySelection && (
+                <p className="mt-2 text-xs text-warning">
+                  Selecciona al menos una opción correcta para poder publicar.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="my-4 border-t border-border" />
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-medium text-text-muted">AL PUBLICAR SE GENERARÁ</p>
+              <div className="mt-1.5 space-y-1">
+                {['Puntuaciones de todos los participantes', 'Clasificación final', 'Detección de empates', 'Desempates si son necesarios'].map((item) => (
+                  <div key={item} className="flex items-center gap-1.5 text-xs text-text-secondary">
+                    <svg className="size-3 text-success shrink-0" viewBox="0 0 16 16" fill="none">
+                      <path d="M4 8L6.5 10.5L12 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    {item}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowConfirm(true)}
+              disabled={publishing || !hasAnySelection}
+              className="w-full sm:w-auto rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
+            >
+              {publishing ? 'Publicando...' : 'Publicar resultados'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Error */}
       {error && (
         <p className="text-xs text-red-400">{error}</p>
       )}
 
-      {canEditResults && (
-        <button
-          type="button"
-          onClick={() => setShowConfirm(true)}
-          disabled={publishing || !hasSelection}
-          className="w-fit rounded-lg bg-purple-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-hover disabled:opacity-50"
-        >
-          Publicar resultados y calcular puntuaciones
-        </button>
-      )}
-
+      {/* Confirmation modal */}
       {showConfirm && (
         <ConfirmActionModal
           title="Publicar resultados oficiales"
-          description="Esta acción iniciará el proceso de generación de resultados."
+          description="Esta acción iniciará el proceso de resolución del Pick'em."
           consequences={[
             'Calcula puntuaciones de todos los participantes',
             'Genera la clasificación final',

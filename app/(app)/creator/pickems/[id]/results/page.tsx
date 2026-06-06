@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getCreatorPickemById } from '@/app/actions/creator';
 import { getEventResults } from '@/app/actions/scoring';
-import { PageHeader, SectionCard } from '@/components/ui';
+import { PageHeader } from '@/components/ui';
 import { ResultsSection } from '@/components/pickem/ResultsSection';
 
 export default async function PickemResultsPage({
@@ -58,19 +58,14 @@ export default async function PickemResultsPage({
         backLabel="Volver al Pick'em"
       />
 
-      <SectionCard
-        title="Resultados reales"
-        subtitle="Marca las opciones correctas por cada predicción y calcula puntuaciones"
-      >
-        <ResultsSection
-          eventId={id}
-          predictions={event.predictions}
-          existingResults={existingResults}
-          status={event.status}
-          players={event.players}
-          onPublished={`/creator/pickems/${id}`}
-        />
-      </SectionCard>
+      <ResultsSection
+        eventId={id}
+        predictions={event.predictions}
+        existingResults={existingResults}
+        status={event.status}
+        players={event.players}
+        onPublished={`/creator/pickems/${id}`}
+      />
     </div>
   );
 }
