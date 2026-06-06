@@ -34,6 +34,7 @@ interface ProfileData {
   display_name: string | null;
   avatar_url: string | null;
   creator_profile_id: string | null;
+  twitch_username: string | null;
 }
 
 function isActive(pathname: string, href: string, exact = false): boolean {
@@ -49,7 +50,7 @@ function useProfile(user: ReturnType<typeof useUser>['user']) {
     const supabase = createBrowserClient();
     supabase
       .from('profiles')
-      .select('role, display_name, avatar_url, creator_profile:creator_profiles(id, status)')
+      .select('role, display_name, avatar_url, twitch_username, creator_profile:creator_profiles(id, status)')
       .eq('id', user.id)
       .maybeSingle()
       .then(({ data }) => {
@@ -63,6 +64,7 @@ function useProfile(user: ReturnType<typeof useUser>['user']) {
           display_name: data.display_name,
           avatar_url: data.avatar_url,
           creator_profile_id: cp?.id ?? null,
+          twitch_username: data.twitch_username ?? null,
         });
       });
   }, [user]);
@@ -110,10 +112,9 @@ function useGroups(profile: ProfileData | null, pathname: string) {
   }, [profile, pathname]);
 
   const groups: NavGroup[] = [];
-  if (!profile) return groups;
 
-  const isCreator = profile.role === 'creator' && profile.creator_status === 'approved';
-  const isAdmin = profile.role === 'admin';
+  const isCreator = !!profile && profile.role === 'creator' && profile.creator_status === 'approved';
+  const isAdmin = !!profile && profile.role === 'admin';
 
   groups.push({
     label: 'General',
@@ -257,7 +258,9 @@ function UserSection({
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
 
-  const initials = (profile.display_name ?? email)
+  const displayName = profile.display_name ?? profile.twitch_username ?? email.split('@')[0] ?? 'Usuario';
+
+  const initials = displayName
     .split(/\s+/)
     .map((s) => s[0])
     .join('')
@@ -299,7 +302,7 @@ function UserSection({
         )}
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-text-primary">
-            {profile.display_name ?? email}
+            {displayName}
           </p>
           <p className={`truncate text-[11px] ${open ? 'text-purple-primary' : 'text-text-muted'}`}>
             {roleLabel}
@@ -322,20 +325,22 @@ function UserSection({
 
       {open && (
         <div className="absolute bottom-full left-0 right-0 mb-1 rounded-lg border border-border bg-surface p-1 shadow-xl">
+          {isCreator && (
+            <Link
+              href="/creator"
+              onClick={() => handleNav(onNav)}
+              className="flex items-center rounded-md px-3 py-2 text-sm text-text-primary transition-colors hover:bg-white/[0.05]"
+            >
+              Perfil de creador
+            </Link>
+          )}
           <Link
-            href={isCreator ? '/creator' : '#'}
+            href="/settings"
             onClick={() => handleNav(onNav)}
-            className={`flex items-center rounded-md px-3 py-2 text-sm transition-colors ${
-              isCreator
-                ? 'text-text-primary hover:bg-white/[0.05]'
-                : 'cursor-not-allowed text-text-secondary opacity-30'
-            }`}
+            className="flex items-center rounded-md px-3 py-2 text-sm text-text-primary transition-colors hover:bg-white/[0.05]"
           >
-            Perfil
-          </Link>
-          <span className="flex cursor-not-allowed items-center rounded-md px-3 py-2 text-sm text-text-secondary opacity-30">
             Configuración
-          </span>
+          </Link>
           <div className="my-1 h-px bg-border" />
           <form action={signOut}>
             <button
@@ -485,8 +490,8 @@ export function Sidebar({ children }: { children: React.ReactNode }) {
     setDrawerOpen(false);
   }, [pathname]);
 
-  const isLoading = loading || (!profile && !!user);
-  const showUi = !loading && !!user && !!profile;
+  const isLoading = loading;
+  const showUi = !loading && !!user;
 
   return (
     <>
@@ -513,11 +518,6 @@ export function Sidebar({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <div className={`flex min-h-screen flex-col bg-bg ${showUi ? 'md:ml-60 pt-14 md:pt-0' : ''}`}>
-        {!isLoading && user && !profile && (
-          <div className="flex items-center justify-center p-8">
-            <div className="size-6 animate-spin rounded-full border-2 border-purple-primary border-t-transparent" />
-          </div>
-        )}
         <main className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-10">
           {children}
         </main>

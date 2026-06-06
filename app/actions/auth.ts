@@ -4,22 +4,30 @@ import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/services/supabase';
 
-export async function signInWithTwitch() {
+async function buildTwitchRedirectUrl(next: string) {
   const supabase = await createServerClient();
   const host = (await headers()).get('host') ?? 'localhost:3000';
   const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
-  const redirectTo = `${protocol}://${host}/auth/callback`;
+  const redirectTo = `${protocol}://${host}/auth/callback?next=${encodeURIComponent(next)}`;
+  return { supabase, redirectTo };
+}
 
+export async function signInWithTwitch() {
+  const { supabase, redirectTo } = await buildTwitchRedirectUrl('/inicio');
   const { data } = await supabase.auth.signInWithOAuth({
     provider: 'twitch',
-    options: {
-      redirectTo,
-    },
+    options: { redirectTo },
   });
+  if (data.url) redirect(data.url);
+}
 
-  if (data.url) {
-    redirect(data.url);
-  }
+export async function linkTwitchAccount() {
+  const { supabase, redirectTo } = await buildTwitchRedirectUrl('/settings');
+  const { data } = await supabase.auth.signInWithOAuth({
+    provider: 'twitch',
+    options: { redirectTo },
+  });
+  if (data.url) redirect(data.url);
 }
 
 export async function signInWithEmail(_prev: unknown, formData: FormData) {

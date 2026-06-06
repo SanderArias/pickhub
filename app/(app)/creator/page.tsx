@@ -1,17 +1,10 @@
 import { redirect } from 'next/navigation';
-import { getUser } from '@/app/actions/auth';
-import { getCurrentProfile } from '@/lib/auth';
+import { requireCreator } from '@/lib/auth';
 import { StatusBadge } from '@/components/ui';
 
 export default async function CreatorProfilePage() {
-  const user = await getUser();
-  if (!user) redirect('/login');
-
-  const profile = await getCurrentProfile();
-  if (!profile) redirect('/login');
-
-  const creatorProfile = profile.creator_profile;
-  if (!creatorProfile) redirect('/inicio');
+  const profile = await requireCreator();
+  const creatorProfile = profile.creator_profile!;
 
   const statusLabels: Record<string, string> = {
     pending: 'En revisión',

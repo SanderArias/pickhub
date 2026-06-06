@@ -1,7 +1,8 @@
 ﻿import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
-import { getCurrentProfile } from '@/lib/auth';
+import { getCurrentProfile, checkTwitchLinked } from '@/lib/auth';
+import { getDisplayUser } from '@/lib/getDisplayUser';
 import { getUserParticipations } from '@/app/actions/participant';
 import { StatusBadge } from '@/components/ui';
 import { RequestCreatorAccessForm } from './RequestCreatorAccessForm';
@@ -13,7 +14,7 @@ export default async function InicioPage() {
   const profile = await getCurrentProfile();
   if (!profile) redirect('/login');
 
-  const displayName = profile.display_name || user.email?.split('@')[0] || 'Usuario';
+  const displayName = getDisplayUser(profile, user);
   const creatorProfile = profile.creator_profile;
 
   const hasCreatorProfile = creatorProfile !== null;
@@ -24,6 +25,7 @@ export default async function InicioPage() {
   const isRejected = creatorStatus === 'rejected';
   const isSuspended = creatorStatus === 'suspended';
   const isReopened = creatorStatus === 'reopened';
+  const { hasLinkedTwitch } = await checkTwitchLinked(user, profile);
 
   const participations = await getUserParticipations('all');
 
@@ -43,23 +45,48 @@ export default async function InicioPage() {
       {!isApproved && !isAdmin && (
         <div className="flex flex-col gap-4">
           {(isReopened || !hasCreatorProfile) && (
-            <div className="rounded-lg border border-border bg-surface p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="text-sm font-semibold text-text-primary">
-                    Solicita acceso anticipado al modo creador
-                  </h2>
-                  <p className="mt-1 text-xs text-text-secondary">
-                    {isReopened
-                      ? 'Tu solicitud anterior fue reabierta. Puedes enviar una nueva solicitud cuando quieras.'
-                      : 'Crea Pick\'ems, configura predicciones y comparte dinámicas con tu comunidad.'}
-                  </p>
+            <>
+              {!hasLinkedTwitch ? (
+                <div className="rounded-lg border border-border bg-surface p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-semibold text-text-primary">
+                        Conecta tu cuenta de Twitch
+                      </h2>
+                      <p className="mt-1 text-xs text-text-secondary">
+                        Para solicitar acceso de creador debes enlazar una cuenta de Twitch.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <Link
+                      href="/settings"
+                      className="inline-block rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+                    >
+                      Ir a configuración
+                    </Link>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-4">
-                <RequestCreatorAccessForm />
-              </div>
-            </div>
+              ) : (
+                <div className="rounded-lg border border-border bg-surface p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-semibold text-text-primary">
+                        Solicita acceso anticipado al modo creador
+                      </h2>
+                      <p className="mt-1 text-xs text-text-secondary">
+                        {isReopened
+                          ? 'Tu solicitud anterior fue reabierta. Puedes enviar una nueva solicitud cuando quieras.'
+                          : 'Crea Pick\'ems, configura predicciones y comparte dinámicas con tu comunidad.'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    <RequestCreatorAccessForm />
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           {isPending && (
