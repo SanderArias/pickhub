@@ -4,50 +4,27 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { closePredictions } from '@/app/actions/creator';
 
-const STEPS = [
-  { key: 'open', label: 'Abierto' },
-  { key: 'predictions_closed', label: 'Cerrado' },
-  { key: 'completed', label: 'Completado' },
-] as const;
-
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_ORDER = ['open', 'predictions_closed', 'completed'] as const;
+const LABELS: Record<string, string> = {
+  open: 'Abierto',
+  predictions_closed: 'Cerrado',
+  completed: 'Completado',
+};
+const DOT_COLORS: Record<string, string> = {
   open: 'bg-purple-primary',
   predictions_closed: 'bg-warning',
   completed: 'bg-success',
 };
-
-function getStepState(status: string, stepKey: string): 'completed' | 'current' | 'upcoming' {
-  const order = ['open', 'predictions_closed', 'completed'];
-  const statusIdx = order.indexOf(status);
-  const stepIdx = order.indexOf(stepKey);
-  if (stepIdx < statusIdx) return 'completed';
-  if (stepIdx === statusIdx) return 'current';
-  return 'upcoming';
-}
-
-function StepCircle({ state, colorClass }: { state: 'completed' | 'current' | 'upcoming'; colorClass: string }) {
-  if (state === 'completed') {
-    return (
-      <div className={`flex size-6 items-center justify-center rounded-full ${colorClass}`}>
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="20 6 9 17 4 12" />
-        </svg>
-      </div>
-    );
-  }
-  if (state === 'current') {
-    return (
-      <div className={`flex size-6 items-center justify-center rounded-full ${colorClass}`}>
-        <div className="size-2.5 rounded-full bg-white" />
-      </div>
-    );
-  }
-  return (
-    <div className="flex size-6 items-center justify-center rounded-full border-2 border-border">
-      <div className="size-2 rounded-full bg-border" />
-    </div>
-  );
-}
+const LINE_COLORS: Record<string, string> = {
+  open: 'bg-purple-primary',
+  predictions_closed: 'bg-warning',
+  completed: 'bg-success',
+};
+const TEXT_COLORS: Record<string, string> = {
+  open: 'text-purple-primary',
+  predictions_closed: 'text-warning',
+  completed: 'text-success',
+};
 
 export function StatusTimeline({
   eventId,
@@ -58,104 +35,68 @@ export function StatusTimeline({
 }) {
   const router = useRouter();
 
+  const currentStepIdx = STATUS_ORDER.indexOf(status as any);
+  const hasAction = status === 'open' || status === 'predictions_closed';
+
   async function handleClose() {
     await closePredictions(eventId);
     router.refresh();
   }
 
-  const order = ['open', 'predictions_closed', 'completed'];
-  const currentStep = order.indexOf(status) + 1;
-
   return (
-    <div className="rounded-xl border border-border bg-surface p-5">
-      {/* Header + step indicator */}
-      <div className="mb-5 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-text-primary">Estado del Pick'em</h2>
-        <span className="rounded-full bg-purple-500/10 px-2.5 py-0.5 text-[11px] font-medium text-purple-400">
-          Paso {currentStep} de 3
-        </span>
+    <div className="rounded-xl border border-border bg-surface px-5 py-2">
+      <div className="flex items-center justify-between">
+        <h2 className="text-[11px] font-semibold text-text-primary">Estado del Pick'em</h2>
+        {hasAction && (
+          status === 'open' ? (
+            <button
+              type="button"
+              onClick={handleClose}
+              className="rounded-lg bg-purple-primary px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-purple-600"
+            >
+              Cerrar predicciones
+            </button>
+          ) : (
+            <Link
+              href={`/creator/pickems/${eventId}/results`}
+              className="rounded-lg bg-purple-primary px-3 py-1 text-[11px] font-medium text-white transition-colors hover:bg-purple-600"
+            >
+              Registrar resultados
+            </Link>
+          )
+        )}
       </div>
 
-      {/* Timeline */}
-      <div className="flex items-center">
-        {STEPS.map((step, i) => {
-          const stepState = getStepState(status, step.key);
-          const color = STATUS_COLORS[step.key];
-          const isActive = stepState !== 'upcoming';
+      <div className="mt-2 flex items-center">
+        {STATUS_ORDER.map((step, i) => {
+          const isPast = i < currentStepIdx;
+          const isCurrent = i === currentStepIdx;
+          const isFuture = i > currentStepIdx;
 
           return (
-            <div key={step.key} className="flex items-center">
-              {/* Circle + label */}
-              <div className="flex flex-col items-center gap-1.5">
-                <StepCircle state={stepState} colorClass={color} />
-                <span className={`whitespace-nowrap text-xs font-medium transition-colors ${
-                  isActive ? 'text-text-primary' : 'text-text-muted'
+            <div key={step} className="flex items-center">
+              <div className="flex items-center gap-1.5">
+                <div className={`size-3 rounded-full transition-colors ${
+                  isFuture ? 'border border-border' : DOT_COLORS[step]
+                }`} />
+                <span className={`text-[11px] leading-none transition-colors ${
+                  isCurrent
+                    ? `${TEXT_COLORS[step]} font-semibold`
+                    : isPast
+                      ? `${TEXT_COLORS[step]}/60 font-medium`
+                      : 'text-text-muted font-medium'
                 }`}>
-                  {step.label}
+                  {LABELS[step]}
                 </span>
               </div>
-
-              {/* Connector line */}
-              {i < STEPS.length - 1 && (
-                <div className={`mx-2 h-1 w-10 sm:w-16 rounded-full transition-colors ${
-                  stepState === 'completed' ? color : 'bg-border'
+              {i < STATUS_ORDER.length - 1 && (
+                <div className={`mx-2 h-px w-6 sm:w-10 rounded-full transition-colors ${
+                  i < currentStepIdx ? LINE_COLORS[step] : 'bg-border'
                 }`} />
               )}
             </div>
           );
         })}
-      </div>
-
-      {/* Context info + CTA */}
-      <div className="mt-5 space-y-3">
-        {status === 'open' && (
-          <>
-            <p className="text-xs leading-relaxed text-text-secondary">
-              Los participantes aún pueden enviar predicciones.
-              <br />
-              Cuando el evento comience, cierra las predicciones para registrar los resultados oficiales.
-            </p>
-            <button
-              type="button"
-              onClick={handleClose}
-              className="w-full rounded-lg bg-purple-primary px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
-            >
-              Cerrar predicciones
-            </button>
-          </>
-        )}
-
-        {status === 'predictions_closed' && (
-          <>
-            <p className="text-xs leading-relaxed text-text-secondary">
-              Las predicciones fueron cerradas correctamente.
-              <br />
-              El siguiente paso es registrar los resultados oficiales del evento.
-            </p>
-            <Link
-              href={`/creator/pickems/${eventId}/results`}
-              className="block w-full rounded-lg bg-purple-primary px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-purple-600"
-            >
-              Registrar resultados
-            </Link>
-          </>
-        )}
-
-        {status === 'completed' && (
-          <>
-            <p className="text-xs leading-relaxed text-text-secondary">
-              Resultados calculados y clasificación generada.
-              <br />
-              El Pick'em ha finalizado correctamente.
-            </p>
-            <Link
-              href={`/creator/pickems/${eventId}/results`}
-              className="block w-full rounded-lg bg-purple-primary px-4 py-2.5 text-center text-sm font-medium text-white transition-colors hover:bg-purple-600"
-            >
-              Ver clasificación
-            </Link>
-          </>
-        )}
       </div>
     </div>
   );
