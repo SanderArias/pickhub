@@ -51,15 +51,17 @@ export function CompletedRightPanel({
 
   return (
     <div className="flex flex-col gap-6">
-      <TiebreakerSection
-        eventId={eventId}
-        tieGroups={tieGroups}
-        drawsMap={drawsMap}
-        onTiebreakerDone={handleTiebreakerDone}
-      />
+      <div id="tiebreaker-section">
+        <TiebreakerSection
+          eventId={eventId}
+          tieGroups={tieGroups}
+          drawsMap={drawsMap}
+          onTiebreakerDone={handleTiebreakerDone}
+        />
+      </div>
 
       {leaderboard.length > 0 && (
-        <div className="flex flex-col gap-3">
+        <div id="leaderboard-section" className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-text-primary">Clasificación</h2>
             {refreshing && (

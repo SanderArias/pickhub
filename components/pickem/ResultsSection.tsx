@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import { publishResultsAndCalculateScores } from '@/app/actions/scoring';
 import { Top8OfficialResults } from '@/components/pickem/Top8OfficialResults';
-import { PublishConfirmModal } from '@/components/pickem/PublishConfirmModal';
+import { ConfirmActionModal } from '@/components/pickem/ConfirmActionModal';
 
 interface Option {
   id: string;
@@ -264,10 +264,19 @@ export function ResultsSection({ eventId, predictions, existingResults, status, 
       )}
 
       {showConfirm && (
-        <PublishConfirmModal
+        <ConfirmActionModal
+          title="Publicar resultados oficiales"
+          description="Esta acción iniciará el proceso de generación de resultados."
+          consequences={[
+            'Calcula puntuaciones de todos los participantes',
+            'Genera la clasificación final',
+            'Detecta empates automáticamente',
+            'Activa desempates si existen',
+          ]}
+          confirmLabel="Publicar resultados"
+          isPending={publishing}
           onConfirm={doPublish}
           onCancel={() => setShowConfirm(false)}
-          publishing={publishing}
         />
       )}
     </div>

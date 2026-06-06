@@ -1,11 +1,9 @@
 import { notFound } from 'next/navigation';
-import Link from 'next/link';
 import { getCreatorPickemById } from '@/app/actions/creator';
 import { getEventResults } from '@/app/actions/scoring';
 import { getLeaderboard } from '@/app/actions/leaderboard';
 import { getTiebreakerDraws, getTieGroups } from '@/app/actions/tiebreaker';
 import {
-  StatusBadge,
   PageHeader,
   SectionCard,
   RequirementCard,
@@ -16,9 +14,9 @@ import { GeneralInfoSection } from '@/components/pickem/GeneralInfoSection';
 import { PrizesSection } from '@/components/picks/PrizesSection';
 import { Top8Readonly } from '@/components/pickem/Top8Readonly';
 import { CompletedRightPanel } from '@/components/pickem/CompletedRightPanel';
+import { PickemStatusCard } from '@/components/pickem/PickemStatusCard';
 import { PublishSection } from './PublishSection';
 import { SharePickemSection } from './SharePickemSection';
-import { StatusTimeline } from './StatusTimeline';
 
 export default async function PickemDashboardPage({
   params,
@@ -59,8 +57,16 @@ export default async function PickemDashboardPage({
 
   const drawsMap = hasFinalResults ? await getTiebreakerDraws(id) : {};
   const tieGroups = hasFinalResults ? await getTieGroups(id) : [];
+  const allTiedProfileIds = new Set<string>();
+  for (const g of tieGroups) {
+    for (const p of g.participants) {
+      allTiedProfileIds.add(p.profile_id);
+    }
+  }
+  const pendingTiebreakerCount = tieGroups.length > 0
+    ? [...allTiedProfileIds].filter((pid) => !(pid in drawsMap)).length
+    : 0;
 
-  // Build readonly Top 8 official results
   const top8Question = hasFinalResults
     ? activePredictions.find((p: { template_type: string | null }) => p.template_type === 'top8_ordered')
     : null;
@@ -93,11 +99,29 @@ export default async function PickemDashboardPage({
         description={event.description ?? undefined}
         backHref="/creator/pickems"
         backLabel="Mis Pick'ems"
-        actions={<StatusBadge status={event.status} />}
       />
 
-      {/* Status timeline for non-draft states */}
-      {!isDraft && <StatusTimeline eventId={id} status={event.status} />}
+      {/* Status card for non-draft states — replaces timeline, badges, stats cards, and action buttons */}
+      {!isDraft && (
+        <PickemStatusCard
+          eventId={id}
+          status={event.status}
+          submissionCount={event.submissionCount}
+          closeDate={event.ends_at}
+          pendingTiebreakerCount={pendingTiebreakerCount}
+        />
+      )}
+
+      {/* Secondary metrics — subdued, below status card */}
+      {!isDraft && (
+        <div className="flex items-center gap-6 text-xs text-text-muted">
+          <span>{event.submissionCount} participación{event.submissionCount !== 1 ? 'es' : ''}</span>
+          <span className="text-border">|</span>
+          <span>{activePredictionCount} prediccione{activePredictionCount !== 1 ? 's' : ''}</span>
+          <span className="text-border">|</span>
+          <span>{activePlayerCount} jugadore{activePlayerCount !== 1 ? 's' : ''}</span>
+        </div>
+      )}
 
       {/* ===== DRAFT: Full configuration ===== */}
       {isDraft && (
@@ -190,78 +214,17 @@ export default async function PickemDashboardPage({
         </>
       )}
 
-      {/* ===== OPEN: Operational phase ===== */}
+      {/* ===== OPEN: Share section ===== */}
       {isOpen && (
-        <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-text-muted">Participaciones</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{event.submissionCount}</p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-text-muted">Predicciones</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{activePredictionCount}</p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-text-muted">Pool de jugadores</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{activePlayerCount}</p>
-            </div>
-          </div>
-
-          <SharePickemSection slug={event.slug} />
-        </>
+        <SharePickemSection slug={event.slug} />
       )}
 
-      {/* ===== PREDICTIONS CLOSED (no results yet): Needs to register results ===== */}
-      {isPredictionsClosed && !hasFinalResults && (
-        <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-text-muted">Participaciones</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{event.submissionCount}</p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-text-muted">Predicciones</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{activePredictionCount}</p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-text-muted">Pool de jugadores</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{activePlayerCount}</p>
-            </div>
-          </div>
+      {/* ===== PREDICTIONS CLOSED (no results yet): Nothing extra needed — status card handles this ===== */}
+      {isPredictionsClosed && !hasFinalResults && null}
 
-          <SectionCard
-            title="Resultados"
-            subtitle="Registra los resultados y calcula puntuaciones"
-          >
-            <Link
-              href={`/creator/pickems/${id}/results`}
-              className="inline-flex items-center gap-2 rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
-            >
-              Ir a resultados
-            </Link>
-          </SectionCard>
-        </>
-      )}
-
-      {/* ===== FINAL RESULTS: Show combined view (completed or predictions_closed with results) ===== */}
+      {/* ===== FINAL RESULTS: Combined view ===== */}
       {hasFinalResults && (
         <>
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-text-muted">Participaciones</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{event.submissionCount}</p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-text-muted">Predicciones</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{activePredictionCount}</p>
-            </div>
-            <div className="rounded-lg border border-border bg-surface p-4">
-              <p className="text-xs text-text-muted">Pool de jugadores</p>
-              <p className="mt-1 text-2xl font-bold text-text-primary">{activePlayerCount}</p>
-            </div>
-          </div>
-
           {/* Prizes */}
           {hasPrizes && (() => {
             type PrizeShape = { id: string; tier: string; label: string; amount: number | null; currency: string | null; quantity: number };
@@ -319,13 +282,15 @@ export default async function PickemDashboardPage({
               </div>
             ) : null}
 
-            <CompletedRightPanel
-              eventId={id}
-              initialLeaderboard={leaderboard}
-              initialTieGroups={tieGroups}
-              initialDrawsMap={drawsMap}
-              myProfileId={undefined}
-            />
+            <div>
+              <CompletedRightPanel
+                eventId={id}
+                initialLeaderboard={leaderboard}
+                initialTieGroups={tieGroups}
+                initialDrawsMap={drawsMap}
+                myProfileId={undefined}
+              />
+            </div>
           </div>
         </>
       )}
