@@ -1,13 +1,9 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { getAppUrl } from '@/lib/app-url';
 
-function getBaseUrl(): string {
-  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL;
-  }
-  return 'http://localhost:3000';
-}
+const getBaseUrl = getAppUrl;
 
 export function SharePickemSection({ slug }: { slug: string }) {
   const [copied, setCopied] = useState(false);

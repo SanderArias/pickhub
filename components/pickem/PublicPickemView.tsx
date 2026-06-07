@@ -3,6 +3,7 @@
 import { useActionState, useState, useMemo, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { signInWithTwitch } from '@/app/actions/auth';
 import { submitPredictions } from '@/app/actions/participant';
 import type { PublicEventData, EventPlayer, PredictionQuestion, Prize, Submission } from '@/app/actions/participant';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
@@ -35,6 +36,7 @@ export function PublicPickemView({
   mySubmission,
   myScore,
   isAuthenticated,
+  isClosed,
   participantName,
   participantTwitchStatus,
   leaderboard,
@@ -77,6 +79,7 @@ export function PublicPickemView({
   const [showModal, setShowModal] = useState(false);
   const [resolvedTwitchStatus, setResolvedTwitchStatus] = useState(participantTwitchStatus);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const [top8Counts, setTop8Counts] = useState<Record<string, number>>({});
   const router = useRouter();
 
   useEffect(() => {
@@ -137,6 +140,12 @@ export function PublicPickemView({
 
   const hasSubscriberBenefits = subPrizes.length > 0;
   const shouldShowTwitchNotice = hasSubscriberBenefits && isAuthenticated && resolvedTwitchStatus === 'not_connected';
+
+  const allTop8Filled = useMemo(() => {
+    const top8Questions = predictions.filter((q) => q.template_type === 'top8_ordered');
+    if (top8Questions.length === 0) return true;
+    return top8Questions.every((q) => (top8Counts[q.id] ?? 0) >= 8);
+  }, [predictions, top8Counts]);
 
   const hasSubmitted = isAuthenticated && !!mySubmission;
 
@@ -324,15 +333,15 @@ export function PublicPickemView({
   }
 
   /* ===== PRE-SUBMISSION VIEW ===== */
-  const activePredictionCount = predictions.filter((q) => q.is_active).length;
-
   return (
     <div className="flex flex-col gap-6">
       {/* Hero */}
-      <PickemParticipationHero
-        event={event}
-        hasTop8={hasTop8}
-      />
+      <div className="rounded-xl border border-border bg-surface p-5">
+        <PickemParticipationHero
+          event={event}
+          hasTop8={hasTop8}
+        />
+      </div>
 
       {/* Prizes carousel */}
       {hasPrizes && (
@@ -343,77 +352,108 @@ export function PublicPickemView({
         />
       )}
 
+      {hasPrizes && <div className="h-px bg-border" />}
+
       {/* Subscriber eligibility notice */}
       {shouldShowTwitchNotice && <SubscriberTwitchEligibilityNotice />}
 
-      {/* Prediction intro and form */}
-      <PredictionIntro
-        hasTop8={hasTop8}
-        questionCount={activePredictionCount}
-        playerCount={activePlayers.length}
-      />
+      {/* Unauthenticated CTA */}
+      {!isAuthenticated && (
+        <section className="rounded-xl border border-border bg-surface p-6 text-center">
+          <p className="mb-4 text-sm text-text-secondary">
+            Inicia sesi&oacute;n con Twitch para participar.
+          </p>
+          <form action={signInWithTwitch}>
+            <button
+              type="submit"
+              className="rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
+            >
+              Iniciar sesi&oacute;n con Twitch
+            </button>
+          </form>
+        </section>
+      )}
 
-      <form action={formAction} className="flex flex-col gap-6">
-        {predictions
-          .filter((q) => q.is_active)
-          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-          .map((q) => {
-            if (q.question_type === 'single' && q.template_type === 'top8_ordered') {
+      {/* Prediction intro + form */}
+      {isAuthenticated && !mySubmission && !isClosed && predictions.length > 0 && (
+        <form action={formAction} className="flex flex-col gap-6">
+          <PredictionIntro
+            hasTop8={hasTop8}
+            questionCount={predictions.length}
+            playerCount={activePlayers.length}
+          />
+
+          {predictions.map((q) => {
+            const isTop8 = q.template_type === 'top8_ordered';
+
+            if (isTop8) {
               return (
-                <div key={q.id} className="flex flex-col gap-3">
-                  <h3 className="text-sm font-semibold text-text-primary">{q.title}</h3>
-                  {q.description && (
-                    <p className="text-xs text-text-muted">{q.description}</p>
-                  )}
-                  <Top8DnD
-                    questionId={q.id}
-                    activePlayers={activePlayers}
-                    options={q.options.map((o) => ({ id: o.id, playerId: o.player_id, label: o.label }))}
-                  />
-                </div>
+                <Top8DnD
+                  key={q.id}
+                  questionId={q.id}
+                  activePlayers={activePlayers}
+                  options={q.options.map((opt) => ({
+                    id: opt.id,
+                    playerId: opt.player_id ?? null,
+                    label: opt.label,
+                  }))}
+                  onChange={(count) => setTop8Counts((prev) => ({ ...prev, [q.id]: count }))}
+                />
               );
             }
+
             return (
-              <div key={q.id} className="flex flex-col gap-2">
-                <h3 className="text-sm font-semibold text-text-primary">{q.title}</h3>
-                {q.description && (
-                  <p className="text-xs text-text-muted">{q.description}</p>
-                )}
-                <input type="hidden" name={`question_${q.id}`} value="" />
-                <div className="flex flex-wrap gap-2">
-                  {q.options
-                    .sort((a, b) => a.sort_order - b.sort_order)
-                    .map((opt) => (
-                      <label
-                        key={opt.id}
-                        className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary transition-colors hover:border-purple-primary/40 has-[:checked]:border-purple-primary has-[:checked]:bg-purple-primary/10"
-                      >
-                        <input
-                          type="checkbox"
-                          name={`question_${q.id}`}
-                          value={opt.id}
-                          className="size-4 accent-purple-primary"
-                        />
-                        {opt.label}
-                      </label>
-                    ))}
-                </div>
+            <fieldset key={q.id} className="rounded-xl border border-border bg-surface p-5">
+              <legend className="mb-3">
+                <h3 className="text-sm font-medium text-text-primary">{q.title}</h3>
+                {q.description && <p className="mt-0.5 text-xs text-text-secondary">{q.description}</p>}
+                <p className="mt-0.5 text-xs text-text-muted">
+                  {q.points_per_correct} punto{q.points_per_correct !== 1 ? 's' : ''} por acierto
+                  {q.question_type === 'single' ? ' \u00b7 Selecci\u00f3n \u00fanica' : ` \u00b7 Selecciona hasta ${q.max_selections} opciones`}
+                </p>
+              </legend>
+
+              <div className="flex flex-col gap-2">
+                {q.options.map((opt) => (
+                  <label key={opt.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-sm text-text-primary transition-colors hover:border-border-hover has-[:checked]:border-purple-primary">
+                    {q.question_type === 'single' ? (
+                      <input type="radio" name={`q_${q.id}`} value={opt.id} className="accent-purple-primary" />
+                    ) : (
+                      <input type="checkbox" name={`q_${q.id}`} value={opt.id} className="accent-purple-primary" />
+                    )}
+                    {opt.label}
+                  </label>
+                ))}
               </div>
+            </fieldset>
             );
           })}
 
-        {state.error && (
-          <p className="text-sm text-danger">{state.error}</p>
-        )}
+          {state?.error && <p className="text-sm text-danger">{state.error}</p>}
 
-        <button
-          type="submit"
-          disabled={pending}
-          className="self-start rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
-        >
-          {pending ? 'Enviando...' : 'Enviar predicción'}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={pending || !allTop8Filled}
+            className="self-start rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
+          >
+            {pending ? 'Enviando predicci\u00f3n\u2026' : 'Enviar predicci\u00f3n'}
+          </button>
+        </form>
+      )}
+
+      {/* Closed without submission */}
+      {isAuthenticated && !mySubmission && isClosed && (
+        <section className="rounded-xl border border-border bg-surface p-6 text-center">
+          <p className="text-sm text-text-muted">Las predicciones ya est\u00e1n cerradas.</p>
+        </section>
+      )}
+
+      {/* No predictions configured */}
+      {isAuthenticated && !mySubmission && predictions.length === 0 && (
+        <section className="rounded-xl border border-border bg-surface p-6 text-center">
+          <p className="text-sm text-text-muted">Este Pick&rsquo;em no tiene predicciones configuradas.</p>
+        </section>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { getUser, signInWithTwitch } from '@/app/actions/auth';
 import { AuthForm } from './LoginForm';
 import { AuthBrandHeader } from '@/components/auth/AuthBrandHeader';
 import { SocialAuthDivider } from '@/components/auth/SocialAuthDivider';
+import { OAuthErrorBanner } from '@/components/auth/OAuthErrorBanner';
 
 export default async function LoginPage({
   searchParams,
@@ -20,6 +21,8 @@ export default async function LoginPage({
     <div className="flex min-h-dvh flex-1 items-center justify-center px-4 py-8">
       <div className="flex w-full max-w-[440px] flex-col gap-8">
         <AuthBrandHeader />
+
+        <OAuthErrorBanner />
 
         <div className="rounded-xl border border-border bg-surface p-6 sm:p-8 shadow-sm">
           <AuthForm isConfirmed={confirmed === '1'} />

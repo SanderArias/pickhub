@@ -3,10 +3,11 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/services/supabase';
+import { getAppUrl } from '@/lib/app-url';
 
 async function buildTwitchRedirectUrl(next: string) {
   const supabase = await createServerClient();
-  const host = (await headers()).get('host') ?? 'localhost:3000';
+  const host = (await headers()).get('host') ?? new URL(getAppUrl()).host;
   const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
   const redirectTo = `${protocol}://${host}/auth/callback?next=${encodeURIComponent(next)}`;
   return { supabase, redirectTo };
@@ -72,7 +73,7 @@ export async function signUpWithEmail(_prev: unknown, formData: FormData) {
     return { error: 'Las contraseñas no coinciden.' };
   }
 
-  const host = (await headers()).get('host') ?? 'localhost:3000';
+  const host = (await headers()).get('host') ?? new URL(getAppUrl()).host;
   const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
   const origin = `${protocol}://${host}`;
 
@@ -107,7 +108,7 @@ export async function resetPasswordForEmail(_prev: unknown, formData: FormData) 
     return { error: 'Introduce tu correo electrónico.' };
   }
 
-  const host = (await headers()).get('host') ?? 'localhost:3000';
+  const host = (await headers()).get('host') ?? new URL(getAppUrl()).host;
   const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
   const origin = `${protocol}://${host}`;
 

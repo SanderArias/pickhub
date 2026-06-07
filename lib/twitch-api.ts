@@ -13,9 +13,10 @@ function getClientSecret(): string {
   return secret;
 }
 
+import { getAppUrl } from './app-url';
+
 function getRedirectUri(): string {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
-  return `${appUrl}/auth/twitch/callback`;
+  return `${getAppUrl()}/auth/twitch/callback`;
 }
 
 interface TokenResponse {

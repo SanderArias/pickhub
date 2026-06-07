@@ -3,13 +3,9 @@
 import { useRef, useState, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import { CARD_W, CARD_H, PredictionShareCard } from './PredictionShareCard';
+import { getAppUrl } from '@/lib/app-url';
 
-function getBaseUrl(): string {
-  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL;
-  }
-  return 'http://localhost:3000';
-}
+const getBaseUrl = getAppUrl;
 
 interface PredictionSelectionExpandableProps {
   questionTitle: string;

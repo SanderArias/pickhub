@@ -3,8 +3,9 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/services/supabase';
 import { exchangeCodeForToken, getTwitchUser } from '@/lib/twitch-api';
 import { encrypt } from '@/lib/twitch-crypto';
+import { getAppUrl } from '@/lib/app-url';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+const APP_URL = getAppUrl();
 
 function errRedirect(reason: string): NextResponse {
   return NextResponse.redirect(new URL(`/settings?sub_verification=error&reason=${encodeURIComponent(reason)}`, APP_URL));

@@ -1,6 +1,6 @@
 ﻿'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -197,7 +197,7 @@ export function Top8DnD({
   activePlayers: Array<{ id: string; name: string; country_code: string | null }>;
   options: Array<{ id: string; playerId: string | null; label: string }>;
   initialRanked?: string[];
-  onChange?: () => void;
+  onChange?: (count: number) => void;
 }) {
   const playerLookup = useMemo(() => {
     const map = new Map<string, { name: string; country_code: string | null }>();
@@ -233,6 +233,9 @@ export function Top8DnD({
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
 
   const rankedCount = useMemo(() => top8.filter(Boolean).length, [top8]);
+
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const { setNodeRef: poolDroppableRef, isOver: isPoolOver } = useDroppable({
     id: 'pool-area',
@@ -274,9 +277,8 @@ export function Top8DnD({
         next[emptyIndex] = item;
         return next;
       });
-      onChange?.();
     },
-    [allItems, onChange],
+    [allItems],
   );
 
   const handleRemove = useCallback(
@@ -288,9 +290,8 @@ export function Top8DnD({
         next[idx] = null;
         return next;
       });
-      onChange?.();
     },
-    [onChange],
+    [],
   );
 
   const handleDragEnd = useCallback(
@@ -320,7 +321,6 @@ export function Top8DnD({
           next[targetIndex] = item;
           return next;
         });
-        onChange?.();
       } else if (activeType === 'top8-slot') {
         const activeIndex = active.data.current?.slotIndex as number;
         const overIndex = SLOT_IDS.indexOf(overId);
@@ -334,14 +334,12 @@ export function Top8DnD({
             next[activeIndex] = null;
             return next;
           });
-          onChange?.();
         } else {
           setTop8((prev) => arrayMove(prev, activeIndex, overIndex));
-          onChange?.();
         }
       }
     },
-    [allItems, onChange],
+    [allItems],
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -361,11 +359,16 @@ export function Top8DnD({
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    if (mounted) {
+      onChangeRef.current?.(rankedCount);
+    }
+  }, [rankedCount, mounted]);
   if (!mounted) {
     return (
-      <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
-        <div className="sm:w-1/2">
-          <div className="rounded-xl border border-border bg-surface p-5">
+      <div className="rounded-xl border border-border bg-surface p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
+          <div className="sm:w-1/2">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-xs font-medium text-text-secondary">Mi Top 8</p>
               <span className="text-xs text-text-muted">(0/8)</span>
@@ -379,10 +382,10 @@ export function Top8DnD({
               ))}
             </div>
           </div>
-        </div>
-        <div className="sm:w-1/2">
-          <div className="rounded-xl border border-border bg-surface p-5 opacity-40">
-            <p className="text-xs font-medium text-text-secondary">Jugadores disponibles</p>
+          <div className="sm:w-1/2 opacity-40">
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-xs font-medium text-text-secondary">Jugadores disponibles</p>
+            </div>
           </div>
         </div>
       </div>
@@ -390,96 +393,95 @@ export function Top8DnD({
   }
 
   return (
-    <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={handleDragStart}
-        onDragEnd={handleDragEnd}
-      >
-        {/* Top 8 — always first on mobile */}
-        <div className="flex flex-col gap-3 sm:order-2 sm:w-1/2">
-          <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-medium text-text-secondary">Mi Top 8</p>
-              <span className="text-xs text-text-muted">({rankedCount}/8)</span>
+    <div className="rounded-xl border border-border bg-surface p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          {/* Top 8 — always first on mobile */}
+          <div className="flex flex-col gap-3 sm:order-2 sm:w-1/2">
+            <div className="rounded-xl border border-border bg-surface p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-medium text-text-secondary">Mi Top 8</p>
+                <span className="text-xs text-text-muted">({rankedCount}/8)</span>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <SortableContext items={SLOT_IDS} strategy={verticalListSortingStrategy}>
+                  {top8.map((item, index) => (
+                    <SortableSlot
+                      key={SLOT_IDS[index]}
+                      item={item}
+                      index={index}
+                      onRemove={handleRemove}
+                    />
+                  ))}
+                </SortableContext>
+              </div>
             </div>
+          </div>
 
-            <div className="flex flex-col gap-1.5">
-              <SortableContext items={SLOT_IDS} strategy={verticalListSortingStrategy}>
-                {top8.map((item, index) => (
-                  <SortableSlot
-                    key={SLOT_IDS[index]}
+          {/* Pool */}
+          <div
+            ref={poolDroppableRef}
+            className={`flex flex-col gap-3 sm:order-1 sm:w-1/2 transition-opacity ${
+              isPoolOver ? 'opacity-60' : ''
+            }`}
+          >
+            <div className="rounded-xl border border-border bg-surface p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-medium text-text-secondary">Jugadores disponibles</p>
+                <span className="text-xs text-text-muted">({pool.length})</span>
+              </div>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar jugador..."
+                className="mb-3 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none"
+              />
+              <div className="flex max-h-[360px] flex-col gap-1.5 overflow-y-auto pr-1 pickhub-scrollbar">
+                {filteredPool.length === 0 && (
+                  <p className="py-4 text-center text-xs text-text-muted">
+                    {searchQuery ? 'Sin resultados' : 'No hay más jugadores disponibles'}
+                  </p>
+                )}
+                {filteredPool.map((item) => (
+                  <DraggablePoolItem
+                    key={item.optionId}
                     item={item}
-                    index={index}
-                    onRemove={handleRemove}
+                    onAdd={handleAdd}
                   />
                 ))}
-              </SortableContext>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Pool */}
-        <div
-          ref={poolDroppableRef}
-          className={`flex flex-col gap-3 sm:order-1 sm:w-1/2 transition-opacity ${
-            isPoolOver ? 'opacity-60' : ''
-          }`}
-        >
-          <div className="rounded-xl border border-border bg-surface p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-medium text-text-secondary">Jugadores disponibles</p>
-              <span className="text-xs text-text-muted">({pool.length})</span>
-            </div>
+          <DragOverlay>
+            {dragOverlayItem && (
+              <div className="flex items-center gap-2 rounded-lg border border-purple-primary bg-purple-surface px-3 py-2.5 text-sm text-purple-primary shadow-lg">
+                <span className="text-text-primary">{dragOverlayItem.label}</span>
+                {dragOverlayItem.countryCode && (
+                  <ReactCountryFlag
+                    countryCode={dragOverlayItem.countryCode}
+                    svg
+                    style={{ width: '1.1em', height: '1.1em' }}
+                  />
+                )}
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
 
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Buscar jugador..."
-              className="mb-3 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none"
-            />
-
-            <div className="flex max-h-[360px] flex-col gap-1.5 overflow-y-auto pr-1 pickhub-scrollbar">
-              {filteredPool.length === 0 && (
-                <p className="py-4 text-center text-xs text-text-muted">
-                  {searchQuery ? 'Sin resultados' : 'No hay más jugadores disponibles'}
-                </p>
-              )}
-              {filteredPool.map((item) => (
-                <DraggablePoolItem
-                  key={item.optionId}
-                  item={item}
-                  onAdd={handleAdd}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <DragOverlay>
-          {dragOverlayItem && (
-            <div className="flex items-center gap-2 rounded-lg border border-purple-primary bg-purple-surface px-3 py-2.5 text-sm text-purple-primary shadow-lg">
-              <span className="text-text-primary">{dragOverlayItem.label}</span>
-              {dragOverlayItem.countryCode && (
-                <ReactCountryFlag
-                  countryCode={dragOverlayItem.countryCode}
-                  svg
-                  style={{ width: '1.1em', height: '1.1em' }}
-                />
-              )}
-            </div>
-          )}
-        </DragOverlay>
-      </DndContext>
-
-      {/* Hidden inputs for form submission */}
-      {top8.map((item, index) =>
-        item ? (
-          <input key={item.optionId} type="hidden" name={`q_${questionId}_${index + 1}`} value={item.optionId} />
-        ) : null,
-      )}
+        {/* Hidden inputs for form submission */}
+        {top8.map((item, index) =>
+          item ? (
+            <input key={item.optionId} type="hidden" name={`q_${questionId}_${index + 1}`} value={item.optionId} />
+          ) : null,
+        )}
+      </div>
     </div>
   );
 }

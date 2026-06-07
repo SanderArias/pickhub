@@ -3,6 +3,7 @@
 import { useRef, useState, useCallback } from 'react';
 import { toPng } from 'html-to-image';
 import { ShareImageCard } from './ShareImageCard';
+import { getAppUrl } from '@/lib/app-url';
 
 interface Player {
   id: string;
@@ -26,12 +27,7 @@ interface ShareSectionProps {
   isPublished: boolean;
 }
 
-function getBaseUrl(): string {
-  if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_APP_URL) {
-    return process.env.NEXT_PUBLIC_APP_URL;
-  }
-  return 'http://localhost:3000';
-}
+const getBaseUrl = getAppUrl;
 
 export function ShareSection({ title, description, creator, players, slug, status, isPublished }: ShareSectionProps) {
   const cardRef = useRef<HTMLDivElement>(null);
