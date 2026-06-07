@@ -4,10 +4,12 @@ import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { linkTwitchAccount } from '@/app/actions/auth';
 import { disableSubVerification, enableSubVerification } from '@/app/actions/twitch-sub-verification';
+import type { TwitchVerificationStatus } from '@/lib/twitch';
 
 interface SubVerificationStatus {
   connected: boolean;
   enabled: boolean;
+  status: TwitchVerificationStatus;
   twitchUsername?: string | null;
   twitchAvatarUrl?: string | null;
   scopes?: string[] | null;
@@ -124,12 +126,14 @@ export function TwitchConnectionCard({
                 Verificación de suscriptores
               </h2>
               <p className="mt-1 text-xs text-text-secondary">
-                {subVerificationStatus.enabled
+                {subVerificationStatus.status === 'active'
                   ? 'PickHub puede detectar automáticamente qué participantes son suscriptores de tu canal.'
-                  : 'Permite que PickHub detecte automáticamente qué participantes son suscriptores de tu canal.'}
+                  : subVerificationStatus.status === 'reauthorization_required'
+                    ? 'El token de acceso ha expirado. Vuelve a autorizar para mantener la verificación activa.'
+                    : 'Permite que PickHub detecte automáticamente qué participantes son suscriptores de tu canal.'}
               </p>
 
-              {subVerificationStatus.enabled && (
+              {subVerificationStatus.status === 'active' && (
                 <div className="mt-4 space-y-2 rounded-lg bg-bg px-4 py-3">
                   <div className="flex items-center gap-1.5 text-xs text-success">
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
@@ -157,13 +161,27 @@ export function TwitchConnectionCard({
                 </div>
               )}
 
+              {subVerificationStatus.status === 'reauthorization_required' && (
+                <div className="mt-4 space-y-2 rounded-lg bg-bg px-4 py-3">
+                  <div className="flex items-center gap-1.5 text-xs text-warning">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 5V8.5M8 11H8.007M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                    Token expirado — reautorización necesaria
+                  </div>
+                  <p className="text-xs text-text-muted">
+                    El token de acceso ha expirado. Vuelve a autorizar la conexión para mantener la verificación activa.
+                  </p>
+                </div>
+              )}
+
               {error && (
                 <p className="mt-2 text-xs text-danger">{error}</p>
               )}
             </div>
 
             <div className="shrink-0">
-              {subVerificationStatus.enabled ? (
+              {subVerificationStatus.status === 'active' ? (
                 <button
                   type="button"
                   onClick={handleDisable}
@@ -172,6 +190,13 @@ export function TwitchConnectionCard({
                 >
                   {actionPending ? 'Desactivando…' : 'Desactivar'}
                 </button>
+              ) : subVerificationStatus.status === 'reauthorization_required' ? (
+                <a
+                  href="/auth/twitch/sub-verification"
+                  className="inline-flex items-center rounded-lg border border-warning px-4 py-2 text-sm font-medium text-warning transition-colors hover:bg-warning/10"
+                >
+                  Re-autorizar
+                </a>
               ) : subVerificationStatus.connected ? (
                 <button
                   type="button"
@@ -184,7 +209,7 @@ export function TwitchConnectionCard({
               ) : (
                 <a
                   href="/auth/twitch/sub-verification"
-                  className="inline-flex items-center rounded-lg bg-purple-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-600"
+                  className="inline-flex items-center rounded-lg bg-purple-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-hover"
                 >
                   Activar verificación
                 </a>

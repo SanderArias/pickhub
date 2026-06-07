@@ -90,7 +90,15 @@ export async function GET(request: Request) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[twitch/callback] Token exchange failed:', msg);
     }
-    return errRedirect(`token_exchange_failed: ${encodeURIComponent(msg.slice(0, 120))}`);
+    return errRedirect('token_exchange_failed');
+  }
+
+  const grantedScopes = tokenData.scope;
+  if (!grantedScopes.includes('channel:read:subscriptions')) {
+    if (process.env.NODE_ENV === 'development') {
+      console.error('[twitch/callback] Missing required scope. Granted:', grantedScopes);
+    }
+    return errRedirect('missing_scope');
   }
 
   let twitchUser;

@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/services/supabase';
+import { getAppUrl } from '@/lib/app-url';
 
 const TWITCH_AUTHORIZE_URL = 'https://id.twitch.tv/oauth2/authorize';
 
@@ -12,14 +13,20 @@ function validateConfig(): string | null {
   if (!key) return 'TOKEN_ENCRYPTION_KEY no configurado';
   if (key.length < 16) return 'TOKEN_ENCRYPTION_KEY debe tener al menos 16 caracteres';
 
-  if (!process.env.NEXT_PUBLIC_APP_URL) return 'NEXT_PUBLIC_APP_URL no configurado';
+  if (!process.env.NEXT_PUBLIC_APP_URL && !process.env.VERCEL_URL && process.env.NODE_ENV !== 'development') {
+    return 'APP_URL no configurado';
+  }
 
   return null;
 }
 
-function redirectToSettings(error: string, reason: string): NextResponse {
+function getAppOrigin(): string {
+  return getAppUrl();
+}
+
+function redirectToSettings(reason: string): NextResponse {
   return NextResponse.redirect(
-    new URL(`/settings?${error}=true&reason=${encodeURIComponent(reason)}`, process.env.NEXT_PUBLIC_APP_URL),
+    new URL(`/settings?sub_verification=error&reason=${encodeURIComponent(reason)}`, getAppUrl()),
   );
 }
 
@@ -29,20 +36,20 @@ export async function GET() {
     if (process.env.NODE_ENV === 'development') {
       console.error('[twitch/sub-verification] Config error:', configError);
     }
-    return redirectToSettings('sub_verification', `missing_config: ${configError}`);
+    return redirectToSettings(`missing_config: ${configError}`);
   }
 
   try {
     const supabase = await createServerClient();
     const { data, error: authError } = await supabase.auth.getUser();
     if (authError || !data?.user) {
-      return NextResponse.redirect(new URL('/login', process.env.NEXT_PUBLIC_APP_URL));
+      return NextResponse.redirect(new URL('/login', getAppUrl()));
     }
   } catch (err) {
     if (process.env.NODE_ENV === 'development') {
       console.error('[twitch/sub-verification] Auth error:', err);
     }
-    return redirectToSettings('sub_verification', 'auth_failed');
+    return redirectToSettings('auth_failed');
   }
 
   let state: string;
@@ -60,10 +67,10 @@ export async function GET() {
     if (process.env.NODE_ENV === 'development') {
       console.error('[twitch/sub-verification] State/cookie error:', err);
     }
-    return redirectToSettings('sub_verification', 'state_failed');
+    return redirectToSettings('state_failed');
   }
 
-  const callbackUrl = `${process.env.NEXT_PUBLIC_APP_URL}/auth/twitch/callback`;
+  const callbackUrl = `${getAppOrigin()}/auth/twitch/callback`;
   const params = new URLSearchParams({
     client_id: process.env.TWITCH_CLIENT_ID!,
     redirect_uri: callbackUrl,

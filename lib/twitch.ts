@@ -42,12 +42,14 @@ export function isSubscriberVerificationActive(
   connection: CreatorTwitchConnection | null,
 ): boolean {
   if (!connection) return false;
-  return (
-    connection.subscriber_verification_enabled === true &&
-    Boolean(connection.twitch_user_id) &&
-    Boolean(connection.access_token_encrypted) &&
-    connection.revoked_at === null
-  );
+  if (connection.subscriber_verification_enabled !== true) return false;
+  if (!connection.twitch_user_id) return false;
+  if (!connection.access_token_encrypted) return false;
+  if (connection.revoked_at !== null) return false;
+  if (connection.expires_at && new Date(connection.expires_at) < new Date()) {
+    return Boolean(connection.refresh_token_encrypted);
+  }
+  return true;
 }
 
 export function getTwitchVerificationStatus(

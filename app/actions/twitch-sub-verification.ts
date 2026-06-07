@@ -5,12 +5,14 @@ import { createServerClient } from '@/services/supabase';
 import { getUser } from './auth';
 import {
   type CreatorTwitchConnection,
+  type TwitchVerificationStatus,
   isSubscriberVerificationActive,
+  getTwitchVerificationStatus,
 } from '@/lib/twitch';
 
 export async function getSubVerificationStatus() {
   const user = await getUser();
-  if (!user) return { connected: false as const, enabled: false };
+  if (!user) return { connected: false as const, enabled: false, status: 'inactive' as const };
 
   const supabase = await createServerClient();
 
@@ -21,12 +23,15 @@ export async function getSubVerificationStatus() {
     .maybeSingle();
 
   if (!connection) {
-    return { connected: false as const, enabled: false };
+    return { connected: false as const, enabled: false, status: 'inactive' as const };
   }
+
+  const status = getTwitchVerificationStatus(connection as CreatorTwitchConnection);
 
   return {
     connected: true as const,
     enabled: isSubscriberVerificationActive(connection as CreatorTwitchConnection),
+    status,
     twitchUsername: connection.twitch_username,
     twitchAvatarUrl: connection.twitch_avatar_url,
     scopes: connection.scopes,

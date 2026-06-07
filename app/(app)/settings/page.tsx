@@ -36,7 +36,23 @@ export default async function SettingsPage({
 
       {sp.sub_verification === 'error' && (
         <div className="rounded-lg border border-danger-border bg-danger/5 p-3 text-sm text-danger">
-          Error al activar la verificación: {sp.reason ?? 'Error desconocido'}
+          {sp.reason?.startsWith('twitch_error: access_denied')
+            ? 'No autorizaste la conexión con Twitch. La verificación sigue inactiva.'
+            : sp.reason?.startsWith('twitch_error')
+              ? 'Twitch rechazó la solicitud. Vuelve a intentarlo.'
+              : sp.reason?.startsWith('missing_scope')
+                ? 'Twitch no concedió el permiso necesario para consultar suscriptores.'
+                : sp.reason?.startsWith('token_exchange_failed')
+                  ? 'No pudimos completar la conexión con Twitch. Vuelve a intentarlo.'
+                  : sp.reason?.startsWith('encryption_failed')
+                    ? 'Error interno al guardar la conexión. Contacta al soporte.'
+                    : sp.reason?.startsWith('missing_config')
+                      ? 'La conexión con Twitch no pudo completarse. Revisa la configuración del entorno.'
+                      : sp.reason?.startsWith('state_failed') || sp.reason?.startsWith('invalid_state')
+                        ? 'La sesión expiró o es inválida. Vuelve a intentarlo.'
+                        : sp.reason?.startsWith('auth_failed')
+                          ? 'Tu sesión expiró. Inicia sesión nuevamente.'
+                          : `Error al activar la verificación: ${sp.reason ?? 'Error desconocido'}`}
         </div>
       )}
 
