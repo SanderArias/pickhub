@@ -5,10 +5,9 @@ import { AuthBrandHeader } from '@/components/auth/AuthBrandHeader';
 import { SocialAuthDivider } from '@/components/auth/SocialAuthDivider';
 import { OAuthErrorBanner } from '@/components/auth/OAuthErrorBanner';
 
-function validateNext(value: string | null): string | null {
+function validateNext(value: string | null | undefined): string | null {
   if (!value) return null;
-  if (!value.startsWith('/')) return null;
-  if (value.startsWith('//')) return null;
+  if (!value.startsWith('/') || value.startsWith('//')) return null;
   return value;
 }
 
@@ -37,7 +36,8 @@ export default async function LoginPage({
 
           <SocialAuthDivider />
 
-          <form action={signInWithTwitch.bind(null, next)}>
+          <form action={signInWithTwitch}>
+            <input type="hidden" name="next" value={next} />
             <button
               type="submit"
               className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-purple-primary/40 px-4 py-2.5 text-sm font-medium text-purple-primary transition-all hover:bg-purple-primary/10 focus:outline-none focus:ring-2 focus:ring-purple-primary/30"

@@ -46,7 +46,7 @@ export async function proxy(request: NextRequest) {
 
   if (user && pathname === '/login') {
     const next = request.nextUrl.searchParams.get('next');
-    const safeNext = isSafeNextPath(next) ? next : '/inicio';
+    const safeNext = next && isSafeNextPath(next) ? next : '/inicio';
     return NextResponse.redirect(new URL(safeNext, request.url));
   }
 

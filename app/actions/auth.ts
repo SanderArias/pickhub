@@ -13,7 +13,10 @@ async function buildTwitchRedirectUrl(next: string) {
   return { supabase, redirectTo };
 }
 
-export async function signInWithTwitch(next: string = '/inicio') {
+export async function signInWithTwitch(nextOrForm?: string | FormData) {
+  const next = typeof nextOrForm === 'string' ? nextOrForm
+    : nextOrForm instanceof FormData ? (nextOrForm.get('next') as string) || '/inicio'
+    : '/inicio';
   const { supabase, redirectTo } = await buildTwitchRedirectUrl(next);
   const { data } = await supabase.auth.signInWithOAuth({
     provider: 'twitch',
