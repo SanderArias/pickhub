@@ -60,6 +60,7 @@ export interface Prize {
   assignment_method: string;
   eligible_rank_start: number;
   sort_order: number;
+  prize_category: string | null;
 }
 
 export interface Answer {
@@ -697,4 +698,32 @@ export async function getSubmissionReceipt(
     prizes,
     error: null,
   };
+}
+
+export interface OfficialResultRow {
+  position: number;
+  player_name: string;
+  country_code: string | null;
+  seed: number | null;
+  image_url: string | null;
+}
+
+export async function getParticipantOfficialResults(eventId: string): Promise<OfficialResultRow[]> {
+  const supabase = await createServerClient();
+
+  const { data: players } = await supabase
+    .from('event_players')
+    .select('name, country_code, seed, image_url')
+    .eq('event_id', eventId)
+    .eq('is_active', true)
+    .order('seed', { ascending: true, nullsFirst: false })
+    .order('name', { ascending: true });
+
+  return (players ?? []).map((p, i) => ({
+    position: i + 1,
+    player_name: p.name,
+    country_code: p.country_code,
+    seed: p.seed,
+    image_url: p.image_url,
+  }));
 }

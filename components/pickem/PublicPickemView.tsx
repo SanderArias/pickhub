@@ -1,23 +1,22 @@
 ﻿'use client';
 
-import { useActionState, useState, useMemo, useEffect } from 'react';
+import { useActionState, useState, useMemo, useEffect, useRef } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { signInWithTwitch } from '@/app/actions/auth';
 import { submitPredictions } from '@/app/actions/participant';
 import type { PublicEventData, EventPlayer, PredictionQuestion, Prize, Submission } from '@/app/actions/participant';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
+import type { OfficialResultEntry } from '@/app/actions/results-data';
 import { Top8DnD } from '@/components/pickem/Top8DnD';
-import { LeaderboardSection } from '@/components/pickem/LeaderboardSection';
 import { ReceiptModal } from '@/components/pickem/ReceiptModal';
 import { PickemParticipationHero } from '@/components/pickem/PickemParticipationHero';
 import { PrizeCarousel } from '@/components/pickem/PrizeCarousel';
 import { PredictionIntro } from '@/components/pickem/PredictionIntro';
 import { SUBMITTED_PREDICTION_STATUS_CONFIG } from '@/lib/status-config';
-import ReactCountryFlag from 'react-country-flag';
 import { SubscriberTwitchEligibilityNotice } from '@/components/pickem/SubscriberTwitchEligibilityNotice';
 import { checkParticipantTwitchStatus } from '@/app/actions/twitch-status';
+import { ParticipantResultsView } from '@/components/completed/ParticipantResultsView';
+import type { EnrichedPick } from '@/components/completed/ParticipantMyPicksTab';
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('es-ES', {
@@ -36,13 +35,18 @@ export function PublicPickemView({
   mySubmission,
   myScore,
   isAuthenticated,
-  isClosed,
   participantName,
   participantTwitchStatus,
   leaderboard,
-  drawsMap,
   tiebreakerWinners,
   myProfileId,
+  myEntry,
+  wonPrizeIds,
+  enrichedPicks,
+  officialResults,
+  isTiebreakerWinner,
+  isTiebreakerLoser,
+  hasResolvedTies,
 }: {
   event: PublicEventData;
   players: EventPlayer[];
@@ -55,9 +59,15 @@ export function PublicPickemView({
   participantName?: string;
   participantTwitchStatus?: 'connected' | 'not_connected';
   leaderboard: LeaderboardEntry[];
-  drawsMap: Record<string, number>;
   tiebreakerWinners: string[];
   myProfileId?: string | null;
+  myEntry: { rank: number; display_name: string | null } | null;
+  wonPrizeIds: string[];
+  enrichedPicks: EnrichedPick[];
+  officialResults: OfficialResultEntry[];
+  isTiebreakerWinner: boolean;
+  isTiebreakerLoser: boolean;
+  hasResolvedTies: boolean;
 }) {
   const [state, formAction, pending] = useActionState(
     submitPredictions.bind(null, event.id),
@@ -66,6 +76,7 @@ export function PublicPickemView({
 
   const [showModal, setShowModal] = useState(false);
   const [resolvedTwitchStatus, setResolvedTwitchStatus] = useState(participantTwitchStatus);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -74,7 +85,6 @@ export function PublicPickemView({
     }
   }, [state.success, event.slug, router]);
 
-  // Revalidate Twitch status when window regains focus (user may have connected Twitch in another tab)
   useEffect(() => {
     function handleFocus() {
       checkParticipantTwitchStatus().then(setResolvedTwitchStatus);
@@ -109,7 +119,6 @@ export function PublicPickemView({
   }, [predictions, mySubmission, activePlayers]);
 
   const hasPrizes = prizes.length > 0;
-  const resolvedTies = Object.keys(drawsMap).length > 0;
   const hasTop8 = predictions.some((q) => q.template_type === 'top8_ordered');
 
   const generalPrizes = useMemo(
@@ -143,23 +152,12 @@ export function PublicPickemView({
 
   /* ===== SUBMITTED VIEW ===== */
   if (hasSubmitted) {
-    const top8Q = predictions.find((q) => q.template_type === 'top8_ordered');
-    const top8Answers = top8Q
-      ? mySubmission!.answers
-          .filter((a) => a.question_id === top8Q.id)
-          .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-      : [];
-
-    const half = Math.ceil(top8Answers.length / 2);
-    const col1 = top8Answers.slice(0, half);
-    const col2 = top8Answers.slice(half);
-
-    const statusCopy = SUBMITTED_PREDICTION_STATUS_CONFIG[event.status] ?? SUBMITTED_PREDICTION_STATUS_CONFIG.open;
     const isCompleted = event.status === 'completed';
+    const statusCopy = SUBMITTED_PREDICTION_STATUS_CONFIG[event.status] ?? SUBMITTED_PREDICTION_STATUS_CONFIG.open;
 
     return (
       <div className="flex flex-col gap-6">
-        {/* Submitted hero */}
+        {/* Header — status, title, creator, buttons */}
         <div className="rounded-xl border border-border bg-surface p-5">
           <div className="flex gap-6">
             <div className="min-w-0 flex-1 flex flex-col gap-1.5">
@@ -207,14 +205,6 @@ export function PublicPickemView({
               </p>
 
               <div className="flex items-center gap-3 mt-3">
-                {isCompleted && (
-                  <Link
-                    href={`/pickems/${event.slug}`}
-                    className="rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
-                  >
-                    Ver resultados
-                  </Link>
-                )}
                 <button
                   type="button"
                   onClick={() => setShowModal(true)}
@@ -241,108 +231,78 @@ export function PublicPickemView({
           </div>
         </div>
 
-        {/* Prizes carousel */}
-        {hasPrizes && (
-          <PrizeCarousel
-            generalPrizes={generalPrizes}
-            subPrizes={subPrizes}
-            stackingPolicy={event.prize_stacking_policy}
-          />
-        )}
-
         {/* Subscriber eligibility notice */}
         {shouldShowTwitchNotice && <SubscriberTwitchEligibilityNotice />}
 
-        {/* Scoring rules */}
-        {hasTop8 && (
-          <section className="flex flex-col gap-1.5">
-            <h3 className="text-sm font-semibold text-text-primary">C&oacute;mo se punt&uacute;a</h3>
-            <div className="flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
-                <span className="font-semibold text-purple-primary">+1</span>
-                <span className="text-text-secondary">Jugador correcto dentro del Top {activePlayers.length}</span>
-              </span>
-              <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
-                <span className="font-semibold text-purple-primary">+1</span>
-                <span className="text-text-secondary">Posici&oacute;n exacta</span>
-              </span>
-            </div>
-            <p className="text-xs text-text-muted">
-              M&aacute;ximo: {activePlayers.length * 2} pts
-            </p>
-          </section>
+        {/* Tabbed results */}
+        {isCompleted && (
+          <div ref={resultsRef}>
+            <ParticipantResultsView
+            myEntry={myEntry}
+            myScore={myScore}
+            isTiebreakerWinner={isTiebreakerWinner}
+            isTiebreakerLoser={isTiebreakerLoser}
+            hasResolvedTies={hasResolvedTies}
+            wonPrizeIds={wonPrizeIds}
+            prizes={prizes}
+            leaderboard={leaderboard}
+            myProfileId={myProfileId ?? undefined}
+            tiebreakerWinners={tiebreakerWinners}
+            enrichedPicks={enrichedPicks}
+            officialResults={officialResults}
+          />
+          </div>
         )}
 
-        {/* Tu Top 8 — two columns on desktop */}
-        {top8Answers.length > 0 && (
-          <section className="flex flex-col gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-text-primary">Tu Top 8</h2>
-              <p className="text-xs text-text-muted mt-0.5">
-                Esta es la selecci&oacute;n registrada para este Pick&rsquo;em.
-              </p>
-            </div>
-
-            <div className="grid gap-2 sm:grid-cols-2">
-              {[col1, col2].map((col, ci) => (
-                <ol key={ci} className="flex flex-col gap-1.5 list-none p-0 m-0">
-                  {col.map((s) => {
-                    const opt = top8Q!.options.find((o) => o.id === s.option_id);
-                    const label = opt?.label ?? '\u2014';
-                    const playerId = opt?.player_id ?? null;
-                    const countryCode = playerId ? activePlayers.find((p) => p.id === playerId)?.country_code ?? null : null;
-                    return (
-                      <li key={s.option_id} className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2">
-                        <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-hover text-xs font-bold text-text-muted">
-                          {s.position}
-                        </span>
-                        <span className="flex-1 truncate text-sm text-text-primary">{label}</span>
-                        {countryCode && (
-                          <span className="shrink-0 text-base leading-none">
-                            <ReactCountryFlag countryCode={countryCode} svg style={{ width: '1.1em', height: '1.1em' }} title={countryCode} />
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ol>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Scored results */}
-        {myScore && myScore.total_score !== null && (
-          <div className="flex flex-col gap-6 lg:grid lg:grid-cols-2 lg:gap-6">
-            {resolvedTies && (
-              <section className="flex flex-col gap-4">
-                <div className="flex items-center gap-2">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-green-400">
-                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-                    <polyline points="22 4 12 14.01 9 11.01" />
-                  </svg>
-                  <h2 className="text-sm font-semibold text-text-primary">Desempate resuelto</h2>
+        {!isCompleted && (
+          <div className="flex flex-col gap-6">
+            {/* Scoring rules */}
+            {hasTop8 && (
+              <section className="flex flex-col gap-1.5">
+                <h3 className="text-sm font-semibold text-text-primary">C&oacute;mo se punt&uacute;a</h3>
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
+                    <span className="font-semibold text-purple-primary">+1</span>
+                    <span className="text-text-secondary">Jugador correcto dentro del Top {activePlayers.length}</span>
+                  </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
+                    <span className="font-semibold text-purple-primary">+1</span>
+                    <span className="text-text-secondary">Posici&oacute;n exacta</span>
+                  </span>
                 </div>
-                <div className="rounded-xl border border-green-500/20 bg-green-500/[0.02] p-5">
-                  {[...leaderboard].filter((e) => e.profile_id in drawsMap).sort((a, b) => (drawsMap[a.profile_id] ?? 0) - (drawsMap[b.profile_id] ?? 0)).map((entry) => {
-                    const order = drawsMap[entry.profile_id] ?? 0;
-                    const isWinner = order === 1;
-                    return (
-                      <div key={entry.profile_id} className="flex items-center gap-3 py-1.5">
-                        <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${isWinner ? 'bg-green-500 text-white' : 'bg-surface-hover text-text-muted'}`}>{order}</span>
-                        <span className={`text-sm ${isWinner ? 'font-medium text-green-400' : 'text-text-primary'}`}>{entry.display_name ?? 'Participante'}</span>
-                        {isWinner && <span className="shrink-0 rounded-full bg-green-500/20 px-2.5 py-0.5 text-[11px] font-semibold text-green-400">Ganador desempate</span>}
-                      </div>
-                    );
-                  })}
-                  <p className="mt-3 text-xs text-text-muted">El desempate fue resuelto mediante sorteo aleatorio.</p>
-                </div>
+                <p className="text-xs text-text-muted">
+                  M&aacute;ximo: {activePlayers.length * 2} pts
+                </p>
               </section>
             )}
-            {leaderboard.length > 0 && (
-              <div className="flex flex-col gap-3">
-                <h2 className="text-sm font-semibold text-text-primary">Clasificaci&oacute;n</h2>
-                <LeaderboardSection entries={leaderboard} myProfileId={myProfileId} tiebreakerWinners={tiebreakerWinners} />
+
+            {/* Scores and ranking when not completed */}
+            {myScore && myScore.total_score !== null && (
+              <div className="flex flex-col gap-6">
+                {leaderboard.length > 0 && (
+                  <section className="flex flex-col gap-3">
+                    <h2 className="text-sm font-semibold text-text-primary">Clasificaci&oacute;n</h2>
+                    <div className="rounded-lg border border-border bg-surface p-4">
+                      {leaderboard.map((entry) => {
+                        const isMe = entry.profile_id === myProfileId;
+                        return (
+                          <div key={entry.profile_id} className="flex items-center gap-3 py-1.5">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-surface-hover text-xs font-bold text-text-muted">
+                              {entry.rank}
+                            </span>
+                            <span className={`text-sm ${isMe ? 'font-medium text-purple-primary' : 'text-text-primary'}`}>
+                              {entry.display_name ?? 'Participante'}
+                              {isMe && <span className="ml-1 text-xs text-purple-primary">(t&uacute;)</span>}
+                            </span>
+                            <span className="ml-auto text-sm font-semibold text-text-primary">
+                              {entry.total_score} pts
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
               </div>
             )}
           </div>
@@ -364,15 +324,15 @@ export function PublicPickemView({
   }
 
   /* ===== PRE-SUBMISSION VIEW ===== */
+  const activePredictionCount = predictions.filter((q) => q.is_active).length;
+
   return (
     <div className="flex flex-col gap-6">
       {/* Hero */}
-      <div className="rounded-xl border border-border bg-surface p-5">
-        <PickemParticipationHero
-          event={event}
-          hasTop8={hasTop8}
-        />
-      </div>
+      <PickemParticipationHero
+        event={event}
+        hasTop8={hasTop8}
+      />
 
       {/* Prizes carousel */}
       {hasPrizes && (
@@ -383,118 +343,77 @@ export function PublicPickemView({
         />
       )}
 
-      {hasPrizes && <div className="h-px bg-border" />}
-
       {/* Subscriber eligibility notice */}
       {shouldShowTwitchNotice && <SubscriberTwitchEligibilityNotice />}
 
-      {/* Unauthenticated CTA */}
-      {!isAuthenticated && (
-        <section className="rounded-xl border border-border bg-surface p-6 text-center">
-          <p className="mb-4 text-sm text-text-secondary">
-            Inicia sesi&oacute;n con Twitch para participar.
-          </p>
-          <form action={signInWithTwitch}>
-            <button
-              type="submit"
-              className="rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
-            >
-              Iniciar sesi&oacute;n con Twitch
-            </button>
-          </form>
-        </section>
-      )}
+      {/* Prediction intro and form */}
+      <PredictionIntro
+        hasTop8={hasTop8}
+        questionCount={activePredictionCount}
+        playerCount={activePlayers.length}
+      />
 
-      {/* Prediction intro + form */}
-      {isAuthenticated && !mySubmission && !isClosed && predictions.length > 0 && (
-        <form action={formAction} className="flex flex-col gap-6">
-          <PredictionIntro
-            hasTop8={hasTop8}
-            questionCount={predictions.length}
-            playerCount={activePlayers.length}
-          />
-
-          {predictions.map((q) => {
-            const isTop8 = q.template_type === 'top8_ordered';
-
-            return (
-            <fieldset key={q.id} className="rounded-xl border border-border bg-surface p-5">
-              <legend className="mb-3">
-                <h3 className="text-sm font-medium text-text-primary">{q.title}</h3>
-                {q.description && <p className="mt-0.5 text-xs text-text-secondary">{q.description}</p>}
-                {!isTop8 && (
-                  <p className="mt-0.5 text-xs text-text-muted">
-                    {q.points_per_correct} punto{q.points_per_correct !== 1 ? 's' : ''} por acierto
-                    {q.question_type === 'single' ? ' \u00b7 Selecci\u00f3n \u00fanica' : ` \u00b7 Selecciona hasta ${q.max_selections} opciones`}
-                  </p>
-                )}
-              </legend>
-
-              {isTop8 ? (
-                <Top8DnD
-                  questionId={q.id}
-                  activePlayers={activePlayers}
-                  options={q.options.map((opt) => ({
-                    id: opt.id,
-                    playerId: opt.player_id ?? null,
-                    label: opt.label,
-                  }))}
-                />
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {q.options.map((opt) => (
-                    <label key={opt.id} className="flex cursor-pointer items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-sm text-text-primary transition-colors hover:border-border-hover has-[:checked]:border-purple-primary">
-                      {q.question_type === 'single' ? (
-                        <input type="radio" name={`q_${q.id}`} value={opt.id} className="accent-purple-primary" />
-                      ) : (
-                        <input type="checkbox" name={`q_${q.id}`} value={opt.id} className="accent-purple-primary" />
-                      )}
-                      {opt.label}
-                    </label>
-                  ))}
+      <form action={formAction} className="flex flex-col gap-6">
+        {predictions
+          .filter((q) => q.is_active)
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+          .map((q) => {
+            if (q.question_type === 'single' && q.template_type === 'top8_ordered') {
+              return (
+                <div key={q.id} className="flex flex-col gap-3">
+                  <h3 className="text-sm font-semibold text-text-primary">{q.title}</h3>
+                  {q.description && (
+                    <p className="text-xs text-text-muted">{q.description}</p>
+                  )}
+                  <Top8DnD
+                    questionId={q.id}
+                    activePlayers={activePlayers}
+                    options={q.options.map((o) => ({ id: o.id, playerId: o.player_id, label: o.label }))}
+                  />
                 </div>
-              )}
-            </fieldset>
+              );
+            }
+            return (
+              <div key={q.id} className="flex flex-col gap-2">
+                <h3 className="text-sm font-semibold text-text-primary">{q.title}</h3>
+                {q.description && (
+                  <p className="text-xs text-text-muted">{q.description}</p>
+                )}
+                <input type="hidden" name={`question_${q.id}`} value="" />
+                <div className="flex flex-wrap gap-2">
+                  {q.options
+                    .sort((a, b) => a.sort_order - b.sort_order)
+                    .map((opt) => (
+                      <label
+                        key={opt.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text-primary transition-colors hover:border-purple-primary/40 has-[:checked]:border-purple-primary has-[:checked]:bg-purple-primary/10"
+                      >
+                        <input
+                          type="checkbox"
+                          name={`question_${q.id}`}
+                          value={opt.id}
+                          className="size-4 accent-purple-primary"
+                        />
+                        {opt.label}
+                      </label>
+                    ))}
+                </div>
+              </div>
             );
           })}
 
-          {state?.error && <p className="text-sm text-danger">{state.error}</p>}
+        {state.error && (
+          <p className="text-sm text-danger">{state.error}</p>
+        )}
 
-          <button
-            type="submit"
-            disabled={pending}
-            className="self-start rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
-          >
-            {pending ? 'Enviando predicci\u00f3n\u2026' : 'Enviar predicci\u00f3n'}
-          </button>
-        </form>
-      )}
-
-      {/* Closed without submission */}
-      {isAuthenticated && !mySubmission && isClosed && (
-        <section className="rounded-xl border border-border bg-surface p-6 text-center">
-          <p className="text-sm text-text-muted">Las predicciones ya est\u00e1n cerradas.</p>
-        </section>
-      )}
-
-      {/* No predictions configured */}
-      {isAuthenticated && !mySubmission && predictions.length === 0 && (
-        <section className="rounded-xl border border-border bg-surface p-6 text-center">
-          <p className="text-sm text-text-muted">Este Pick&rsquo;em no tiene predicciones configuradas.</p>
-        </section>
-      )}
-
-      <ReceiptModal
-        isOpen={showModal}
-        onClose={() => setShowModal(false)}
-        eventTitle={event.title}
-        eventSlug={event.slug}
-        eventLogoUrl={event.logo_url}
-        creatorLabel={event.creator?.display_name ?? event.creator?.handle ?? '\u2014'}
-        participantName={participantName ?? '\u2014'}
-        submittedAt={mySubmission?.submitted_at ?? null}
-        rankedPlayers={rankedPlayers}
-      />
+        <button
+          type="submit"
+          disabled={pending}
+          className="self-start rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
+        >
+          {pending ? 'Enviando...' : 'Enviar predicción'}
+        </button>
+      </form>
     </div>
   );
 }

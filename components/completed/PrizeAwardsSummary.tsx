@@ -50,7 +50,7 @@ export function PrizeAwardsSummary({
       <section className="flex flex-col gap-4">
         <h3 className="text-sm font-semibold text-text-primary">Premios</h3>
         <div className="rounded-lg border border-border bg-surface px-4 py-3">
-          <p className="text-sm text-text-muted">Este Pick'em no tiene premios configurados.</p>
+          <p className="text-sm text-text-muted">Este Pick&apos;em no tiene premios configurados.</p>
         </div>
       </section>
     );
