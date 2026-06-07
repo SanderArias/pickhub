@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { getUser } from '@/app/actions/auth';
+import { getUser, signOut } from '@/app/actions/auth';
 import { getCurrentProfile, checkTwitchLinked } from '@/lib/auth';
+import { ensureUserProfile } from '@/app/actions/profile';
 import { getDisplayUser } from '@/lib/getDisplayUser';
 import { getUserParticipations } from '@/app/actions/participant';
 import { StatusBadge } from '@/components/ui';
@@ -9,10 +10,25 @@ import { RequestCreatorAccessForm } from './RequestCreatorAccessForm';
 
 export default async function InicioPage() {
   const user = await getUser();
-  if (!user) redirect('/login');
+  if (!user) {
+    console.log('[auth-redirect]', { source: 'inicio', pathname: '/inicio', hasUser: false, userId: null, redirectTarget: '/login', reason: 'no-user' });
+    console.log('[auth-location]', { source: 'inicio', from: '/inicio', to: '/login' });
+    redirect('/login');
+  }
 
-  const profile = await getCurrentProfile(user);
-  if (!profile) redirect('/login');
+  let profile = await getCurrentProfile(user);
+  if (!profile) {
+    const result = await ensureUserProfile(user);
+    if (result.error) {
+      console.error('[inicio] profile repair failed:', result.error);
+      return <ProfileErrorScreen />;
+    }
+    profile = await getCurrentProfile(user);
+    if (!profile) {
+      console.error('[inicio] still no profile after repair');
+      return <ProfileErrorScreen />;
+    }
+  }
 
   const displayName = getDisplayUser(profile, user);
   const creatorProfile = profile.creator_profile;
@@ -196,6 +212,27 @@ export default async function InicioPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function ProfileErrorScreen() {
+  return (
+    <div className="flex min-h-dvh flex-1 items-center justify-center px-4 py-8">
+      <div className="w-full max-w-md text-center">
+        <h2 className="text-lg font-bold text-text-primary">Error al cargar tu perfil</h2>
+        <p className="mt-2 text-sm text-text-secondary">
+          No pudimos cargar tu perfil. Intenta cerrar sesi&oacute;n y volver a entrar.
+        </p>
+        <form action={signOut} className="mt-6">
+          <button
+            type="submit"
+            className="rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-hover"
+          >
+            Cerrar sesi&oacute;n
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

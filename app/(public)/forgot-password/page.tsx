@@ -1,11 +1,7 @@
-import { redirect } from 'next/navigation';
-import { getUser } from '@/app/actions/auth';
 import { ForgotPasswordForm } from './ForgotPasswordForm';
 import { AuthBrandHeader } from '@/components/auth/AuthBrandHeader';
 
 export default async function ForgotPasswordPage() {
-  const user = await getUser();
-  if (user) redirect('/inicio');
 
   return (
     <div className="flex min-h-dvh flex-1 items-center justify-center px-4 py-8">

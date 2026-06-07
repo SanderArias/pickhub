@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Logo } from '@/components/ui/Logo';
+import { BackButton } from '@/components/ui/BackButton';
 
 export default function NotFound() {
   return (
@@ -28,12 +29,7 @@ export default function NotFound() {
             Volver al inicio
           </Link>
 
-          <Link
-            href="/inicio"
-            className="rounded-lg border border-purple-primary px-6 py-2.5 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50"
-          >
-            Explorar Pick&apos;ems
-          </Link>
+          <BackButton />
         </div>
       </section>
     </main>

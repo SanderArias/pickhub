@@ -25,7 +25,8 @@ function isSafeNextPath(next: string | null): boolean {
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  const response = NextResponse.next();
+
+  let response = NextResponse.next({ request });
 
   const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -33,12 +34,17 @@ export async function proxy(request: NextRequest) {
     {
       cookies: {
         getAll() {
-          return request.cookies.getAll();
+          const all = request.cookies.getAll();
+          return all;
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            response.cookies.set(name, value),
-          );
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
         },
       },
     },
@@ -49,14 +55,28 @@ export async function proxy(request: NextRequest) {
   if (user && pathname === '/login') {
     const next = request.nextUrl.searchParams.get('next');
     const safeNext = next && isSafeNextPath(next) ? next : '/inicio';
-    return NextResponse.redirect(new URL(safeNext, request.url));
+    const target = new URL(safeNext, request.url).href;
+    console.log('[auth-redirect]', { source: 'proxy', pathname, hasUser: true, userId: user.id, redirectTarget: safeNext, reason: 'authenticated-on-login' });
+    console.log('[auth-location]', { source: 'proxy', from: pathname, to: target });
+    const redirectResponse = NextResponse.redirect(target);
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value);
+    });
+    return redirectResponse;
   }
 
   if (!user && !isPublicRoute(pathname)) {
     const loginUrl = new URL('/login', request.url);
     const nextPath = `${request.nextUrl.pathname}${request.nextUrl.search}`;
     loginUrl.searchParams.set('next', nextPath);
-    return NextResponse.redirect(loginUrl);
+    const target = loginUrl.href;
+    console.log('[auth-redirect]', { source: 'proxy', pathname, hasUser: false, userId: null, redirectTarget: '/login', reason: 'unauthenticated-private' });
+    console.log('[auth-location]', { source: 'proxy', from: pathname, to: target });
+    const redirectResponse = NextResponse.redirect(target);
+    response.cookies.getAll().forEach((cookie) => {
+      redirectResponse.cookies.set(cookie.name, cookie.value);
+    });
+    return redirectResponse;
   }
 
   return response;

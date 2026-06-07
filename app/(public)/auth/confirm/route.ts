@@ -1,21 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/services/supabase';
-import { getAppUrl } from '@/lib/app-url';
+import { createServerClient } from '@supabase/ssr';
 
-const APP_URL = getAppUrl();
-
-function safeNextUrl(next: string | null): string {
-  if (!next) return '/update-password';
-  try {
-    const parsed = new URL(next, APP_URL);
-    if (parsed.origin === APP_URL || parsed.origin === 'http://localhost:3000') {
-      return parsed.pathname + parsed.search;
-    }
-  } catch {
-    // not a full URL, treat as path
-  }
-  if (next.startsWith('/') && !next.startsWith('//')) return next;
-  return '/update-password';
+function validateNext(next: string | null, fallback: string): string {
+  if (next && next.startsWith('/') && !next.startsWith('//')) return next;
+  return fallback;
 }
 
 function recoveryErrorCode(error: { code?: string; message: string }): string {
@@ -26,26 +14,46 @@ function recoveryErrorCode(error: { code?: string; message: string }): string {
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url);
+  const { searchParams, origin } = new URL(request.url);
   const token_hash = searchParams.get('token_hash');
   const type = searchParams.get('type');
-  const next = safeNextUrl(searchParams.get('next'));
+  const next = validateNext(searchParams.get('next'), '/update-password');
 
   if (!token_hash || !type) {
-    console.error('[auth/confirm] missing token_hash or type');
-    return NextResponse.redirect(`${APP_URL}/login?error=missing_params`);
+    console.log('[auth-redirect]', { source: 'confirm', pathname: '/auth/confirm', hasUser: false, userId: null, redirectTarget: '/forgot-password?error=missing_params', reason: 'missing-params' });
+    return NextResponse.redirect(`${origin}/forgot-password?error=missing_params`);
   }
 
-  const supabase = await createServerClient();
-  const { error } = await supabase.auth.verifyOtp({ token_hash, type: type as any });
+  const response = NextResponse.redirect(`${origin}${next}`);
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
+        },
+      },
+    },
+  );
+
+  const { error } = await supabase.auth.verifyOtp({
+    token_hash,
+    type: type as any,
+  });
 
   if (error) {
-    console.error('[auth/confirm] verifyOtp failed:', error.code, error.message);
-    if (type === 'recovery') {
-      return NextResponse.redirect(`${APP_URL}/login?error=${recoveryErrorCode(error)}`);
-    }
-    return NextResponse.redirect(`${APP_URL}/login?error=verification_failed`);
+    const code = recoveryErrorCode(error);
+    console.log('[auth-redirect]', { source: 'confirm', pathname: '/auth/confirm', hasUser: false, userId: null, redirectTarget: `/forgot-password?error=${code}`, reason: 'verify-otp-failed' });
+    return NextResponse.redirect(`${origin}/forgot-password?error=${code}`);
   }
 
-  return NextResponse.redirect(`${APP_URL}${next}`);
+  console.log('[auth-redirect]', { source: 'confirm', pathname: '/auth/confirm', hasUser: null, userId: null, redirectTarget: next, reason: 'verify-otp-success' });
+  return response;
 }

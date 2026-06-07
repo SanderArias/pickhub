@@ -5,13 +5,20 @@ import type { Database } from '@/types/database.types';
 export async function createClient() {
   const cookieStore = await cookies();
 
+  const cookieNames = cookieStore.getAll().map((c) => c.name);
+  const hasAuthCookie = cookieNames.some((n) => n.startsWith('sb-') || n.startsWith('supabase-'));
+  if (hasAuthCookie) {
+    // no-op: just tracing
+  }
+
   return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
         getAll() {
-          return cookieStore.getAll();
+          const all = cookieStore.getAll();
+          return all;
         },
         setAll(cookiesToSet) {
           try {

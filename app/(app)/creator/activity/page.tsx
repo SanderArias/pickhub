@@ -10,7 +10,7 @@ export default async function ActivityPage({
   searchParams: Promise<{ filter?: string }>;
 }) {
   const profile = await getCurrentProfile();
-  if (!profile) redirect('/login');
+  if (!profile) redirect('/inicio');
 
   const creatorProfile = profile.creator_profile;
   const isApproved = profile.role === 'creator' && creatorProfile?.status === 'approved';

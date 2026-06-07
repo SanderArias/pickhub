@@ -22,6 +22,8 @@ export default async function LoginPage({
   const user = await getUser();
 
   if (user) {
+    console.log('[auth-redirect]', { source: 'login-page', pathname: '/login', hasUser: true, userId: user.id, redirectTarget: next, reason: 'authenticated-on-login-page' });
+    console.log('[auth-location]', { source: 'login-page', from: '/login', to: next });
     redirect(next);
   }
 

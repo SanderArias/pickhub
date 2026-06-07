@@ -36,14 +36,28 @@ export async function getCurrentProfile(
 
   const supabase = await createServerClient();
 
-  // TODO: display_name, twitch_id, twitch_avatar_url don't exist in remote profiles — cast for compatibility
-  const { data: profile } = await (supabase as any)
+  // Remote schema is missing twitch_id, twitch_avatar_url — select without them first
+  let profileData: Record<string, unknown> | null = null;
+  let profileError: unknown = null;
+
+  const result = await (supabase as any)
     .from('profiles')
-    .select('id, display_name, avatar_url, role, is_active, created_at, updated_at, twitch_username, twitch_id, twitch_avatar_url')
+    .select('id, display_name, avatar_url, role, is_active, created_at, updated_at, twitch_username')
     .eq('id', user.id)
     .maybeSingle();
 
-  if (!profile) return null;
+  profileData = result.data ?? null;
+  profileError = result.error ?? null;
+
+  if (!profileData) {
+    console.log('[profile-debug]', {
+      userId: user.id,
+      hasProfile: false,
+      profileErrorCode: (profileError as any)?.code ?? null,
+      profileErrorMessage: (profileError as any)?.message ?? null,
+    });
+    return null;
+  }
 
   const { data: creatorProfile } = await supabase
     .from('creator_profiles')
@@ -51,7 +65,19 @@ export async function getCurrentProfile(
     .eq('profile_id', user.id)
     .maybeSingle();
 
-  return { ...profile, creator_profile: creatorProfile ?? null } as Profile;
+  return {
+    id: profileData.id,
+    display_name: profileData.display_name ?? null,
+    avatar_url: profileData.avatar_url ?? null,
+    role: profileData.role ?? 'user',
+    is_active: profileData.is_active ?? true,
+    created_at: profileData.created_at,
+    updated_at: profileData.updated_at,
+    twitch_username: profileData.twitch_username ?? null,
+    twitch_id: null,
+    twitch_avatar_url: null,
+    creator_profile: creatorProfile ?? null,
+  } as Profile;
 }
 
 /**
@@ -121,7 +147,7 @@ export async function requireAuth() {
 
 export async function requireAdmin(): Promise<Profile> {
   const profile = await getCurrentProfile();
-  if (!profile) redirect('/login');
+  if (!profile) redirect('/inicio');
   if (profile.role !== 'admin') {
     throw new Error('Acceso denegado. Se requiere rol de administrador.');
   }

@@ -164,11 +164,14 @@ export async function resetPasswordForEmail(_prev: unknown, formData: FormData):
     return { success: false, fieldErrors: { email: 'Introduce tu correo electrónico.' } };
   }
 
-  const appUrl = getAppUrl();
+  const host = (await headers()).get('host') ?? new URL(getAppUrl()).host;
+  const protocol = process.env.NODE_ENV === 'development' ? 'http' : 'https';
+  const origin = `${protocol}://${host}`;
+  const redirectTo = `${origin}/auth/confirm?next=/update-password`;
 
   const supabase = await createServerClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${appUrl}/update-password`,
+    redirectTo,
   });
 
   if (error) {
@@ -215,6 +218,8 @@ export async function updatePassword(_prev: unknown, formData: FormData): Promis
       fieldErrors: normalized.field ? { [normalized.field]: normalized.message } : undefined,
     };
   }
+
+  await supabase.auth.signOut();
 
   return { success: true, message: 'Tu contraseña fue actualizada correctamente.' };
 }

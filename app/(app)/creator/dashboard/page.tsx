@@ -11,7 +11,7 @@ import type { AttentionItem, MetricDef, ActionType } from '@/lib/dashboard-confi
 
 export default async function CreatorDashboardPage() {
   const profile = await getCurrentProfile();
-  if (!profile) redirect('/login');
+  if (!profile) redirect('/inicio');
 
   const creatorProfile = profile.creator_profile;
   const isApproved = profile.role === 'creator' && creatorProfile?.status === 'approved';

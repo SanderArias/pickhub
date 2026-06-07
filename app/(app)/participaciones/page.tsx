@@ -5,7 +5,7 @@ import { ParticipacionesClient } from './ParticipacionesClient';
 
 export default async function ParticipacionesPage() {
   const profile = await getCurrentProfile();
-  if (!profile) redirect('/login');
+  if (!profile) redirect('/inicio');
 
   const participations = await getUserParticipations('all');
 

@@ -13,7 +13,7 @@ export default async function SettingsPage({
   if (!user) redirect('/login');
 
   const profile = await getCurrentProfile(user);
-  if (!profile) redirect('/login');
+  if (!profile) redirect('/inicio');
 
   const { hasLinkedTwitch, twitchUsername, twitchAvatarUrl } = await checkTwitchLinked(user, profile);
   const subStatus = await getSubVerificationStatus();
