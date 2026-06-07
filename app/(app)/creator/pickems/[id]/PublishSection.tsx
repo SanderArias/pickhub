@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { publishPickem } from '@/app/actions/creator';
+import { publishPickem } from '@/activities/pickem/actions';
 
 function CheckItem({
   ok,

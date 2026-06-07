@@ -15,10 +15,9 @@ interface ReceiptModalProps {
   onClose: () => void;
   eventTitle: string;
   eventSlug: string;
-  eventLogoUrl: string | null;
-  creatorLabel: string;
+  subtitle?: string;
+  eventLogoUrl?: string | null;
   participantName: string;
-  submittedAt: string | null;
   rankedPlayers: RankedPlayer[];
 }
 
@@ -27,21 +26,31 @@ export function ReceiptModal({
   onClose,
   eventTitle,
   eventSlug,
+  subtitle,
   eventLogoUrl,
-  creatorLabel,
   participantName,
-  submittedAt,
   rankedPlayers,
 }: ReceiptModalProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [downloading, setDownloading] = useState(false);
   const [copying, setCopying] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'unsupported'>('idle');
+  const [scale, setScale] = useState(1);
 
   useEffect(() => {
     if (!isOpen) {
       setCopyStatus('idle');
+      return;
     }
+    function calcScale() {
+      const maxW = window.innerWidth * 0.88;
+      const maxH = window.innerHeight * 0.7;
+      const s = Math.min(maxW / CARD_W, maxH / CARD_H, 1);
+      setScale(s);
+    }
+    calcScale();
+    window.addEventListener('resize', calcScale);
+    return () => window.removeEventListener('resize', calcScale);
   }, [isOpen]);
 
   const handleDownload = useCallback(async () => {
@@ -100,18 +109,12 @@ export function ReceiptModal({
 
   if (!isOpen) return null;
 
-  const scaleRatio = Math.min(
-    0.75 * window.innerHeight / CARD_H,
-    0.9 * window.innerWidth / CARD_W,
-    1,
-  );
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="flex w-full max-w-3xl flex-col gap-4">
+      <div className="flex w-full max-w-5xl flex-col gap-5">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -130,19 +133,20 @@ export function ReceiptModal({
         </div>
 
         {/* Card preview */}
-        <div className="flex justify-center overflow-auto rounded-xl bg-black/40 p-4">
+        <div className="flex justify-center overflow-auto rounded-xl bg-black/40 py-6">
           <div
             style={{
-              width: CARD_W * scaleRatio,
-              height: CARD_H * scaleRatio,
+              width: CARD_W * scale,
+              height: CARD_H * scale,
               overflow: 'hidden',
-              borderRadius: 12,
+              borderRadius: 18,
               flexShrink: 0,
+              boxShadow: '0 8px 60px rgba(0,0,0,0.6)',
             }}
           >
             <div
               style={{
-                transform: `scale(${scaleRatio})`,
+                transform: `scale(${scale})`,
                 transformOrigin: 'top left',
                 width: CARD_W,
                 height: CARD_H,
@@ -151,10 +155,9 @@ export function ReceiptModal({
               <ShareablePredictionCard
                 ref={cardRef}
                 eventTitle={eventTitle}
+                subtitle={subtitle}
                 eventLogoUrl={eventLogoUrl}
-                creatorLabel={creatorLabel}
                 participantName={participantName}
-                submittedAt={submittedAt}
                 rankedPlayers={rankedPlayers}
               />
             </div>

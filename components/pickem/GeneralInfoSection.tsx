@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useEffect, useActionState, useTransition } from 'react';
-import { updatePickemGeneralInfo, uploadEventLogo, removeEventLogo } from '@/app/actions/creator';
+import { updatePickemGeneralInfo, uploadEventLogo, removeEventLogo } from '@/activities/pickem/actions';
 import { PredictionCloseScheduler } from '@/components/ui/PredictionCloseScheduler';
 import { splitDatetimeForTimezone, detectTimezone } from '@/lib/timezones';
 
@@ -9,10 +9,12 @@ export function GeneralInfoSection({
   eventId,
   event,
   isDraft,
+  canManage = true,
 }: {
   eventId: string;
   event: { title: string; description: string | null; ends_at: string | null; logo_url: string | null; predictions_close_timezone: string | null };
   isDraft: boolean;
+  canManage?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -70,7 +72,7 @@ export function GeneralInfoSection({
             </span>
           </p>
         </div>
-        {isDraft && !editing && (
+        {isDraft && canManage && !editing && (
           <div className="mt-1">
             <button
               onClick={() => setEditing(true)}

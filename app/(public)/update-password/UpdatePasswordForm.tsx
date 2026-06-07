@@ -3,6 +3,17 @@
 import { useActionState } from 'react';
 import { updatePassword } from '@/app/actions/auth';
 import { PasswordField } from '@/components/auth/PasswordField';
+import type { AuthActionResult } from '@/app/actions/auth';
+
+function getFieldError(state: AuthActionResult, field: string): string | undefined {
+  if (!state || state.success) return undefined;
+  return state.fieldErrors?.[field as keyof typeof state.fieldErrors];
+}
+
+function getGeneralError(state: AuthActionResult): string | undefined {
+  if (!state || state.success) return undefined;
+  return state.message;
+}
 
 export function UpdatePasswordForm() {
   const [state, action, pending] = useActionState(updatePassword, null);
@@ -15,12 +26,15 @@ export function UpdatePasswordForm() {
             <path d="M20 6L9 17l-5-5" />
           </svg>
         </div>
-        <p className="text-sm text-text-muted">{state.success}</p>
+        <p className="text-base font-semibold text-white">Contraseña actualizada</p>
+        <p className="mt-1 text-sm text-text-muted">
+          Ya puedes iniciar sesión con tu nueva contraseña.
+        </p>
         <a
           href="/login"
-          className="mt-4 inline-block text-sm font-medium text-purple-primary hover:text-purple-hover transition-colors"
+          className="mt-4 inline-block rounded-lg bg-purple-primary px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-purple-600"
         >
-          Volver a iniciar sesión
+          Ir a iniciar sesión
         </a>
       </div>
     );
@@ -33,8 +47,8 @@ export function UpdatePasswordForm() {
         name="password"
         label="Nueva contraseña"
         autoComplete="new-password"
-        placeholder="Mínimo 6 caracteres"
-        error={state?.error && state.error.includes('contraseña') ? state.error : null}
+        placeholder="Mínimo 8 caracteres"
+        error={getFieldError(state, 'password')}
       />
 
       <div>
@@ -48,12 +62,20 @@ export function UpdatePasswordForm() {
           required
           autoComplete="new-password"
           placeholder="Repite tu contraseña"
+          aria-invalid={getFieldError(state, 'confirmPassword') ? true : undefined}
+          aria-describedby={getFieldError(state, 'confirmPassword') ? 'confirmPassword-error' : undefined}
+          onInput={(e) => { e.currentTarget.setAttribute('data-autofilled', 'true'); }}
           className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none focus:ring-1 focus:ring-purple-primary/30 transition-colors"
         />
+        {getFieldError(state, 'confirmPassword') && (
+          <p id="confirmPassword-error" className="mt-1 text-xs text-danger" role="alert">
+            {getFieldError(state, 'confirmPassword')}
+          </p>
+        )}
       </div>
 
-      {state?.error && (
-        <p className="text-sm text-danger" role="alert">{state.error}</p>
+      {getGeneralError(state) && (
+        <p className="text-sm text-danger" role="alert">{getGeneralError(state)}</p>
       )}
 
       <button

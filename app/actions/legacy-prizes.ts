@@ -1,6 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import { pickemRoutes } from '@/activities/pickem/routes';
 import { backfillLegacyPrizeAwards } from './legacy-migration';
 
 export type LegacyPrizeBackfillState = {
@@ -22,7 +23,7 @@ export async function runLegacyPrizeBackfillAction(
       };
     }
 
-    revalidatePath(`/creator/pickems/${eventId}`);
+    revalidatePath(pickemRoutes.api.revalidate(eventId));
 
     return {
       success: true,

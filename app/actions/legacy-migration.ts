@@ -3,10 +3,11 @@
 import { createServerClient } from '@/services/supabase';
 import { requireCreator } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { pickemRoutes } from '@/activities/pickem/routes';
 import { isLegacyPrize, normalizeLegacyPrize } from '@/lib/legacy-prizes';
 import { assignPrizes } from '@/lib/prize-assignment';
 import type { PrizeEligibilityType, PrizeStackingPolicy } from '@/lib/prize-types';
-import { assignEventPrizes } from './results-data';
+import { assignEventPrizes } from '@/activities/pickem/actions/results-data';
 
 export type BackfillResult =
   | { success: true; assignedCount: number; dryRun: boolean }
@@ -153,7 +154,7 @@ export async function backfillLegacyPrizeAwards(
     };
   }
 
-  revalidatePath(`/creator/pickems/${eventId}`);
+  revalidatePath(pickemRoutes.api.revalidate(eventId));
 
   return { success: true, assignedCount: result.assignedCount, dryRun: false };
 }

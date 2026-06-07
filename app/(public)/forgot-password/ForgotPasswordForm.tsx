@@ -2,6 +2,17 @@
 
 import { useActionState } from 'react';
 import { resetPasswordForEmail } from '@/app/actions/auth';
+import type { AuthActionResult } from '@/app/actions/auth';
+
+function getFieldError(state: AuthActionResult, field: string): string | undefined {
+  if (!state || state.success) return undefined;
+  return state.fieldErrors?.[field as keyof typeof state.fieldErrors];
+}
+
+function getGeneralError(state: AuthActionResult): string | undefined {
+  if (!state || state.success) return undefined;
+  return state.message;
+}
 
 export function ForgotPasswordForm() {
   const [state, action, pending] = useActionState(resetPasswordForEmail, null);
@@ -14,7 +25,7 @@ export function ForgotPasswordForm() {
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
           </svg>
         </div>
-        <p className="text-sm text-text-muted">{state.success}</p>
+        <p className="text-sm text-text-muted">{state.message}</p>
       </div>
     );
   }
@@ -32,12 +43,20 @@ export function ForgotPasswordForm() {
           required
           autoComplete="email"
           placeholder="tu@email.com"
+          aria-invalid={getFieldError(state, 'email') ? true : undefined}
+          aria-describedby={getFieldError(state, 'email') ? 'email-error' : undefined}
+          onInput={(e) => { e.currentTarget.setAttribute('data-autofilled', 'true'); }}
           className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none focus:ring-1 focus:ring-purple-primary/30 transition-colors"
         />
+        {getFieldError(state, 'email') && (
+          <p id="email-error" className="mt-1 text-xs text-danger" role="alert">
+            {getFieldError(state, 'email')}
+          </p>
+        )}
       </div>
 
-      {state?.error && (
-        <p className="text-sm text-danger" role="alert">{state.error}</p>
+      {getGeneralError(state) && (
+        <p className="text-sm text-danger" role="alert">{getGeneralError(state)}</p>
       )}
 
       <button
@@ -51,7 +70,7 @@ export function ForgotPasswordForm() {
             <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />
           </svg>
         )}
-        {pending ? 'Enviando…' : 'Enviar enlace'}
+        {pending ? 'Enviando enlace…' : 'Enviar enlace de recuperación'}
       </button>
     </form>
   );

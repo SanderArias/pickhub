@@ -1,13 +1,14 @@
 import { notFound } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
 import { getPublicPickem, getParticipantOfficialResults } from '@/app/actions/participant';
+import { getActivityCapabilities } from '@/activities/registry.server';
 import type { Prize } from '@/app/actions/participant';
 import { getLeaderboard, getMyScore } from '@/app/actions/leaderboard';
 import { getTiebreakerDraws } from '@/app/actions/tiebreaker';
 import { PublicPickemView } from '@/components/pickem/PublicPickemView';
 import { createServerClient } from '@/services/supabase';
 import { getTwitchAccountInfo } from '@/lib/getTwitchAccountInfo';
-import type { OfficialResultEntry } from '@/app/actions/results-data';
+import type { OfficialResultEntry } from '@/activities/pickem/actions/results-data';
 
 export default async function PickemPublicPage({
   params,
@@ -17,6 +18,7 @@ export default async function PickemPublicPage({
   const { slug } = await params;
   const user = await getUser();
   const result = await getPublicPickem(slug);
+  const caps = getActivityCapabilities('pickem');
 
   if (!result.event) {
     notFound();
@@ -33,12 +35,19 @@ export default async function PickemPublicPage({
 
   if (user) {
     const supabase = await createServerClient();
-    const { data: profile } = await supabase
+    const { data: profile } = await (supabase as any)
       .from('profiles')
       .select('display_name, twitch_username, twitch_id, twitch_avatar_url')
       .eq('id', user.id)
       .maybeSingle();
-    participantName = profile?.display_name ?? user.email ?? undefined;
+    const meta = user.user_metadata as Record<string, unknown> | undefined;
+    participantName =
+      profile?.display_name?.trim() ||
+      profile?.twitch_username?.trim() ||
+      (typeof meta?.full_name === 'string' ? meta.full_name.trim() : undefined) ||
+      (typeof meta?.preferred_username === 'string' ? meta.preferred_username.trim() : undefined) ||
+      (typeof meta?.user_name === 'string' ? meta.user_name.trim() : undefined) ||
+      undefined;
     const twitchInfo = getTwitchAccountInfo(profile, user);
     participantTwitchStatus = twitchInfo.isConnected ? 'connected' : 'not_connected';
 
@@ -109,7 +118,7 @@ export default async function PickemPublicPage({
         .eq('is_correct', true);
 
       const officialPositions = new Map<string, number>(
-        (correctResults ?? []).map((r) => [r.option_id, r.position]),
+        (correctResults ?? []).filter((r): r is typeof r & { position: number } => r.position !== null).map((r) => [r.option_id, r.position]),
       );
       const officialOptionIds = new Set(officialPositions.keys());
 
@@ -154,6 +163,7 @@ export default async function PickemPublicPage({
         myScore={myScore}
         isAuthenticated={!!user}
         isClosed={isClosed}
+        canParticipate={caps.participate}
         participantName={participantName}
         participantTwitchStatus={participantTwitchStatus}
         leaderboard={leaderboard}

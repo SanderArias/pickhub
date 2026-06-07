@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useActionState, useCallback } from 'react';
-import { createPredictionQuestion, updatePredictionQuestion, deletePredictionQuestion } from '@/app/actions/creator';
+import { createPredictionQuestion, updatePredictionQuestion, deletePredictionQuestion } from '@/activities/pickem/actions/predictions';
 
 const MAX_PREDICTIONS = 5;
 

@@ -10,10 +10,10 @@ export default async function TemplatesPage() {
   await requireAdmin();
 
   const supabase = await createServerClient();
-  const { data: templates } = await supabase
+  const { data: templates } = await (supabase as any)
     .from('tournament_templates')
     .select('*')
-    .order('created_at', { ascending: false });
+    .order('created_at', { ascending: false }) as { data: any[] | null };
 
   return (
     <div className="flex flex-col gap-8">

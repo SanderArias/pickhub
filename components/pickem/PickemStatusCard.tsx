@@ -3,7 +3,7 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { closePredictions } from '@/app/actions/creator';
+import { closePredictions } from '@/activities/pickem/actions';
 import { ConfirmActionModal } from './ConfirmActionModal';
 import { EVENT_STATUS_CONFIG } from '@/lib/status-config';
 
@@ -14,6 +14,8 @@ interface PickemStatusCardProps {
   closeDate?: string | null;
   pendingTiebreakerCount?: number;
   compact?: boolean;
+  hasPrizes?: boolean;
+  canManage?: boolean;
 }
 
 type VisualState = 'open' | 'predictions_closed' | 'tiebreakers_pending' | 'completed';
@@ -61,6 +63,8 @@ export function PickemStatusCard({
   closeDate,
   pendingTiebreakerCount = 0,
   compact = false,
+  hasPrizes = false,
+  canManage = true,
 }: PickemStatusCardProps) {
   const router = useRouter();
   const [closing, setClosing] = useState(false);
@@ -105,7 +109,7 @@ export function PickemStatusCard({
               {visualState === 'tiebreakers_pending'
                 ? nonCompletedConfig?.description
                 : isCompleted
-                  ? config.description
+                  ? (hasPrizes ? config.description : 'La clasificación final ya está disponible.')
                   : nonCompletedConfig?.description ?? config.description}
             </p>
 
@@ -142,7 +146,7 @@ export function PickemStatusCard({
               </div>
 
               <div className="shrink-0">
-                {visualState === 'open' && (
+                {visualState === 'open' && canManage && (
                   <button
                     type="button"
                     onClick={() => setShowCloseModal(true)}
@@ -152,7 +156,7 @@ export function PickemStatusCard({
                     {closing ? 'Cerrando...' : 'Cerrar predicciones'}
                   </button>
                 )}
-                {visualState === 'predictions_closed' && (
+                {visualState === 'predictions_closed' && canManage && (
                   <Link
                     href={`/creator/pickems/${eventId}/results`}
                     className="inline-flex w-full sm:w-auto items-center justify-center rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"

@@ -4,6 +4,7 @@ import { createServerClient } from '@/services/supabase';
 import { requireCreator } from '@/lib/auth';
 import { getProfileAvatarUrl } from '@/lib/getProfileAvatarUrl';
 import type { LegacyMigrationStatus } from '@/lib/legacy-prizes';
+import { requirePickemCapability } from '@/activities/pickem/lib/capability-guards.server';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -192,6 +193,7 @@ async function getRawLeaderboard(eventId: string) {
 /* ------------------------------------------------------------------ */
 
 export async function getCompletedSummary(eventId: string): Promise<CompletedSummary> {
+  requirePickemCapability('readHistoricalData');
   await requireCreator();
   const supabase = await createServerClient();
 
@@ -232,16 +234,16 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
   const podiumProfileIds = leaderboard.slice(0, 3).map((e) => e.profile_id);
   const { data: podiumProfiles } = await supabase
     .from('profiles')
-    .select('id, avatar_url, twitch_avatar_url')
+    .select('id, avatar_url')
     .in('id', podiumProfileIds);
 
   const podiumAvatarMap = new Map(
-    (podiumProfiles ?? []).map((p) => [p.id, getProfileAvatarUrl(p)]),
+    (podiumProfiles ?? []).map((p) => [p.id, getProfileAvatarUrl(p as any)]),
   );
 
   // Sync Twitch avatars for profiles missing them (idempotent RPC)
   const podiumMissingAvatar = (podiumProfiles ?? []).filter(
-    (p) => !p.twitch_avatar_url && !p.avatar_url,
+    (p) => !(p as any).twitch_avatar_url && !p.avatar_url,
   );
   if (podiumMissingAvatar.length > 0) {
     for (const p of podiumMissingAvatar) {
@@ -252,10 +254,10 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     }
     const { data: updatedPodium } = await supabase
       .from('profiles')
-      .select('id, avatar_url, twitch_avatar_url')
+      .select('id, avatar_url')
       .in('id', podiumMissingAvatar.map((p) => p.id));
     for (const p of updatedPodium ?? []) {
-      const fresh = getProfileAvatarUrl(p);
+      const fresh = getProfileAvatarUrl(p as any);
       if (fresh) {
         podiumAvatarMap.set(p.id, fresh);
       }
@@ -314,7 +316,7 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
   // Prize awards
   const { data: prizes } = await supabase
     .from('event_prizes')
-    .select('*')
+    .select('id, label, amount, currency, prize_category, quantity, eligibility_type, eligible_rank_start, sort_order')
     .eq('event_id', eventId)
     .order('sort_order', { ascending: true });
 
@@ -503,6 +505,7 @@ export async function getFinalRanking(
   pageSize: number = 50,
   search?: string,
 ): Promise<PaginatedRanking> {
+  requirePickemCapability('readHistoricalData');
   await requireCreator();
   const supabase = await createServerClient();
 
@@ -555,12 +558,12 @@ export async function getFinalRanking(
   const profileIds = leaderboard.map((e) => e.profile_id);
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, avatar_url, twitch_avatar_url')
+    .select('id, avatar_url')
     .in('id', profileIds);
-  const avatarMap = new Map((profiles ?? []).map((p) => [p.id, getProfileAvatarUrl(p)]));
+  const avatarMap = new Map((profiles ?? []).map((p) => [p.id, getProfileAvatarUrl(p as any)]));
 
   // Sync Twitch avatars for profiles missing them (idempotent RPC)
-  const missingAvatar = (profiles ?? []).filter((p) => !p.twitch_avatar_url && !p.avatar_url);
+  const missingAvatar = (profiles ?? []).filter((p) => !(p as any).twitch_avatar_url && !p.avatar_url);
   if (missingAvatar.length > 0) {
     for (const p of missingAvatar) {
       const { error: rpcErr } = await supabase.rpc('sync_twitch_from_auth', { profile_id: p.id });
@@ -570,10 +573,10 @@ export async function getFinalRanking(
     }
     const { data: updatedProfiles } = await supabase
       .from('profiles')
-      .select('id, avatar_url, twitch_avatar_url')
+      .select('id, avatar_url')
       .in('id', missingAvatar.map((p) => p.id));
     for (const p of updatedProfiles ?? []) {
-      const fresh = getProfileAvatarUrl(p);
+      const fresh = getProfileAvatarUrl(p as any);
       if (fresh) avatarMap.set(p.id, fresh);
     }
   }
@@ -616,6 +619,7 @@ export async function getFinalRanking(
 /* ------------------------------------------------------------------ */
 
 export async function getOfficialResults(eventId: string): Promise<OfficialResultEntry[]> {
+  requirePickemCapability('readHistoricalData');
   await requireCreator();
   const supabase = await createServerClient();
 
@@ -650,6 +654,8 @@ export async function getMyResult(
   total_questions: number;
   prizes: Array<{ label: string; amount: number | null; currency: string | null; prize_category: string | null }>;
 } | null> {
+  requirePickemCapability('readHistoricalData');
+
   const supabase = await createServerClient();
 
   const leaderboard = await getRawLeaderboard(eventId);
@@ -701,7 +707,7 @@ export async function diagnosePrizeAssignment(eventId: string) {
 
   const { data: prizes } = await supabase
     .from('event_prizes')
-    .select('*')
+    .select('id, label, amount, currency, prize_category, eligibility_type, eligible_rank_start, quantity, sort_order')
     .eq('event_id', eventId)
     .order('sort_order', { ascending: true });
 

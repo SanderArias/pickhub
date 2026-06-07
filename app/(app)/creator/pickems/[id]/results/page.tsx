@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
-import { getCreatorPickemById } from '@/app/actions/creator';
+import { getCreatorPickemById } from '@/activities/pickem/actions';
 import { getEventResults } from '@/app/actions/scoring';
 import { PageHeader } from '@/components/ui';
 import { ResultsSection } from '@/components/pickem/ResultsSection';
@@ -60,10 +60,10 @@ export default async function PickemResultsPage({
 
       <ResultsSection
         eventId={id}
-        predictions={event.predictions}
+        predictions={event.predictions as any}
         existingResults={existingResults}
         status={event.status}
-        players={event.players}
+        players={event.players as any}
         onPublished={`/creator/pickems/${id}`}
       />
     </div>

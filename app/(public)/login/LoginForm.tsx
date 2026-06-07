@@ -3,6 +3,18 @@
 import { useState, useActionState } from 'react';
 import { signInWithEmail, signUpWithEmail } from '@/app/actions/auth';
 import { PasswordField } from '@/components/auth/PasswordField';
+import { TwitchLoginButton } from '@/components/auth/TwitchLoginButton';
+import type { AuthActionResult } from '@/app/actions/auth';
+
+function getFieldError(state: AuthActionResult, field: string): string | undefined {
+  if (!state || state.success) return undefined;
+  return state.fieldErrors?.[field as keyof typeof state.fieldErrors];
+}
+
+function getGeneralError(state: AuthActionResult): string | undefined {
+  if (!state || state.success) return undefined;
+  return state.message;
+}
 
 export function AuthForm({ isConfirmed, next }: { isConfirmed?: boolean; next?: string }) {
   const [tab, setTab] = useState<'login' | 'signup'>('login');
@@ -14,11 +26,10 @@ export function AuthForm({ isConfirmed, next }: { isConfirmed?: boolean; next?: 
   const formAction = isLogin ? loginAction : signupAction;
   const pending = isLogin ? loginPending : signupPending;
 
-  const showSuccess = !isLogin && !!signupState?.success;
+  const showSuccess = !isLogin && signupState?.success === true;
 
   return (
     <div>
-      {/* Tabs */}
       <div className="mb-6 flex rounded-lg border border-border bg-bg/50 p-0.5" role="tablist">
         <button
           type="button"
@@ -48,14 +59,12 @@ export function AuthForm({ isConfirmed, next }: { isConfirmed?: boolean; next?: 
         </button>
       </div>
 
-      {/* Email confirmed banner */}
       {isConfirmed && (
         <div className="mb-4 rounded-lg border border-success-border bg-success/5 px-4 py-3 text-center" role="alert">
           <p className="text-sm text-success">Tu correo fue confirmado. Ya puedes iniciar sesión.</p>
         </div>
       )}
 
-      {/* Signup success */}
       {showSuccess ? (
         <div className="rounded-xl border border-success-border bg-success/5 p-8 text-center">
           <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-success/10">
@@ -65,7 +74,7 @@ export function AuthForm({ isConfirmed, next }: { isConfirmed?: boolean; next?: 
           </div>
           <p className="text-base font-semibold text-white">Revisa tu correo</p>
           <p className="mt-1 text-sm text-text-muted">
-            Te enviamos un enlace para confirmar tu cuenta.
+            {signupState?.message || 'Te enviamos un enlace para confirmar tu cuenta.'}
           </p>
           <a
             href="/login"
@@ -77,6 +86,7 @@ export function AuthForm({ isConfirmed, next }: { isConfirmed?: boolean; next?: 
       ) : (
         <form action={formAction} className="flex flex-col gap-4" noValidate>
           {next && <input type="hidden" name="next" value={next} />}
+
           {tab === 'signup' && (
             <div>
               <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-text-secondary">
@@ -89,6 +99,8 @@ export function AuthForm({ isConfirmed, next }: { isConfirmed?: boolean; next?: 
                 required
                 autoComplete="username"
                 placeholder="tunombre"
+                aria-invalid={getFieldError(state, 'general') ? true : undefined}
+                onInput={(e) => { e.currentTarget.setAttribute('data-autofilled', 'true'); }}
                 className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none focus:ring-1 focus:ring-purple-primary/30 transition-colors"
               />
             </div>
@@ -105,8 +117,30 @@ export function AuthForm({ isConfirmed, next }: { isConfirmed?: boolean; next?: 
               required
               autoComplete="email"
               placeholder="tu@email.com"
+              aria-invalid={getFieldError(state, 'email') ? true : undefined}
+              aria-describedby={getFieldError(state, 'email') ? 'email-error' : undefined}
+              onInput={(e) => { e.currentTarget.setAttribute('data-autofilled', 'true'); }}
               className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none focus:ring-1 focus:ring-purple-primary/30 transition-colors"
             />
+            {getFieldError(state, 'email') && (
+              <div id="email-error" className="mt-1">
+                <p className="text-xs text-danger" role="alert">
+                  {getFieldError(state, 'email')}
+                </p>
+                {getFieldError(state, 'email')?.includes('Ya existe') && (
+                  <div className="mt-2 flex gap-3">
+                    <a
+                      href={`/login${next ? `?next=${encodeURIComponent(next)}` : ''}`}
+                      className="text-xs font-medium text-purple-primary hover:text-purple-hover transition-colors"
+                    >
+                      Iniciar sesión
+                    </a>
+                    <span className="text-xs text-text-muted">|</span>
+                    <TwitchLoginButton next={next} variant="link" />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
@@ -129,6 +163,7 @@ export function AuthForm({ isConfirmed, next }: { isConfirmed?: boolean; next?: 
               label=""
               autoComplete={isLogin ? 'current-password' : 'new-password'}
               placeholder={isLogin ? 'Tu contraseña' : 'Mínimo 8 caracteres'}
+              error={getFieldError(state, 'password')}
             />
           </div>
 
@@ -144,13 +179,21 @@ export function AuthForm({ isConfirmed, next }: { isConfirmed?: boolean; next?: 
                 required
                 autoComplete="new-password"
                 placeholder="Repite tu contraseña"
+                aria-invalid={getFieldError(state, 'confirmPassword') ? true : undefined}
+                aria-describedby={getFieldError(state, 'confirmPassword') ? 'confirmPassword-error' : undefined}
+                onInput={(e) => { e.currentTarget.setAttribute('data-autofilled', 'true'); }}
                 className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none focus:ring-1 focus:ring-purple-primary/30 transition-colors"
               />
+              {getFieldError(state, 'confirmPassword') && (
+                <p id="confirmPassword-error" className="mt-1 text-xs text-danger" role="alert">
+                  {getFieldError(state, 'confirmPassword')}
+                </p>
+              )}
             </div>
           )}
 
-          {state?.error && (
-            <p className="text-sm text-danger" role="alert">{state.error}</p>
+          {getGeneralError(state) && (
+            <p className="text-sm text-danger" role="alert">{getGeneralError(state)}</p>
           )}
 
           <button

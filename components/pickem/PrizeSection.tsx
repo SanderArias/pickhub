@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useMemo, type ReactNode } from 'react';
-import { updateEventPrizes } from '@/app/actions/creator';
+import { updateEventPrizes } from '@/activities/pickem/actions';
 import {
   type Prize,
   type PrizeStackingPolicy,

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCurrentProfile } from '@/lib/auth';
 import { createServerClient } from '@/services/supabase';
+import { isActivityCapabilityEnabled } from '@/activities/registry.server';
 import { DashboardMetricCard } from '@/components/creator/DashboardMetricCard';
 import { PendingActionsSection } from '@/components/creator/PendingActionsSection';
 import { RecentActivitySection } from '@/components/creator/RecentActivitySection';
@@ -256,12 +257,14 @@ export default async function CreatorDashboardPage() {
             Panel de control de tus Pick&rsquo;ems.
           </p>
         </div>
-        <Link
-          href="/creator/pickems/new"
-          className="self-start rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
-        >
-          + Nuevo Pick&rsquo;em
-        </Link>
+        {isActivityCapabilityEnabled('pickem', 'create') && (
+          <Link
+            href="/creator/pickems/new"
+            className="self-start rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
+          >
+            + Nuevo Pick&rsquo;em
+          </Link>
+        )}
       </div>
 
       {/* Metrics */}

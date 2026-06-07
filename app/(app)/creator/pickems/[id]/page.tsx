@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
-import { getCreatorPickemById } from '@/app/actions/creator';
+import { getCreatorPickemById } from '@/activities/pickem/actions';
 import { getCreatorTwitchVerificationStatus } from '@/app/actions/twitch-status';
+import { getActivityCapabilities } from '@/activities/registry.server';
 import { getTiebreakerDraws, getTieGroups } from '@/app/actions/tiebreaker';
 import { getPredictionConfigurationSummary, getPrizeConfigurationSummary } from '@/lib/summary';
 import {
@@ -12,8 +13,7 @@ import { PlayersSection } from '@/components/players/PlayersSection';
 import { PredictionsSection } from '@/components/predictions/PredictionsSection';
 import { GeneralInfoSection } from '@/components/pickem/GeneralInfoSection';
 import { PrizeSection } from '@/components/pickem/PrizeSection';
-import { PickemStatusCard } from '@/components/pickem/PickemStatusCard';
-import { CompletedResultsClient } from '@/components/completed/CompletedResultsClient';
+import { CreatorPickemClientSection } from '@/components/pickem/CreatorPickemClientSection';
 import { PublishSection } from './PublishSection';
 import { SharePickemSection } from './SharePickemSection';
 
@@ -28,6 +28,8 @@ export default async function PickemDashboardPage({
   const event = await getCreatorPickemById(id);
 
   if (!event) notFound();
+
+  const caps = getActivityCapabilities('pickem');
 
   const isDraft = event.status === 'draft';
   const isOpen = event.status === 'open';
@@ -80,15 +82,19 @@ export default async function PickemDashboardPage({
         backLabel="Mis Pick'ems"
       />
 
-      {/* Status card for non-draft states */}
+      {/* Status card + completed results (shared pendingTiebreakerCount state) */}
       {!isDraft && (
-        <PickemStatusCard
+        <CreatorPickemClientSection
           eventId={id}
-          status={event.status}
+          status={event.status as 'open' | 'predictions_closed' | 'completed'}
           submissionCount={event.submissionCount}
-          closeDate={event.ends_at}
-          pendingTiebreakerCount={pendingTiebreakerCount}
-          compact={isCompleted && !hasPendingTiebreakers}
+          endsAt={event.ends_at}
+          initialPendingTiebreakerCount={pendingTiebreakerCount}
+          initialTab={initialTab}
+          tieGroups={tieGroups}
+          drawsMap={drawsMap}
+          hasPrizes={hasPrizes}
+          canManage={caps.manageExisting}
         />
       )}
 
@@ -121,13 +127,13 @@ export default async function PickemDashboardPage({
               title="Premios"
               state={hasPrizes ? 'configured' : 'optional'}
               description="Incentivos para los ganadores."
-              current={hasPrizes ? getPrizeConfigurationSummary(event.prizes).primary : 'Sin premios configurados'}
+              current={hasPrizes ? getPrizeConfigurationSummary(event.prizes as any).primary : 'Sin premios configurados'}
               href="#premios"
             />
           </div>
 
           <SectionCard id="informacion-general" title="Información general" subtitle="Detalles básicos del Pick'em">
-            <GeneralInfoSection eventId={id} event={event} isDraft={isDraft} />
+            <GeneralInfoSection eventId={id} event={event} isDraft={isDraft} canManage={caps.manageExisting} />
           </SectionCard>
 
           <div id="pool-de-jugadores">
@@ -136,7 +142,7 @@ export default async function PickemDashboardPage({
               players={event.players}
               activePlayerCount={activePlayerCount}
               hasMinActivePlayers={hasMinActivePlayers}
-              readOnly={false}
+              readOnly={!caps.manageExisting}
             />
           </div>
 
@@ -147,7 +153,7 @@ export default async function PickemDashboardPage({
             action={<span className="text-xs text-text-muted">{activePredictionCount} activa{activePredictionCount !== 1 ? 's' : ''}</span>}
             accent={hasMinPredictions && allPredictionsHaveOptions ? 'success' : 'error'}
           >
-            <PredictionsSection eventId={id} predictions={event.predictions} readOnly={false} />
+            <PredictionsSection eventId={id} predictions={event.predictions} readOnly={!caps.manageExisting} />
           </SectionCard>
 
           <SectionCard
@@ -159,17 +165,17 @@ export default async function PickemDashboardPage({
           >
             <PrizeSection
               eventId={id}
-              initialPrizes={event.prizes}
-              initialStackingPolicy={event.prize_stacking_policy ?? 'single_prize_per_participant'}
+              initialPrizes={event.prizes as any}
+              initialStackingPolicy={(event.prize_stacking_policy ?? 'single_prize_per_participant') as 'single_prize_per_participant' | 'allow_multiple_prizes'}
               twitchStatus={twitchStatus}
-              readOnly={false}
+              readOnly={!caps.manageExisting}
             />
           </SectionCard>
 
           <SectionCard title="Publicación">
             <PublishSection
               eventId={id}
-              status={event.status}
+          status={event.status as 'open' | 'predictions_closed' | 'completed'}
               canPublish={canPublish}
               hasMinActivePlayers={hasMinActivePlayers}
               activePlayerCount={activePlayerCount}
@@ -186,17 +192,6 @@ export default async function PickemDashboardPage({
       {/* ===== OPEN: Share section ===== */}
       {isOpen && (
         <SharePickemSection slug={event.slug} />
-      )}
-
-      {/* ===== COMPLETED: Tabs always visible ===== */}
-      {isCompleted && (
-        <CompletedResultsClient
-          eventId={id}
-          initialTab={initialTab}
-          tieGroups={tieGroups}
-          drawsMap={drawsMap}
-          hasPrizes={hasPrizes}
-        />
       )}
     </div>
   );

@@ -7,7 +7,7 @@ import { useUser } from '@/hooks/useUser';
 
 const STORAGE_KEY = 'pickhub_creator_welcome_seen';
 
-export function CreatorWelcomeModal() {
+export function CreatorWelcomeModal({ canCreatePickem = true }: { canCreatePickem?: boolean }) {
   const { user } = useUser();
   const [open, setOpen] = useState(false);
 
@@ -43,20 +43,22 @@ export function CreatorWelcomeModal() {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
       <div className="w-full max-w-sm rounded-lg border border-border bg-surface p-6">
         <h2 className="text-lg font-bold text-text-primary">
-          Bienvenido al modo creador de PickHub
+          Bienvenido al espacio de creadores
         </h2>
         <p className="mt-2 text-sm text-text-secondary">
-          Ya puedes crear Pick’ems, configurar predicciones y compartir dinámicas con tu comunidad.
+          Ya puedes crear actividades interactivas para tu comunidad. Empieza con tu primer Pick&rsquo;em.
         </p>
 
         <div className="mt-6 flex flex-col gap-2">
-          <Link
-            href="/creator/pickems/new"
-            onClick={handleClose}
-            className="rounded-lg border border-purple-primary px-4 py-2 text-center text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
-          >
-            Empezar creando un Pick’em
-          </Link>
+          {canCreatePickem && (
+            <Link
+              href="/creator/pickems/new"
+              onClick={handleClose}
+              className="rounded-lg border border-purple-primary px-4 py-2 text-center text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+            >
+              Crear un Pick&rsquo;em
+            </Link>
+          )}
           <Link
             href="/creator"
             onClick={handleClose}

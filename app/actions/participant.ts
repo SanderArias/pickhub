@@ -2,7 +2,15 @@
 
 import { createServerClient } from '@/services/supabase';
 import { getUser } from './auth';
+import { pickemRoutes } from '@/activities/pickem/routes';
 import { revalidatePath } from 'next/cache';
+import { checkPickemCapability, requirePickemCapability } from '@/activities/pickem/lib/capability-guards.server';
+import {
+  PUBLIC_EVENT_COLUMNS,
+  EVENT_PRIZE_COLUMNS,
+  PREDICTION_QUESTION_COLUMNS,
+  PREDICTION_OPTION_COLUMNS,
+} from '@/activities/pickem/data/selects';
 
 export interface PublicEventData {
   id: string;
@@ -87,12 +95,14 @@ export interface PublicPickemResult {
 }
 
 export async function getPublicPickem(slug: string): Promise<PublicPickemResult> {
+  requirePickemCapability('readHistoricalData');
+
   const supabase = await createServerClient();
   const user = await getUser();
 
   const { data: event } = await supabase
     .from('events')
-    .select('*')
+    .select(PUBLIC_EVENT_COLUMNS)
     .eq('slug', slug)
     .in('status', ['open', 'predictions_closed', 'completed', 'archived'])
     .order('created_at', { ascending: false })
@@ -117,7 +127,7 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
   // RLS on event_prizes now allows reading prizes for visible events.
   const { data: prizesData } = await supabase
     .from('event_prizes')
-    .select('*')
+    .select(EVENT_PRIZE_COLUMNS)
     .eq('event_id', event.id)
     .order('sort_order', { ascending: true });
   prizes = (prizesData ?? []) as Prize[];
@@ -126,7 +136,7 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
     const [cpRes, playersRes, questionsRes] = await Promise.all([
       supabase.from('creator_profiles').select('id, profile_id, handle').eq('id', event.creator_id).maybeSingle(),
       supabase.from('event_players').select('id, name, is_active, country_code').eq('event_id', event.id).order('sort_order', { ascending: true }),
-      supabase.from('prediction_questions').select('*').eq('event_id', event.id).eq('is_active', true).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+      supabase.from('prediction_questions').select(PREDICTION_QUESTION_COLUMNS).eq('event_id', event.id).eq('is_active', true).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
     ]);
 
     players = (playersRes.data ?? []) as EventPlayer[];
@@ -145,13 +155,13 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
       };
     }
 
-    const questions = (questionsRes.data ?? []) as PredictionQuestion[];
+    const questions = (questionsRes.data ?? []) as unknown as PredictionQuestion[];
 
     if (questions.length > 0) {
       const qIds = questions.map((q) => q.id);
       const { data: options } = await supabase
         .from('prediction_options')
-        .select('*')
+        .select(PREDICTION_OPTION_COLUMNS)
         .in('question_id', qIds)
         .order('sort_order', { ascending: true });
 
@@ -205,6 +215,9 @@ export async function submitPredictions(
   const user = await getUser();
   if (!user) return { error: 'Debes iniciar sesión para participar.', success: false, submissionId: null };
 
+  const partErr = checkPickemCapability('participate');
+  if (partErr) return { error: partErr, success: false, submissionId: null };
+
   const supabase = await createServerClient();
 
   const { data: event } = await supabase
@@ -257,8 +270,8 @@ export async function submitPredictions(
         return { error: `Selecciona solo una opción por predicción.`, success: false, submissionId: null };
       }
 
-      if (q.question_type === 'multiple' && clean.length > q.max_selections) {
-        return { error: `Máximo ${q.max_selections} selecciones por predicción.`, success: false, submissionId: null };
+      if (q.question_type === 'multiple' && clean.length > (q.max_selections ?? 1)) {
+        return { error: `Máximo ${q.max_selections ?? 1} selecciones por predicción.`, success: false, submissionId: null };
       }
     }
   }
@@ -306,7 +319,7 @@ export async function submitPredictions(
           .eq('id', user.id)
           .maybeSingle();
 
-        const participantTwitchId = participantProfile?.data?.twitch_id;
+        const participantTwitchId = (participantProfile?.data as any)?.twitch_id;
 
         if (participantTwitchId) {
           const { decrypt } = await import('@/lib/twitch-crypto');
@@ -428,7 +441,7 @@ export async function submitPredictions(
     return { error: `Error al guardar respuestas: ${ansErr?.message}`, success: false, submissionId: null };
   }
 
-  revalidatePath(`/pickems/${eventId}`);
+  revalidatePath(pickemRoutes.public.detail(eventId));
   return { error: null, success: true, submissionId: submission.id };
 }
 
@@ -447,6 +460,8 @@ export interface Participation {
 }
 
 export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 'all'): Promise<Participation[]> {
+  requirePickemCapability('readHistoricalData');
+
   const user = await getUser();
   if (!user) return [];
 
@@ -584,13 +599,15 @@ export async function getSubmissionReceipt(
   prizes: Prize[];
   error: string | null;
 }> {
+  requirePickemCapability('readHistoricalData');
+
   const supabase = await createServerClient();
   const user = await getUser();
   if (!user) return { event: null, submission: null, predictions: [], players: [], prizes: [], error: 'No autenticado.' };
 
   const { data: event } = await supabase
     .from('events')
-    .select('*')
+    .select(PUBLIC_EVENT_COLUMNS)
     .eq('slug', eventSlug)
     .in('status', ['open', 'predictions_closed', 'completed', 'archived'])
     .maybeSingle();
@@ -601,8 +618,8 @@ export async function getSubmissionReceipt(
   const [cpRes, playersRes, questionsRes, prizesRes] = await Promise.all([
     supabase.from('creator_profiles').select('id, profile_id, handle').eq('id', event.creator_id).maybeSingle(),
     supabase.from('event_players').select('id, name, is_active, country_code').eq('event_id', event.id).order('sort_order', { ascending: true }),
-    supabase.from('prediction_questions').select('*').eq('event_id', event.id).eq('is_active', true).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
-    supabase.from('event_prizes').select('*').eq('event_id', event.id).order('sort_order', { ascending: true }),
+    supabase.from('prediction_questions').select(PREDICTION_QUESTION_COLUMNS).eq('event_id', event.id).eq('is_active', true).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
+    supabase.from('event_prizes').select(EVENT_PRIZE_COLUMNS).eq('event_id', event.id).order('sort_order', { ascending: true }),
   ]);
 
   const players = (playersRes.data ?? []) as EventPlayer[];
@@ -622,14 +639,14 @@ export async function getSubmissionReceipt(
     };
   }
 
-  const questions = (questionsRes.data ?? []) as PredictionQuestion[];
+  const questions = (questionsRes.data ?? []) as unknown as PredictionQuestion[];
   let predictions: PredictionQuestion[] = [];
 
   if (questions.length > 0) {
     const qIds = questions.map((q) => q.id);
     const { data: options } = await supabase
       .from('prediction_options')
-      .select('*')
+      .select(PREDICTION_OPTION_COLUMNS)
       .in('question_id', qIds)
       .order('sort_order', { ascending: true });
 
@@ -709,6 +726,8 @@ export interface OfficialResultRow {
 }
 
 export async function getParticipantOfficialResults(eventId: string): Promise<OfficialResultRow[]> {
+  requirePickemCapability('readHistoricalData');
+
   const supabase = await createServerClient();
 
   const { data: players } = await supabase

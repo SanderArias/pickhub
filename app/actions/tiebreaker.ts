@@ -2,6 +2,7 @@
 
 import { createServerClient } from '@/services/supabase';
 import { getUser } from './auth';
+import { checkPickemCapability } from '@/activities/pickem/lib/capability-guards.server';
 
 export interface TieGroup {
   score: number;
@@ -92,6 +93,9 @@ export async function performTiebreaker(
   eventId: string,
   score: number,
 ): Promise<{ error: string | null; draws: TiebreakerDraw[] | null }> {
+  const mgmtErr = checkPickemCapability('manageExisting');
+  if (mgmtErr) return { error: mgmtErr, draws: null };
+
   const user = await getUser();
   if (!user) return { error: 'Debes iniciar sesión.', draws: null };
 

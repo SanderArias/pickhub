@@ -1,13 +1,12 @@
 'use client';
 
 import { useActionState, useState, useMemo, useEffect, useRef } from 'react';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { signInWithTwitch } from '@/app/actions/auth';
 import { submitPredictions } from '@/app/actions/participant';
 import type { PublicEventData, EventPlayer, PredictionQuestion, Prize, Submission } from '@/app/actions/participant';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
-import type { OfficialResultEntry } from '@/app/actions/results-data';
+import type { OfficialResultEntry } from '@/activities/pickem/actions/results-data';
 import { Top8DnD } from '@/components/pickem/Top8DnD';
 import { ReceiptModal } from '@/components/pickem/ReceiptModal';
 import { PickemParticipationHero } from '@/components/pickem/PickemParticipationHero';
@@ -49,6 +48,7 @@ export function PublicPickemView({
   isTiebreakerWinner,
   isTiebreakerLoser,
   hasResolvedTies,
+  canParticipate = true,
 }: {
   event: PublicEventData;
   players: EventPlayer[];
@@ -58,6 +58,7 @@ export function PublicPickemView({
   myScore: { total_score: number | null; correct_answers: number; total_questions: number } | null;
   isAuthenticated: boolean;
   isClosed: boolean;
+  canParticipate?: boolean;
   participantName?: string;
   participantTwitchStatus?: 'connected' | 'not_connected';
   leaderboard: LeaderboardEntry[];
@@ -97,6 +98,9 @@ export function PublicPickemView({
   }, []);
 
   const activePlayers = players.filter((p) => p.is_active);
+
+  const top8Q = predictions.find((q) => q.template_type === 'top8_ordered');
+  const subtitle = top8Q ? `TOP ${top8Q.options.length}` : undefined;
 
   const rankedPlayers = useMemo(() => {
     const top8Q = predictions.find((q) => q.template_type === 'top8_ordered');
@@ -225,16 +229,12 @@ export function PublicPickemView({
             </div>
 
             {event.logo_url && (
-              <div className="hidden sm:flex size-24 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-hover p-2">
-                <div className="relative size-full">
-                  <Image
-                    src={event.logo_url}
-                    alt={`Logo de ${event.title}`}
-                    fill
-                    className="object-contain"
-                    sizes="96px"
-                  />
-                </div>
+              <div className="hidden sm:flex h-[96px] w-[112px] shrink-0 items-center justify-center rounded-lg border border-border/60 bg-surface-hover/50 p-[10px]">
+                <img
+                  src={event.logo_url}
+                  alt={`Logo de ${event.title}`}
+                  className="h-full w-full object-contain"
+                />
               </div>
             )}
           </div>
@@ -322,10 +322,9 @@ export function PublicPickemView({
           onClose={() => setShowModal(false)}
           eventTitle={event.title}
           eventSlug={event.slug}
+          subtitle={subtitle}
           eventLogoUrl={event.logo_url}
-          creatorLabel={event.creator?.display_name ?? event.creator?.handle ?? '—'}
-          participantName={participantName ?? '—'}
-          submittedAt={mySubmission?.submitted_at ?? null}
+          participantName={participantName || 'Usuario de PickHub'}
           rankedPlayers={rankedPlayers}
         />
       </div>
@@ -374,8 +373,20 @@ export function PublicPickemView({
         </section>
       )}
 
+      {/* Participation disabled */}
+      {isAuthenticated && !mySubmission && !isClosed && !canParticipate && (
+        <section className="rounded-xl border border-warning-border bg-warning-bg p-6 text-center">
+          <p className="text-sm text-warning">
+            Las nuevas participaciones est&aacute;n temporalmente deshabilitadas.
+          </p>
+          <p className="mt-1 text-xs text-text-muted">
+            Tus participaciones anteriores y resultados siguen disponibles.
+          </p>
+        </section>
+      )}
+
       {/* Prediction intro + form */}
-      {isAuthenticated && !mySubmission && !isClosed && predictions.length > 0 && (
+      {isAuthenticated && !mySubmission && !isClosed && canParticipate && predictions.length > 0 && (
         <form action={formAction} className="flex flex-col gap-6">
           <PredictionIntro
             hasTop8={hasTop8}

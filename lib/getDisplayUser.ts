@@ -20,6 +20,8 @@ export function getDisplayUser(
   const meta = user?.user_metadata;
   if (meta) {
     const nameVal =
+      (meta.full_name as string | undefined) ??
+      (meta.username as string | undefined) ??
       (meta.user_name as string | undefined) ??
       (meta.preferred_username as string | undefined) ??
       (meta.name as string | undefined);

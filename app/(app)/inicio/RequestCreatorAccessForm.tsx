@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { requestCreatorAccess } from '@/app/actions/creator';
+import { requestCreatorAccess } from '@/app/actions/creator-profile';
 
 export function RequestCreatorAccessForm() {
   const [state, formAction, pending] = useActionState(requestCreatorAccess, { error: null as string | null });

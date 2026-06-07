@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { closePredictions } from '@/app/actions/creator';
+import { closePredictions } from '@/activities/pickem/actions';
 
 const STATUS_ORDER = ['open', 'predictions_closed', 'completed'] as const;
 const LABELS: Record<string, string> = {

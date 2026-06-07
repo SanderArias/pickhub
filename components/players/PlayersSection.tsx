@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { createEventPlayer, deleteEventPlayer, updateEventPlayerCountry } from '@/app/actions/creator';
+import { createEventPlayer, deleteEventPlayer, updateEventPlayerCountry } from '@/activities/pickem/actions/players';
 import { CountryCombobox } from '@/components/ui/CountryCombobox';
 import { Card } from '@/components/ui/Card';
 

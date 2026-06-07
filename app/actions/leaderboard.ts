@@ -2,6 +2,7 @@
 
 import { createServerClient } from '@/services/supabase';
 import { getUser } from './auth';
+import { requirePickemCapability } from '@/activities/pickem/lib/capability-guards.server';
 
 export interface LeaderboardEntry {
   rank: number;
@@ -13,6 +14,8 @@ export interface LeaderboardEntry {
 }
 
 export async function getLeaderboard(eventId: string): Promise<LeaderboardEntry[]> {
+  requirePickemCapability('readHistoricalData');
+
   const supabase = await createServerClient();
 
   const { data, error } = await supabase
@@ -75,6 +78,8 @@ export async function getMyScore(eventId: string): Promise<{
   correct_answers: number;
   total_questions: number;
 } | null> {
+  requirePickemCapability('readHistoricalData');
+
   const user = await getUser();
   if (!user) return null;
 

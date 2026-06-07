@@ -2,10 +2,11 @@
 
 import { createServerClient } from '@/services/supabase';
 import { requireCreator } from '@/lib/auth';
-import { revalidatePath } from 'next/cache';
+import { revalidatePickemPaths } from '@/activities/pickem/lib/revalidation.server';
 import { assignPrizes } from '@/lib/prize-assignment';
 import type { PrizeEligibilityType, PrizeStackingPolicy } from '@/lib/prize-types';
-import { assignEventPrizes } from './results-data';
+import { assignEventPrizes } from '@/activities/pickem/actions/results-data';
+import { checkPickemCapability, requirePickemCapability } from '@/activities/pickem/lib/capability-guards.server';
 
 async function detectTies(eventId: string): Promise<boolean> {
   const supabase = await createServerClient();
@@ -30,6 +31,8 @@ async function detectTies(eventId: string): Promise<boolean> {
 }
 
 export async function getEventResults(eventId: string) {
+  requirePickemCapability('readHistoricalData');
+
   const profile = await requireCreator();
   const creatorId = profile.creator_profile!.id;
 
@@ -57,6 +60,9 @@ export async function publishResultsAndCalculateScores(
   standardResults: Record<string, string[]>,
   rankingResults: Record<string, { position: number; option_id: string }[]>,
 ): Promise<{ error: string | null }> {
+  const mgmtErr = checkPickemCapability('manageExisting');
+  if (mgmtErr) return { error: mgmtErr };
+
   const profile = await requireCreator();
   const creatorId = profile.creator_profile!.id;
 
@@ -413,9 +419,7 @@ export async function publishResultsAndCalculateScores(
   }
 
   // 14. Revalidate paths
-  revalidatePath(`/creator/pickems/${eventId}`);
-  revalidatePath(`/creator/pickems/${eventId}/results`);
-  revalidatePath(`/pickems/[slug]`);
+  revalidatePickemPaths(eventId);
 
   return { error: null };
 }
@@ -427,6 +431,9 @@ export async function publishResultsAndCalculateScores(
 export async function finalizeEventAfterTiebreakers(
   eventId: string,
 ): Promise<{ error: string | null }> {
+  const mgmtErr = checkPickemCapability('manageExisting');
+  if (mgmtErr) return { error: mgmtErr };
+
   const profile = await requireCreator();
   const creatorId = profile.creator_profile!.id;
 
@@ -514,6 +521,8 @@ export async function finalizeEventAfterTiebreakers(
     .order('sort_order', { ascending: true });
 
   if (!newPrizes || newPrizes.length === 0) {
+    await supabase.from('events').update({ status: 'completed' }).eq('id', eventId);
+    revalidatePickemPaths(eventId);
     return { error: null };
   }
 
@@ -605,9 +614,7 @@ export async function finalizeEventAfterTiebreakers(
     console.error('[finalizeEventAfterTiebreakers] error marking event completed:', completeErr);
   }
 
-  revalidatePath(`/creator/pickems/${eventId}`);
-  revalidatePath(`/creator/pickems/${eventId}/results`);
-  revalidatePath(`/pickems/[slug]`);
+  revalidatePickemPaths(eventId);
 
   return { error: null };
 }

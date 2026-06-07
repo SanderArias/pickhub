@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useCallback, Suspense } from 'react';
+import { useState, useMemo, useCallback, Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -85,13 +85,30 @@ function SearchIcon() {
   );
 }
 
-function PickemsListInner({ pickems }: { pickems: PickemItem[] }) {
+function PickemsListInner({
+  pickems,
+  canCreate = true,
+  notice,
+}: {
+  pickems: PickemItem[];
+  canCreate?: boolean;
+  notice?: string | null;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const urlStatus = searchParams.get('status') as FilterKey | null;
   const urlQ = searchParams.get('q') ?? '';
+
+  useEffect(() => {
+    if (searchParams.has('notice')) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('notice');
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    }
+  }, []);
 
   const [search, setSearch] = useState(urlQ);
   const [activeFilter, setActiveFilter] = useState<FilterKey>(urlStatus ?? 'all');
@@ -157,15 +174,22 @@ function PickemsListInner({ pickems }: { pickems: PickemItem[] }) {
 
   return (
     <div className="flex flex-col gap-6">
+      {notice && (
+        <div className="rounded-lg border border-warning-border bg-warning-bg px-4 py-3 text-sm text-warning">
+          La creación de nuevos Pick&rsquo;ems está temporalmente deshabilitada.
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-2xl font-bold text-text-primary">Mis Pick&rsquo;ems</h1>
-        <Link
-          href="/creator/pickems/new"
-          className="shrink-0 rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
-        >
-          Nuevo Pick&rsquo;em
-        </Link>
+        {canCreate && (
+          <Link
+            href="/creator/pickems/new"
+            className="shrink-0 rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+          >
+            Nuevo Pick&rsquo;em
+          </Link>
+        )}
       </div>
 
       {/* Search */}
@@ -226,12 +250,14 @@ function PickemsListInner({ pickems }: { pickems: PickemItem[] }) {
           message="Aún no has creado ningún Pick'em."
           description="Crea el primero para comenzar a recibir participaciones."
           action={
-            <Link
-              href="/creator/pickems/new"
-              className="rounded-lg bg-purple-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-600"
-            >
-              Crear Pick&rsquo;em
-            </Link>
+            canCreate && (
+              <Link
+                href="/creator/pickems/new"
+                className="rounded-lg bg-purple-primary px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-600"
+              >
+                Crear Pick&rsquo;em
+              </Link>
+            )
           }
         />
       ) : filtered.length === 0 && search.trim() ? (
@@ -318,10 +344,18 @@ function PickemListItem({ pickem }: { pickem: PickemItem }) {
   );
 }
 
-export function PickemsList(props: { pickems: PickemItem[] }) {
+export function PickemsList({
+  pickems,
+  canCreate,
+  notice,
+}: {
+  pickems: PickemItem[];
+  canCreate?: boolean;
+  notice?: string | null;
+}) {
   return (
       <Suspense fallback={<div />}>
-      <PickemsListInner {...props} />
+      <PickemsListInner pickems={pickems} canCreate={canCreate} notice={notice} />
     </Suspense>
   );
 }

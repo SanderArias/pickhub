@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import type { PaginatedRanking } from '@/app/actions/results-data';
-import { getFinalRanking } from '@/app/actions/results-data';
+import type { PaginatedRanking } from '@/activities/pickem/actions/results-data';
+import { getFinalRanking } from '@/activities/pickem/actions/results-data';
 import { RankingTable, RankingTableSkeleton } from './RankingTable';
 
 export function FinalRankingTab({

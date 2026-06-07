@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
 import type { Prize } from '@/app/actions/participant';
-import type { RankingEntry } from '@/app/actions/results-data';
+import type { RankingEntry } from '@/activities/pickem/actions/results-data';
 import { RankingTable } from './RankingTable';
 
 interface ParticipantRankingTabProps {

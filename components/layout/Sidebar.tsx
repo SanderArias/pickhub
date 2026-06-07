@@ -7,7 +7,7 @@ import { useUser } from '@/hooks/useUser';
 import { createClient as createBrowserClient } from '@/services/supabase/client';
 import { signOut } from '@/app/actions/auth';
 import { Logo } from '@/components/ui/Logo';
-import { CreatorWelcomeModal } from '@/components/pickem/CreatorWelcomeModal';
+import { CreatorWelcomeModal } from '@/components/creator/CreatorWelcomeModal';
 
 function formatBadgeCount(count: number): string | undefined {
   if (count <= 0) return undefined;
@@ -478,7 +478,7 @@ function MobileHeader({ onMenuClick }: { onMenuClick: () => void }) {
 // Main Sidebar export
 // ============================================================================
 
-export function Sidebar({ children }: { children: React.ReactNode }) {
+export function Sidebar({ children, canCreatePickem }: { children: React.ReactNode; canCreatePickem?: boolean }) {
   const pathname = usePathname();
   const { user, loading } = useUser();
   const profile = useProfile(user);
@@ -523,7 +523,7 @@ export function Sidebar({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      <CreatorWelcomeModal />
+      <CreatorWelcomeModal canCreatePickem={canCreatePickem} />
     </>
   );
 }

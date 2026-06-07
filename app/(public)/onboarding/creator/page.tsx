@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
-import { getCreatorProfile, createCreatorProfile } from '@/app/actions/creator';
+import { getCreatorProfile, createCreatorProfile } from '@/app/actions/creator-profile';
 import { Logo } from '@/components/ui/Logo';
 
 export default async function OnboardingCreatorPage() {

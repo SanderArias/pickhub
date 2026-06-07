@@ -1,4 +1,4 @@
-import type { PrizeAwardEntry } from '@/app/actions/results-data';
+import type { PrizeAwardEntry } from '@/activities/pickem/actions/results-data';
 
 export function PrizeAwardCard({ award }: { award: PrizeAwardEntry }) {
   const isSubBonus = award.prize_category === 'subscriber_bonus';

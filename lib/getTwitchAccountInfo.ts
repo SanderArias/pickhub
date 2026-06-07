@@ -35,8 +35,8 @@ export function getTwitchAccountInfo(
   // Priority chain for username
   const username =
     profileUsername ??
-    extractString(identityData, 'preferred_username', 'user_name', 'name', 'full_name') ??
-    extractString(meta, 'preferred_username', 'user_name', 'name', 'full_name') ??
+    extractString(identityData, 'preferred_username', 'user_name', 'name', 'full_name', 'username') ??
+    extractString(meta, 'preferred_username', 'user_name', 'name', 'full_name', 'username') ??
     null;
 
   // Priority chain for avatar

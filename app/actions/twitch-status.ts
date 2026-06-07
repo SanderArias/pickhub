@@ -19,7 +19,8 @@ export async function getCreatorTwitchVerificationStatus(): Promise<{
 
   const supabase = await createServerClient();
 
-  const { data: connection, error } = await supabase
+  // TODO: creator_twitch_connections doesn't exist in remote schema — cast for now
+  const { data: connection, error } = await (supabase as any)
     .from('creator_twitch_connections')
     .select('*')
     .eq('profile_id', user.id)
@@ -44,7 +45,8 @@ export async function checkParticipantTwitchStatus(): Promise<'connected' | 'not
   if (!user) return 'not_connected';
 
   const supabase = await createServerClient();
-  const { data: profile } = await supabase
+  // TODO: profiles has no twitch_id/twitch_avatar_url in remote schema — cast for compatibility with getTwitchAccountInfo
+  const { data: profile } = await (supabase as any)
     .from('profiles')
     .select('twitch_username, twitch_id, twitch_avatar_url')
     .eq('id', user.id)

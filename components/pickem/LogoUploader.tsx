@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useCallback } from 'react';
-import { uploadEventLogo, removeEventLogo } from '@/app/actions/creator';
+import { uploadEventLogo, removeEventLogo } from '@/activities/pickem/actions';
 
 const ACCEPT = 'image/png,image/jpeg,image/webp,image/svg+xml';
 

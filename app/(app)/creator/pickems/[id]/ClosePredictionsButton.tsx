@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { closePredictions } from '@/app/actions/creator';
+import { closePredictions } from '@/activities/pickem/actions';
 
 export function ClosePredictionsButton({ eventId }: { eventId: string }) {
   const router = useRouter();

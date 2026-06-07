@@ -1,4 +1,3 @@
-import Image from 'next/image';
 import { EVENT_STATUS_CONFIG } from '@/lib/status-config';
 import type { PublicEventData } from '@/app/actions/participant';
 
@@ -24,7 +23,7 @@ export function PickemParticipationHero({
   const creatorInitial = (creator?.display_name ?? creator?.handle ?? '?')[0].toUpperCase();
 
   return (
-    <section className="flex gap-6">
+    <section className="flex flex-col sm:flex-row gap-4 sm:gap-6">
       {/* Left content */}
       <div className="flex flex-col gap-1.5 min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -77,16 +76,12 @@ export function PickemParticipationHero({
 
       {/* Event logo */}
       {hasLogo && (
-        <div className="hidden sm:flex size-24 shrink-0 items-center justify-center rounded-xl border border-border bg-surface-hover p-2">
-          <div className="relative size-full">
-            <Image
-              src={event.logo_url!}
-              alt={`Logo de ${event.title}`}
-              fill
-              className="object-contain"
-              sizes="96px"
-            />
-          </div>
+        <div className="flex h-[96px] w-[112px] shrink-0 items-center justify-center rounded-lg border border-border/60 bg-surface-hover/50 p-[10px]">
+          <img
+            src={event.logo_url!}
+            alt={`Logo de ${event.title}`}
+            className="h-full w-full object-contain"
+          />
         </div>
       )}
     </section>

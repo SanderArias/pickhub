@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useActionState, useCallback, useEffect, useRef, startTransition } from 'react';
-import { upsertEventPrize, deleteEventPrize } from '@/app/actions/creator';
+import { upsertEventPrize, deleteEventPrize } from '@/activities/pickem/actions/prizes';
 
 interface Prize {
   id: string;

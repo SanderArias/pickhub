@@ -1,6 +1,6 @@
 'use client';
 
-import type { PodiumEntry } from '@/app/actions/results-data';
+import type { PodiumEntry } from '@/activities/pickem/actions/results-data';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 
 function accent(index: number) {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { CompletedSummary } from '@/app/actions/results-data';
+import type { CompletedSummary } from '@/activities/pickem/actions/results-data';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 
 export function TiebreakerSummary({ summary }: { summary: CompletedSummary }) {

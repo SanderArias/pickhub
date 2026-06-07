@@ -1,12 +1,14 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import type { Database } from '@/types/database.types';
 
 const publicRoutes = [
   '/login',
   '/auth',
   '/forgot-password',
   '/update-password',
+  '/auth/confirm',
   '/',
 ];
 
@@ -25,7 +27,7 @@ export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const response = NextResponse.next();
 
-  const supabase = createServerClient(
+  const supabase = createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {

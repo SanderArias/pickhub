@@ -8,7 +8,7 @@ import { ParticipantRankingTab } from './ParticipantRankingTab';
 import { OfficialResultsTab } from './OfficialResultsTab';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
 import type { Prize } from '@/app/actions/participant';
-import type { OfficialResultEntry } from '@/app/actions/results-data';
+import type { OfficialResultEntry } from '@/activities/pickem/actions/results-data';
 
 const TABS = [
   { id: 'summary', label: 'Resumen' },

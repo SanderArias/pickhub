@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import type { CompletedSummary } from '@/app/actions/results-data';
-import { diagnosePrizeAssignment } from '@/app/actions/results-data';
+import type { CompletedSummary } from '@/activities/pickem/actions/results-data';
+import { diagnosePrizeAssignment } from '@/activities/pickem/actions/results-data';
 import type { TieGroup } from '@/app/actions/tiebreaker';
 import { Podium } from './Podium';
 import { PrizeAwardsSummary } from './PrizeAwardsSummary';

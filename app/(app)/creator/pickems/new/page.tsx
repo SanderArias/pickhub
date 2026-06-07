@@ -1,10 +1,16 @@
+import { redirect } from 'next/navigation';
 import { requireCreator } from '@/lib/auth';
-import { createPickem } from '@/app/actions/creator';
+import { isActivityCapabilityEnabled } from '@/activities/registry.server';
+import { createPickem } from '@/activities/pickem/actions';
 import { PageHeader, ActionButton } from '@/components/ui';
 import { ClosureSection } from './ClosureSection';
 
 export default async function NewPickemPage() {
   await requireCreator();
+
+  if (!isActivityCapabilityEnabled('pickem', 'create')) {
+    redirect('/creator/pickems?notice=creation_disabled');
+  }
 
   return (
     <div className="flex flex-col gap-8">

@@ -1,4 +1,4 @@
-import type { OfficialResultEntry } from '@/app/actions/results-data';
+import type { OfficialResultEntry } from '@/activities/pickem/actions/results-data';
 import { CountryDisplay } from '@/components/ui/CountryDisplay';
 
 const POSITION_BADGES = [

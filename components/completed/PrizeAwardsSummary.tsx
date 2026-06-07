@@ -1,4 +1,4 @@
-import type { PrizeAwardEntry } from '@/app/actions/results-data';
+import type { PrizeAwardEntry } from '@/activities/pickem/actions/results-data';
 
 function formatAmount(award: PrizeAwardEntry): string {
   if (award.prize_amount !== null) {

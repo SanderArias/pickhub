@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import type { CompletedSummary, OfficialResultEntry } from '@/app/actions/results-data';
+import type { CompletedSummary, OfficialResultEntry } from '@/activities/pickem/actions/results-data';
 import type { TieGroup } from '@/app/actions/tiebreaker';
-import { getCompletedSummary, getOfficialResults } from '@/app/actions/results-data';
+import { getCompletedSummary, getOfficialResults } from '@/activities/pickem/actions/results-data';
 import { getTieGroups, getTiebreakerDraws } from '@/app/actions/tiebreaker';
 import { CompletedResultsTabs } from './CompletedResultsTabs';
 import type { TabId } from './CompletedResultsTabs';
@@ -21,6 +21,7 @@ interface CompletedResultsClientProps {
   tieGroups: TieGroup[];
   drawsMap: Record<string, number>;
   hasPrizes?: boolean;
+  onTiebreakerStatusChange?: (pendingCount: number) => void;
 }
 
 export function CompletedResultsClient({
@@ -29,6 +30,7 @@ export function CompletedResultsClient({
   tieGroups: initialTieGroups,
   drawsMap: initialDrawsMap,
   hasPrizes: hasEventPrizes,
+  onTiebreakerStatusChange,
 }: CompletedResultsClientProps) {
   const [activeTab, setActiveTab] = useState<TabId>(
     isTabId(initialTab) ? initialTab : 'summary',
@@ -65,7 +67,11 @@ export function CompletedResultsClient({
     setTieGroups(tg);
     setDrawsMap(draws as Record<string, number>);
     loadedTabs.current.add('summary');
-  }, [eventId]);
+    const newPendingCount = tg.filter(
+      (g) => !g.participants.every((p) => p.profile_id in draws),
+    ).length;
+    onTiebreakerStatusChange?.(newPendingCount);
+  }, [eventId, onTiebreakerStatusChange]);
 
   const loadOfficialResults = useCallback(async () => {
     if (loadedTabs.current.has('official-results')) return;

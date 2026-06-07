@@ -36,9 +36,10 @@ export async function getCurrentProfile(
 
   const supabase = await createServerClient();
 
-  const { data: profile } = await supabase
+  // TODO: display_name, twitch_id, twitch_avatar_url don't exist in remote profiles — cast for compatibility
+  const { data: profile } = await (supabase as any)
     .from('profiles')
-    .select('*')
+    .select('id, display_name, avatar_url, role, is_active, created_at, updated_at, twitch_username, twitch_id, twitch_avatar_url')
     .eq('id', user.id)
     .maybeSingle();
 
@@ -46,7 +47,7 @@ export async function getCurrentProfile(
 
   const { data: creatorProfile } = await supabase
     .from('creator_profiles')
-    .select('*')
+    .select('id, profile_id, handle, bio, status, reason, created_at, updated_at')
     .eq('profile_id', user.id)
     .maybeSingle();
 
@@ -84,11 +85,11 @@ export async function checkTwitchLinked(
           updates.avatar_url = info.avatarUrl;
         }
         if (Object.keys(updates).length > 0) {
-          await supabase.from('profiles').update(updates).eq('id', user.id);
+          await (supabase as any).from('profiles').update(updates).eq('id', user.id);
         }
       }
 
-      const { data: refreshed } = await supabase
+      const { data: refreshed } = await (supabase as any)
         .from('profiles')
         .select('display_name, twitch_username, twitch_id, twitch_avatar_url')
         .eq('id', user.id)

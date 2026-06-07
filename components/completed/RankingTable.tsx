@@ -1,4 +1,4 @@
-import type { RankingEntry } from '@/app/actions/results-data';
+import type { RankingEntry } from '@/activities/pickem/actions/results-data';
 import { Badge } from './Badge';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 

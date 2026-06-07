@@ -338,7 +338,7 @@ export async function createTemplate(formData: FormData) {
   const name = parseFormText(formData, 'name');
   if (!name) throw new Error('El nombre es obligatorio.');
 
-  const supabase = await createServerClient();
+  const supabase = (await createServerClient()) as any;
   const { error } = await supabase.from('tournament_templates').insert({
     name,
     description: parseFormText(formData, 'description'),
@@ -359,7 +359,7 @@ export async function updateTemplate(templateId: string, formData: FormData) {
   const name = parseFormText(formData, 'name');
   if (!name) throw new Error('El nombre es obligatorio.');
 
-  const supabase = await createServerClient();
+  const supabase = (await createServerClient()) as any;
   const { error } = await supabase
     .from('tournament_templates')
     .update({
@@ -379,7 +379,7 @@ export async function updateTemplate(templateId: string, formData: FormData) {
 export async function deleteTemplate(templateId: string) {
   await requireAdmin();
 
-  const supabase = await createServerClient();
+  const supabase = (await createServerClient()) as any;
   const { error } = await supabase
     .from('tournament_templates')
     .delete()
@@ -393,7 +393,7 @@ export async function deleteTemplate(templateId: string) {
 export async function toggleTemplate(templateId: string, isActive: boolean) {
   await requireAdmin();
 
-  const supabase = await createServerClient();
+  const supabase = (await createServerClient()) as any;
   const { error } = await supabase
     .from('tournament_templates')
     .update({ is_active: !isActive })
