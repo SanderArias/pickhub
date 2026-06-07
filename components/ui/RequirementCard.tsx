@@ -41,19 +41,21 @@ export function RequirementCard({
     <Card
       variant={styles.variant}
       hover={!!href}
-      className={`flex flex-col justify-between ${href ? '' : ''}`}
+      className="flex h-full flex-col"
     >
-      <div>
-        <div className="flex items-center justify-between gap-3">
-          <h4 className="text-sm font-medium text-text-primary">{title}</h4>
-          <span className={`shrink-0 text-xs font-medium ${LABEL_COLORS[styles.variant]}`}>
-            {styles.label}
-          </span>
-        </div>
-        <p className="mt-1 text-xs text-text-secondary">{description}</p>
+      <div className="flex items-start justify-between gap-3">
+        <h4 className="min-h-[40px] text-sm font-medium leading-tight text-text-primary">
+          {title}
+        </h4>
+        <span className={`shrink-0 whitespace-nowrap text-xs font-medium ${LABEL_COLORS[styles.variant]}`}>
+          {styles.label}
+        </span>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-2">
-        <span className="text-xs text-text-muted line-clamp-2">{current}</span>
+      <p className="mt-1 min-h-[40px] text-xs leading-tight text-text-secondary line-clamp-2">
+        {description}
+      </p>
+      <div className="mt-auto flex items-center justify-between gap-2">
+        <span className="text-xs text-text-muted truncate">{current}</span>
         {href && (
           <svg
             width="16"
@@ -76,8 +78,8 @@ export function RequirementCard({
   );
 
   if (href) {
-    return <Link href={href} className="block">{content}</Link>;
+    return <Link href={href} className="block h-[136px]">{content}</Link>;
   }
 
-  return content;
+  return <div className="h-[136px]">{content}</div>;
 }
