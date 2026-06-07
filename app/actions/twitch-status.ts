@@ -5,7 +5,7 @@ import { getUser } from './auth';
 import {
   type TwitchVerificationStatus,
   type CreatorTwitchConnection,
-  getTwitchVerificationStatus,
+  isSubscriberVerificationActive,
 } from '@/lib/twitch';
 import { getTwitchAccountInfo } from '@/lib/getTwitchAccountInfo';
 
@@ -31,9 +31,11 @@ export async function getCreatorTwitchVerificationStatus(): Promise<{
   }
 
   return {
-    status: getTwitchVerificationStatus(
+    status: isSubscriberVerificationActive(
       connection as CreatorTwitchConnection | null,
-    ),
+    )
+      ? 'active'
+      : 'inactive',
   };
 }
 

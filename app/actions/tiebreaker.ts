@@ -166,6 +166,17 @@ export async function performTiebreaker(
 
   if (insErr) return { error: `Error al guardar sorteo: ${insErr.message}`, draws: null };
 
+  // After successful draw, check if all tiebreakers are resolved and auto-finalize
+  try {
+    const { finalizeEventAfterTiebreakers } = await import('./scoring');
+    const result = await finalizeEventAfterTiebreakers(eventId);
+    if (result.error) {
+      console.error('[performTiebreaker] auto-finalization warning:', result.error);
+    }
+  } catch (e) {
+    console.error('[performTiebreaker] auto-finalization error:', e);
+  }
+
   return {
     error: null,
     draws: rows.map((r) => ({ profile_id: r.profile_id, draw_order: r.draw_order })),

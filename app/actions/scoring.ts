@@ -349,7 +349,6 @@ export async function publishResultsAndCalculateScores(
         .from('event_prizes')
         .select('id, prize_category, eligibility_type, eligible_rank_start, quantity, sort_order')
         .eq('event_id', eventId)
-        .not('prize_category', 'is', null)
         .order('sort_order', { ascending: true });
 
       if (newPrizes && newPrizes.length > 0) {
@@ -357,18 +356,27 @@ export async function publishResultsAndCalculateScores(
         const leaderboardEntries = (lb ?? []) as Array<{ rank: number; profile_id: string; total_score: number }>;
 
         if (leaderboardEntries.length > 0) {
-          const { data: eventData } = await supabase
-            .from('events')
-            .select('prize_stacking_policy')
-            .eq('id', eventId)
-            .single();
+          // Fetch real subscriber status for all participants
+          const lbProfileIds = leaderboardEntries.map((e) => e.profile_id);
+          const { data: scoringParticipants } = await supabase
+            .from('event_participants')
+            .select('profile_id, subscriber_verification_status')
+            .eq('event_id', eventId)
+            .in('profile_id', lbProfileIds);
 
-          const participants = leaderboardEntries.map((e) => ({
-            profile_id: e.profile_id,
-            rank: e.rank,
-            is_verified_subscriber: false,
-            is_verified_non_subscriber: false,
-          }));
+          const scoringSubMap = new Map(
+            (scoringParticipants ?? []).map((p) => [p.profile_id, p.subscriber_verification_status]),
+          );
+
+          const participants = leaderboardEntries.map((e) => {
+            const subStatus = scoringSubMap.get(e.profile_id);
+            return {
+              profile_id: e.profile_id,
+              rank: e.rank,
+              is_verified_subscriber: subStatus === 'verified_sub',
+              is_verified_non_subscriber: subStatus === 'verified_non_sub',
+            };
+          });
 
           const prizeDefs = newPrizes.map((p) => ({
             id: p.id,
@@ -377,6 +385,12 @@ export async function publishResultsAndCalculateScores(
             eligible_rank_start: p.eligible_rank_start,
             winner_count: p.quantity,
           }));
+
+          const { data: eventData } = await supabase
+            .from('events')
+            .select('prize_stacking_policy')
+            .eq('id', eventId)
+            .single();
 
           const policy: PrizeStackingPolicy =
             (eventData?.prize_stacking_policy as PrizeStackingPolicy) ?? 'single_prize_per_participant';
@@ -427,7 +441,11 @@ export async function finalizeEventAfterTiebreakers(
     .single();
 
   if (!event) return { error: 'Evento no encontrado.' };
-  if (event.status !== 'completed') return { error: 'El evento debe estar completado para finalizar.' };
+
+  // Diagnostic log
+  if (process.env.NODE_ENV === 'development') {
+    console.info('[prizes/finalize]', { eventId, eventStatus: event.status });
+  }
 
   // Verify no pending tiebreakers remain
   const hasTies = await detectTies(eventId);
@@ -437,7 +455,6 @@ export async function finalizeEventAfterTiebreakers(
       .select('profile_id')
       .eq('event_id', eventId);
 
-    // Get all tied profile IDs
     const { data: submissions } = await supabase
       .from('submissions')
       .select('total_score, participant_id')
@@ -469,59 +486,123 @@ export async function finalizeEventAfterTiebreakers(
     }
   }
 
-  // Assign prizes
-  try {
-    const { data: newPrizes } = await supabase
-      .from('event_prizes')
-      .select('id, prize_category, eligibility_type, eligible_rank_start, quantity, sort_order')
-      .eq('event_id', eventId)
-      .not('prize_category', 'is', null)
-      .order('sort_order', { ascending: true });
+  // Fetch leaderboard
+  const { data: lb } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
+  const leaderboardEntries = (lb ?? []) as Array<{ rank: number; profile_id: string; total_score: number }>;
 
-    if (newPrizes && newPrizes.length > 0) {
-      const { data: lb } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
-      const leaderboardEntries = (lb ?? []) as Array<{ rank: number; profile_id: string; total_score: number }>;
+  if (leaderboardEntries.length === 0) {
+    return { error: 'No hay clasificación para asignar premios.' };
+  }
 
-      if (leaderboardEntries.length > 0) {
-        const { data: eventData } = await supabase
-          .from('events')
-          .select('prize_stacking_policy')
-          .eq('id', eventId)
-          .single();
+  // Fetch subscriber verification status for all participants
+  const lbProfileIds = leaderboardEntries.map((e) => e.profile_id);
+  const { data: eventParticipants } = await supabase
+    .from('event_participants')
+    .select('profile_id, subscriber_verification_status')
+    .eq('event_id', eventId)
+    .in('profile_id', lbProfileIds);
 
-        const participants = leaderboardEntries.map((e) => ({
-          profile_id: e.profile_id,
-          rank: e.rank,
-          is_verified_subscriber: false,
-          is_verified_non_subscriber: false,
-        }));
+  const subStatusMap = new Map(
+    (eventParticipants ?? []).map((p) => [p.profile_id, p.subscriber_verification_status]),
+  );
 
-        const prizeDefs = newPrizes.map((p) => ({
-          id: p.id,
-          sort_order: p.sort_order,
-          eligibility_type: p.eligibility_type as PrizeEligibilityType,
-          eligible_rank_start: p.eligible_rank_start,
-          winner_count: p.quantity,
-        }));
+  // Fetch prizes
+  const { data: newPrizes } = await supabase
+    .from('event_prizes')
+    .select('id, prize_category, eligibility_type, eligible_rank_start, quantity, sort_order')
+    .eq('event_id', eventId)
+    .order('sort_order', { ascending: true });
 
-        const policy: PrizeStackingPolicy =
-          (eventData?.prize_stacking_policy as PrizeStackingPolicy) ?? 'single_prize_per_participant';
+  if (!newPrizes || newPrizes.length === 0) {
+    return { error: null };
+  }
 
-        const result = assignPrizes(participants, prizeDefs, policy);
+  // Check if prizes are already assigned (idempotent)
+  const prizeIds = newPrizes.map((p) => p.id);
+  const { data: existingAwards } = await supabase
+    .from('prize_winners')
+    .select('event_prize_id')
+    .in('event_prize_id', prizeIds);
 
-        if (result.winners.length > 0) {
-          const rows = result.winners.map((w) => ({
-            event_prize_id: w.prize_id,
-            profile_id: w.profile_id,
-            rank_achieved: w.rank,
-          }));
-          await assignEventPrizes(eventId, rows);
-        }
-      }
+  if (existingAwards && existingAwards.length >= prizeIds.length) {
+    return { error: null };
+  }
+
+  // Build participants with real subscriber status
+  const participants = leaderboardEntries.map((e) => {
+    const subStatus = subStatusMap.get(e.profile_id);
+    return {
+      profile_id: e.profile_id,
+      rank: e.rank,
+      is_verified_subscriber: subStatus === 'verified_sub',
+      is_verified_non_subscriber: subStatus === 'verified_non_sub',
+    };
+  });
+
+  const { data: eventData } = await supabase
+    .from('events')
+    .select('prize_stacking_policy')
+    .eq('id', eventId)
+    .single();
+
+  const prizeDefs = newPrizes.map((p) => ({
+    id: p.id,
+    sort_order: p.sort_order,
+    eligibility_type: p.eligibility_type as PrizeEligibilityType,
+    eligible_rank_start: p.eligible_rank_start,
+    winner_count: p.quantity,
+  }));
+
+  const policy: PrizeStackingPolicy =
+    (eventData?.prize_stacking_policy as PrizeStackingPolicy) ?? 'single_prize_per_participant';
+
+  const result = assignPrizes(participants, prizeDefs, policy);
+
+  if (process.env.NODE_ENV === 'development') {
+    for (const w of result.winners) {
+      console.info('[prizes/assignment]', {
+        prizeId: w.prize_id,
+        profileId: w.profile_id,
+        rank: w.rank,
+        assignmentStatus: 'assigned',
+      });
     }
-  } catch (prizeErr) {
-    console.error('[finalizeEventAfterTiebreakers] prize assignment error:', prizeErr);
-    return { error: 'Error al asignar premios. Intenta de nuevo.' };
+    for (const warn of result.warnings) {
+      console.info('[prizes/assignment] warning:', warn);
+    }
+  }
+
+  if (result.winners.length > 0) {
+    const rows = result.winners.map((w) => ({
+      event_prize_id: w.prize_id,
+      profile_id: w.profile_id,
+      rank_achieved: w.rank,
+    }));
+
+    const { error: assignErr } = await supabase.from('prize_winners').upsert(rows, {
+      onConflict: 'event_prize_id,profile_id',
+    });
+
+    if (assignErr) {
+      console.error('[finalizeEventAfterTiebreakers] upsert error:', {
+        message: assignErr.message,
+        code: assignErr.code,
+        details: assignErr.details,
+        hint: assignErr.hint,
+        operation: 'prize_winners_upsert',
+      });
+      return { error: `Error al asignar premios: ${assignErr.message}` };
+    }
+  }
+
+  // Mark event as completed (safe to call even if already completed)
+  const { error: completeErr } = await supabase
+    .from('events')
+    .update({ status: 'completed' })
+    .eq('id', eventId);
+
+  if (completeErr) {
+    console.error('[finalizeEventAfterTiebreakers] error marking event completed:', completeErr);
   }
 
   revalidatePath(`/creator/pickems/${eventId}`);

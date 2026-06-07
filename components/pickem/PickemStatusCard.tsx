@@ -39,7 +39,7 @@ const VISUAL_CONFIG: Record<Exclude<VisualState, 'completed'>, {
   tiebreakers_pending: {
     dot: 'bg-yellow-400',
     title: 'Desempate pendiente',
-    description: 'La clasificaci\u00f3n est\u00e1 calculada, pero debes resolver un empate antes de publicar el resultado final.',
+    description: 'La clasificación está calculada. Resuelve los empates para asignar los premios.',
     nextStep: '',
   },
 };

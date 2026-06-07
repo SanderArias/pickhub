@@ -7,12 +7,6 @@ import { getFinalRanking } from '@/app/actions/results-data';
 import { Badge } from './Badge';
 import { UserAvatar } from '@/components/ui/UserAvatar';
 
-const FILTERS = [
-  { value: 'all', label: 'Todos' },
-  { value: 'prized', label: 'Con premio' },
-  { value: 'subscribers', label: 'Suscriptores' },
-] as const;
-
 export function FinalRankingTab({
   eventId,
   hasPendingTiebreakers,
@@ -31,26 +25,25 @@ export function FinalRankingTab({
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const currentPage = parseInt(searchParams.get('page') ?? '1', 10);
-  const currentFilter = (searchParams.get('filter') ?? 'all') as (typeof FILTERS)[number]['value'];
   const currentQuery = searchParams.get('q') ?? '';
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const result = await getFinalRanking(eventId, currentPage, 50, currentQuery, currentFilter);
+      const result = await getFinalRanking(eventId, currentPage, 50, currentQuery);
       if (!cancelled) {
         setData(result);
         setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [eventId, currentPage, currentFilter, currentQuery]);
+  }, [eventId, currentPage, currentQuery]);
 
   function updateUrl(params: Record<string, string | undefined>) {
     const sp = new URLSearchParams(searchParams.toString());
     for (const [key, val] of Object.entries(params)) {
-      if (val === undefined || val === '' || val === '1' || (key === 'filter' && val === 'all') || (key === 'q' && val === '')) {
+      if (val === undefined || val === '' || val === '1' || (key === 'q' && val === '')) {
         sp.delete(key);
       } else {
         sp.set(key, val);
@@ -64,10 +57,6 @@ export function FinalRankingTab({
     searchTimeout.current = setTimeout(() => {
       updateUrl({ q: val || undefined, page: '1' });
     }, 300);
-  }
-
-  function handleFilter(val: string) {
-    updateUrl({ filter: val === 'all' ? undefined : val, page: '1' });
   }
 
   function goToPage(p: number) {
@@ -117,31 +106,6 @@ export function FinalRankingTab({
           placeholder="Buscar participante..."
           className="w-full rounded-lg border border-border bg-surface py-2 pl-10 pr-4 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none focus:ring-1 focus:ring-purple-primary"
         />
-      </div>
-
-      {/* Filters */}
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {FILTERS.map((f) => {
-          const isDisabled = isProvisional && f.value === 'prized';
-          return (
-            <button
-              key={f.value}
-              type="button"
-              disabled={isDisabled}
-              title={isDisabled ? 'Disponible después de resolver el desempate.' : undefined}
-              onClick={() => handleFilter(f.value)}
-              className={`shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                currentFilter === f.value
-                  ? 'bg-purple-primary text-white'
-                  : isDisabled
-                    ? 'border border-border bg-surface text-text-muted opacity-40 cursor-not-allowed'
-                    : 'border border-border bg-surface text-text-secondary hover:border-border-hover'
-              }`}
-            >
-              {f.label}
-            </button>
-          );
-        })}
       </div>
 
       {/* Loading skeleton */}
@@ -212,8 +176,8 @@ export function FinalRankingTab({
       {!loading && data && data.entries.length === 0 && (
         <div className="rounded-lg border border-border bg-surface p-8 text-center">
           <p className="text-sm text-text-muted">
-            {currentQuery || currentFilter !== 'all'
-              ? 'No se encontraron participantes con los filtros actuales.'
+            {currentQuery
+              ? 'No se encontraron participantes con ese nombre.'
               : "Este Pick'em no recibió participaciones."}
           </p>
         </div>
@@ -254,7 +218,7 @@ function buildDisplayRows(entries: RankingEntry[], isProvisional: boolean, hasEv
   let lastScore: number | null = null;
 
   entries.forEach((entry) => {
-    const displayRank = getDisplayRank(entry, entries, tieScores);
+    const displayRank = isProvisional ? getDisplayRank(entry, entries, tieScores) : entry.rank;
     const isTied = tieScores.has(entry.total_score);
 
     if (isProvisional && isTied && entry.total_score !== lastScore) {
@@ -338,11 +302,16 @@ function RankingRow({
 
       {/* Participant */}
       <td className="py-2 px-2 align-middle">
-        <div className="flex min-w-0 items-center gap-3">
+        <div className="flex min-w-0 items-center gap-2">
           <UserAvatar name={entry.display_name} url={entry.avatar_url} />
           <span className="truncate text-sm font-medium text-text-primary">
             {entry.display_name ?? 'Participante'}
           </span>
+          {entry.is_verified_subscriber && (
+            <span className="shrink-0 rounded-md border border-purple-primary/30 bg-purple-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-primary leading-tight">
+              ★ Sub
+            </span>
+          )}
         </div>
       </td>
 
@@ -392,7 +361,7 @@ function buildMobileCards(entries: RankingEntry[], isProvisional: boolean, hasEv
   let lastScore: number | null = null;
 
   entries.forEach((entry) => {
-    const displayRank = getDisplayRank(entry, entries, tieScores);
+    const displayRank = isProvisional ? getDisplayRank(entry, entries, tieScores) : entry.rank;
     const isTied = tieScores.has(entry.total_score);
     const isTiedProvisional = isTied && isProvisional;
 
@@ -463,6 +432,11 @@ function MobileCard({
           <span className="truncate text-sm font-medium text-text-primary">
             {entry.display_name ?? 'Participante'}
           </span>
+          {entry.is_verified_subscriber && (
+            <span className="shrink-0 rounded-md border border-purple-primary/30 bg-purple-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-purple-primary leading-tight">
+              ★ Sub
+            </span>
+          )}
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {!isProvisional && <RankBadges entry={entry} />}

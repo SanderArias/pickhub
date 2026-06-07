@@ -2,6 +2,7 @@
 
 import { createServerClient } from '@/services/supabase';
 import { requireCreator } from '@/lib/auth';
+import { getProfileAvatarUrl } from '@/lib/getProfileAvatarUrl';
 import type { LegacyMigrationStatus } from '@/lib/legacy-prizes';
 
 /* ------------------------------------------------------------------ */
@@ -12,10 +13,18 @@ export interface PodiumEntry {
   rank: number;
   profile_id: string;
   display_name: string | null;
+  avatar_url: string | null;
   total_score: number;
   correct_answers: number;
   total_questions: number;
   tiebreaker_winner: boolean;
+  is_verified_subscriber: boolean;
+  awards: Array<{
+    prize_id: string;
+    category: string;
+    label: string;
+    value_label: string | null;
+  }>;
 }
 
 export interface PrizeAwardEntry {
@@ -65,6 +74,7 @@ export interface RankingEntry {
   total_questions: number;
   prizes: string[];
   is_tiebreaker_winner: boolean;
+  is_verified_subscriber: boolean;
 }
 
 export interface PaginatedRanking {
@@ -187,7 +197,7 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
 
   const { data: event } = await supabase
     .from('events')
-    .select('title, description, prize_stacking_policy')
+    .select('title, description, prize_stacking_policy, status')
     .eq('id', eventId)
     .single();
 
@@ -218,9 +228,81 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
 
   const drawMap = new Map((draws ?? []).map((d) => [d.profile_id, d.draw_order]));
 
+  // Fetch profile avatars and subscriber status for podium
+  const podiumProfileIds = leaderboard.slice(0, 3).map((e) => e.profile_id);
+  const { data: podiumProfiles } = await supabase
+    .from('profiles')
+    .select('id, avatar_url, twitch_avatar_url')
+    .in('id', podiumProfileIds);
+
+  const podiumAvatarMap = new Map(
+    (podiumProfiles ?? []).map((p) => [p.id, getProfileAvatarUrl(p)]),
+  );
+
+  // Sync Twitch avatars for profiles missing them (idempotent RPC)
+  const podiumMissingAvatar = (podiumProfiles ?? []).filter(
+    (p) => !p.twitch_avatar_url && !p.avatar_url,
+  );
+  if (podiumMissingAvatar.length > 0) {
+    for (const p of podiumMissingAvatar) {
+      const { error: rpcErr } = await supabase.rpc('sync_twitch_from_auth', { profile_id: p.id });
+      if (rpcErr) {
+        console.error('[podium/avatar/sync] RPC failed for', p.id, rpcErr);
+      }
+    }
+    const { data: updatedPodium } = await supabase
+      .from('profiles')
+      .select('id, avatar_url, twitch_avatar_url')
+      .in('id', podiumMissingAvatar.map((p) => p.id));
+    for (const p of updatedPodium ?? []) {
+      const fresh = getProfileAvatarUrl(p);
+      if (fresh) {
+        podiumAvatarMap.set(p.id, fresh);
+      }
+    }
+  }
+
+  const { data: podiumParticipants } = await supabase
+    .from('event_participants')
+    .select('profile_id, subscriber_verification_status')
+    .eq('event_id', eventId)
+    .in('profile_id', podiumProfileIds);
+  const podiumSubMap = new Map(
+    (podiumParticipants ?? []).map((p) => [p.profile_id, p.subscriber_verification_status]),
+  );
+
+  // Map awards to podium participants
+  const { data: podiumAwards } = await supabase
+    .from('prize_winners')
+    .select('event_prize_id, profile_id')
+    .in('profile_id', podiumProfileIds);
+
+  const { data: podiumPrizeDefs } = await supabase
+    .from('event_prizes')
+    .select('id, label, amount, currency, prize_category')
+    .eq('event_id', eventId);
+
+  const prizeById = new Map((podiumPrizeDefs ?? []).map((p) => [p.id, p]));
+  const awardsByProfile = new Map<string, PodiumEntry['awards']>();
+  for (const a of podiumAwards ?? []) {
+    const p = prizeById.get(a.event_prize_id);
+    if (!p) continue;
+    const list = awardsByProfile.get(a.profile_id) ?? [];
+    list.push({
+      prize_id: a.event_prize_id,
+      category: p.prize_category ?? 'general_ranking',
+      label: p.label,
+      value_label: p.amount !== null ? `${p.amount.toLocaleString('es-ES')} ${p.currency ?? 'USD'}` : null,
+    });
+    awardsByProfile.set(a.profile_id, list);
+  }
+
   const podium: PodiumEntry[] = leaderboard.slice(0, 3).map((e) => ({
     ...e,
+    avatar_url: podiumAvatarMap.get(e.profile_id) ?? null,
     tiebreaker_winner: drawMap.has(e.profile_id) && drawMap.get(e.profile_id) === 1,
+    is_verified_subscriber: podiumSubMap.get(e.profile_id) === 'verified_sub',
+    awards: awardsByProfile.get(e.profile_id) ?? [],
   }));
 
   const maxScore = leaderboard.length > 0 ? leaderboard[0].total_score : null;
@@ -240,6 +322,15 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     .from('prize_winners')
     .select('event_prize_id, profile_id, rank_achieved')
     .in('event_prize_id', (prizes ?? []).map((p) => p.id));
+
+  // [diag] prize state
+  console.log('[diag/prizes]', JSON.stringify({
+    eventStatus: event?.status,
+    prizeCount: (prizes ?? []).length,
+    prizes: (prizes ?? []).map(p => ({ id: p.id, label: p.label, category: p.prize_category, qty: p.quantity })),
+    awardRowCount: (awardRows ?? []).length,
+    awardRows: (awardRows ?? []).map(a => ({ prizeId: a.event_prize_id, profileId: a.profile_id, rank: a.rank_achieved })),
+  }));
 
   const awardByPrize = new Map<string, typeof awardRows>();
   for (const a of awardRows ?? []) {
@@ -411,7 +502,6 @@ export async function getFinalRanking(
   page: number = 1,
   pageSize: number = 50,
   search?: string,
-  filter?: 'all' | 'winners' | 'prized' | 'subscribers',
 ): Promise<PaginatedRanking> {
   await requireCreator();
   const supabase = await createServerClient();
@@ -467,27 +557,36 @@ export async function getFinalRanking(
     .from('profiles')
     .select('id, avatar_url, twitch_avatar_url')
     .in('id', profileIds);
-  const avatarMap = new Map((profiles ?? []).map((p) => [p.id, p.twitch_avatar_url ?? p.avatar_url]));
+  const avatarMap = new Map((profiles ?? []).map((p) => [p.id, getProfileAvatarUrl(p)]));
 
-  // Additional fallback: try to get Twitch avatar from auth.identities
-  try {
-    const { data: twitchIdentities } = await supabase
-      .from('identities')
-      .select('user_id, identity_data')
-      .eq('provider', 'twitch')
-      .in('user_id', profileIds);
-    if (twitchIdentities) {
-      for (const id of twitchIdentities) {
-        const idAvatar = id.identity_data?.avatar_url ?? id.identity_data?.picture ?? null;
-        const existing = avatarMap.get(id.user_id);
-        if (idAvatar && !existing) {
-          avatarMap.set(id.user_id, idAvatar);
-        }
+  // Sync Twitch avatars for profiles missing them (idempotent RPC)
+  const missingAvatar = (profiles ?? []).filter((p) => !p.twitch_avatar_url && !p.avatar_url);
+  if (missingAvatar.length > 0) {
+    for (const p of missingAvatar) {
+      const { error: rpcErr } = await supabase.rpc('sync_twitch_from_auth', { profile_id: p.id });
+      if (rpcErr) {
+        console.error('[ranking/avatar/sync] RPC failed for', p.id, rpcErr);
       }
     }
-  } catch {
-    // auth.identities may not be accessible via public API; silently fall back
+    const { data: updatedProfiles } = await supabase
+      .from('profiles')
+      .select('id, avatar_url, twitch_avatar_url')
+      .in('id', missingAvatar.map((p) => p.id));
+    for (const p of updatedProfiles ?? []) {
+      const fresh = getProfileAvatarUrl(p);
+      if (fresh) avatarMap.set(p.id, fresh);
+    }
   }
+
+  // Fetch subscriber verification status for ranking
+  const { data: rankingParticipants } = await supabase
+    .from('event_participants')
+    .select('profile_id, subscriber_verification_status')
+    .eq('event_id', eventId)
+    .in('profile_id', profileIds);
+  const rankingSubMap = new Map(
+    (rankingParticipants ?? []).map((p) => [p.profile_id, p.subscriber_verification_status]),
+  );
 
   // Build enriched entries
   let entries: RankingEntry[] = leaderboard.map((e) => ({
@@ -495,43 +594,13 @@ export async function getFinalRanking(
     avatar_url: avatarMap.get(e.profile_id) ?? null,
     prizes: prizesByProfile.get(e.profile_id) ?? [],
     is_tiebreaker_winner: drawWinnerSet.has(e.profile_id),
+    is_verified_subscriber: rankingSubMap.get(e.profile_id) === 'verified_sub',
   }));
-
-  // Diagnostic log for avatar/tiebreaker debugging
-  if (process.env.NODE_ENV === 'development') {
-    console.info('[ranking/avatar-debug]', {
-      participants: entries.map((p) => ({
-        profileId: p.profile_id,
-        displayName: p.display_name,
-        avatarUrl: p.avatar_url,
-        finalRank: p.rank,
-        wonTiebreaker: p.is_tiebreaker_winner,
-        prizeLabel: p.prizes.join(', '),
-      })),
-    });
-  }
 
   // Search
   if (search) {
     const q = search.toLowerCase();
     entries = entries.filter((e) => (e.display_name ?? '').toLowerCase().includes(q));
-  }
-
-  // Filter
-  if (filter === 'winners') {
-    entries = entries.filter((e) => e.prizes.length > 0);
-  } else if (filter === 'prized') {
-    entries = entries.filter((e) => e.prizes.length > 0);
-  } else if (filter === 'subscribers') {
-    const profileIds = entries.map((e) => e.profile_id);
-    const { data: parts } = await supabase
-      .from('event_participants')
-      .select('profile_id')
-      .eq('event_id', eventId)
-      .eq('is_subscriber', true)
-      .in('profile_id', profileIds);
-    const subSet = new Set((parts ?? []).map((p) => p.profile_id));
-    entries = entries.filter((e) => subSet.has(e.profile_id));
   }
 
   const totalCount = entries.length;
@@ -614,5 +683,93 @@ export async function getMyResult(
     correct_answers: myEntry.correct_answers,
     total_questions: myEntry.total_questions,
     prizes: myPrizes,
+  };
+}
+
+/* ------------------------------------------------------------------ */
+/*  diagnosePrizeAssignment — diagnostic tool (temporary)               */
+/* ------------------------------------------------------------------ */
+
+export async function diagnosePrizeAssignment(eventId: string) {
+  const supabase = await createServerClient();
+
+  const { data: event } = await supabase
+    .from('events')
+    .select('id, status, title')
+    .eq('id', eventId)
+    .single();
+
+  const { data: prizes } = await supabase
+    .from('event_prizes')
+    .select('*')
+    .eq('event_id', eventId)
+    .order('sort_order', { ascending: true });
+
+  const prizeIds = (prizes ?? []).map((p: { id: string }) => p.id);
+  const { data: winners } = await supabase
+    .from('prize_winners')
+    .select('event_prize_id, profile_id, rank_achieved')
+    .in('event_prize_id', prizeIds.length > 0 ? prizeIds : ['__none__']);
+
+  const { data: draws } = await supabase
+    .from('tiebreaker_draws')
+    .select('profile_id, draw_order')
+    .eq('event_id', eventId);
+
+  const { data: lbRaw } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
+  const leaderboard = (lbRaw ?? []) as Array<{ rank: number; profile_id: string; display_name?: string; total_score: number }>;
+
+  const { data: participants } = await supabase
+    .from('event_participants')
+    .select('profile_id, subscriber_verification_status')
+    .eq('event_id', eventId)
+    .in('profile_id', leaderboard.map((e: { profile_id: string }) => e.profile_id));
+
+  const { data: profiles } = await supabase
+    .from('profiles')
+    .select('id, display_name')
+    .in('id', [...new Set(leaderboard.map((e: { profile_id: string }) => e.profile_id))]);
+
+  const profileNameMap = new Map((profiles ?? []).map((p: { id: string; display_name: string | null }) => [p.id, p.display_name]));
+
+  const pendingTies = (() => {
+    const scoreGroups = new Map<number, string[]>();
+    for (const e of leaderboard) {
+      const g = scoreGroups.get(e.total_score) ?? [];
+      g.push(e.profile_id);
+      scoreGroups.set(e.total_score, g);
+    }
+    const tiedScores = [...scoreGroups.entries()].filter(([, pids]) => pids.length > 1);
+    return tiedScores.filter(([, pids]) => !pids.every((pid) => draws?.some((d) => d.profile_id === pid)));
+  })();
+
+  return {
+    eventStatus: event?.status ?? 'unknown',
+    prizes: (prizes ?? []).map((p: { id: string; label: string; prize_category: string | null; eligibility_type: string; eligible_rank_start: number; quantity: number; sort_order: number }) => ({
+      id: p.id,
+      label: p.label,
+      category: p.prize_category,
+      eligibility: p.eligibility_type,
+      rankStart: p.eligible_rank_start,
+      qty: p.quantity,
+      sortOrder: p.sort_order,
+    })),
+    winners: (winners ?? []).map((w: { event_prize_id: string; profile_id: string; rank_achieved: number | null }) => ({
+      prizeId: w.event_prize_id,
+      profileId: w.profile_id,
+      winnerName: profileNameMap.get(w.profile_id) ?? null,
+      rankAchieved: w.rank_achieved,
+    })),
+    leaderboard: leaderboard.map((e: { rank: number; profile_id: string; total_score: number }) => ({
+      rank: e.rank,
+      profileId: e.profile_id,
+      name: profileNameMap.get(e.profile_id) ?? null,
+      score: e.total_score,
+      subStatus: (participants ?? []).find((p: { profile_id: string }) => p.profile_id === e.profile_id)?.subscriber_verification_status ?? null,
+    })),
+    pendingTiebreakerCount: pendingTies.length,
+    drawCount: draws?.length ?? 0,
+    prizeCount: (prizes ?? []).length,
+    winnerCount: (winners ?? []).length,
   };
 }

@@ -1,4 +1,7 @@
+'use client';
+
 import type { PodiumEntry } from '@/app/actions/results-data';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 
 function accent(index: number) {
   if (index === 0) return 'border-amber-500/25';
@@ -26,32 +29,55 @@ export function Podium({ entries }: { entries: PodiumEntry[] }) {
         {entries.map((entry, i) => (
           <div
             key={entry.profile_id}
-            className={`flex items-center gap-3 rounded-lg border px-4 py-2.5 ${accent(i)}`}
+            className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${accent(i)}`}
           >
             <span
               className={`flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${positionDot(i)}`}
             >
               {positionLabel(i)}
             </span>
+
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-text-primary">
-                {entry.display_name ?? 'Participante'}
-              </p>
+              <div className="flex items-center gap-2">
+                <UserAvatar name={entry.display_name} url={entry.avatar_url} size={28} />
+                <span className="truncate text-sm font-medium text-text-primary">
+                  {entry.display_name ?? 'Participante'}
+                </span>
+                {entry.is_verified_subscriber && (
+                  <span className="shrink-0 rounded-md border border-purple-primary/30 bg-purple-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-purple-primary leading-tight">
+                    ★ Sub
+                  </span>
+                )}
+              </div>
+
               {entry.tiebreaker_winner && (
-                <p className="text-[11px] leading-tight text-green-400 mt-0.5">
-                  Ganador definido por desempate
+                <p className="mt-0.5 text-[11px] leading-tight text-green-400">
+                  Posición definida por desempate
                 </p>
               )}
+
+              {entry.awards.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {entry.awards.map((a) => (
+                    <span
+                      key={a.prize_id}
+                      className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium leading-tight ${
+                        a.category === 'subscriber_bonus'
+                          ? 'border-purple-primary/30 bg-purple-primary/10 text-purple-primary'
+                          : 'border-border bg-surface-hover text-text-secondary'
+                      }`}
+                    >
+                      {a.label}{a.value_label ? ` · ${a.value_label}` : ''}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+
+            <div className="flex shrink-0 items-center self-start">
               <span className="text-sm font-semibold text-text-primary">
                 {entry.total_score} pts
               </span>
-              {i === 0 && (
-                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-medium text-amber-400 border border-amber-500/30">
-                  Ganador del Pick&rsquo;em
-                </span>
-              )}
             </div>
           </div>
         ))}

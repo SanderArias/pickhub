@@ -2,16 +2,15 @@
 
 import { useState } from 'react';
 import type { CompletedSummary } from '@/app/actions/results-data';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 
 export function TiebreakerSummary({ summary }: { summary: CompletedSummary }) {
-  const [expanded, setExpanded] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
 
   if (!summary.hasTiebreakers) return null;
 
   return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold text-text-primary">Desempate resuelto</h3>
-
+    <section className="flex flex-col gap-3">
       {summary.tiebreakerGroups.map((group) => {
         const sorted = group.participants
           .map((p) => ({
@@ -22,42 +21,73 @@ export function TiebreakerSummary({ summary }: { summary: CompletedSummary }) {
 
         const winner = sorted[0];
         const runnerUp = sorted[1];
+        const affectedRank = Math.min(
+          ...sorted.map((p) =>
+            summary.podium.find((po) => po.profile_id === p.profile_id)?.rank ?? 0,
+          ),
+        );
 
         return (
-          <div key={group.score} className="rounded-lg border border-border bg-surface px-3.5 py-2.5">
-            <p className="text-sm text-text-primary">
-              <span className="font-medium">{winner.display_name ?? 'Participante'}</span>
-              {runnerUp
-                ? ` obtuvo el primer lugar tras empatar con ${runnerUp.display_name ?? 'Participante'}.`
-                : ' obtuvo el primer lugar.'}
+          <div
+            key={group.score}
+            className="rounded-lg border border-border bg-surface px-4 py-3"
+          >
+            <h3 className="text-sm font-semibold text-text-primary">
+              Desempate por el {affectedRank}.º lugar
+            </h3>
+
+            <p className="mt-1 text-xs text-text-muted">
+              {sorted.map((p) => p.display_name ?? 'Participante').join(' y ')} finalizaron con{' '}
+              {group.score} puntos.
             </p>
+
+            <div className="mt-3 flex items-center gap-2">
+              <div className="flex -space-x-2">
+                {sorted.slice(0, 2).map((p) => (
+                  <UserAvatar
+                    key={p.profile_id}
+                    name={p.display_name}
+                    url={null}
+                    size={28}
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-text-muted">
+                {sorted.length} participantes
+              </span>
+            </div>
+
+            {winner && (
+              <p className="mt-2 text-xs text-text-primary">
+                <span className="font-medium text-green-400">
+                  {winner.display_name ?? 'Participante'}
+                </span>{' '}
+                ganó el sorteo y obtuvo el {affectedRank}.º lugar.
+              </p>
+            )}
 
             <button
               type="button"
-              onClick={() => setExpanded(!expanded)}
-              className="mt-1 text-xs font-medium text-purple-primary hover:text-purple-400"
+              onClick={() => setShowDetail(!showDetail)}
+              className="mt-2 text-xs font-medium text-purple-primary hover:text-purple-400"
             >
-              {expanded ? 'Ocultar detalles' : 'Ver detalles'}
+              {showDetail ? 'Ocultar' : 'Ver resultado del sorteo'}
             </button>
 
-            {expanded && (
-              <div className="mt-2 space-y-1.5 border-t border-border pt-2">
+            {showDetail && (
+              <div className="mt-3 space-y-2 border-t border-border pt-3">
                 <div className="grid gap-x-4 gap-y-0.5 text-xs text-text-muted sm:grid-cols-2">
                   <div>
-                    <span className="font-medium text-text-secondary">Puntuaci&oacute;n:</span>{' '}
+                    <span className="font-medium text-text-secondary">Puntuación:</span>{' '}
                     {group.score} pts
                   </div>
                   <div>
-                    <span className="font-medium text-text-secondary">M&eacute;todo:</span>{' '}
+                    <span className="font-medium text-text-secondary">Método:</span>{' '}
                     Sorteo aleatorio
                   </div>
                   <div>
                     <span className="font-medium text-text-secondary">Participantes:</span>{' '}
                     {group.participants.length}
-                  </div>
-                  <div className="sm:col-span-2">
-                    <span className="font-medium text-text-secondary">Orden:</span>{' '}
-                    {sorted.map((p) => p.display_name ?? 'Participante').join(', ')}
                   </div>
                 </div>
                 <div className="flex flex-col gap-1">

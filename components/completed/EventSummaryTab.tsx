@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { CompletedSummary } from '@/app/actions/results-data';
+import { diagnosePrizeAssignment } from '@/app/actions/results-data';
 import type { TieGroup } from '@/app/actions/tiebreaker';
 import { Podium } from './Podium';
 import { PrizeAwardsSummary } from './PrizeAwardsSummary';
@@ -45,6 +46,14 @@ export function EventSummaryTab({
     setModalGroup(null);
   }, []);
 
+  useEffect(() => {
+    if (summary.prizeAwards.length > 0 && !summary.prizeAwards.some((a) => a.award_status === 'assigned')) {
+      diagnosePrizeAssignment(eventId).then((data) => {
+        console.log('[diag/assignment]', JSON.parse(JSON.stringify(data)));
+      });
+    }
+  }, [eventId, summary.prizeAwards]);
+
   return (
     <div className="flex flex-col gap-6">
       {hasPending && (
@@ -56,34 +65,15 @@ export function EventSummaryTab({
               onResolve={() => setModalGroup(group)}
             />
           ))}
-
-          {/* Pending prizes placeholder */}
-          <section className="flex flex-col gap-2">
-            <h3 className="text-sm font-semibold text-text-primary">Premios pendientes</h3>
-            <div className="rounded-lg border border-border bg-surface px-4 py-3">
-              <p className="text-sm text-text-muted">
-                La asignaci&oacute;n se completar&aacute; despu&eacute;s de resolver el desempate.
-              </p>
-            </div>
-          </section>
         </>
       )}
 
-      {!hasPending && (
-        <>
-          <Podium entries={summary.podium} />
+      <Podium entries={summary.podium} />
 
-          <PrizeAwardsSummary
-            awards={summary.prizeAwards}
-            eventId={summary.eventId}
-            hasLegacyPrizes={summary.hasLegacyPrizes}
-            legacyMigrationStatus={summary.legacyMigrationStatus}
-          />
+      <PrizeAwardsSummary awards={summary.prizeAwards} />
 
-          {hasResolvedTies && (
-            <TiebreakerSummary summary={summary} />
-          )}
-        </>
+      {hasResolvedTies && (
+        <TiebreakerSummary summary={summary} />
       )}
 
       {modalGroup && (
