@@ -1,4 +1,4 @@
-﻿'use server';
+'use server';
 
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
@@ -13,8 +13,8 @@ async function buildTwitchRedirectUrl(next: string) {
   return { supabase, redirectTo };
 }
 
-export async function signInWithTwitch() {
-  const { supabase, redirectTo } = await buildTwitchRedirectUrl('/inicio');
+export async function signInWithTwitch(next: string = '/inicio') {
+  const { supabase, redirectTo } = await buildTwitchRedirectUrl(next);
   const { data } = await supabase.auth.signInWithOAuth({
     provider: 'twitch',
     options: { redirectTo },
@@ -34,6 +34,7 @@ export async function linkTwitchAccount() {
 export async function signInWithEmail(_prev: unknown, formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
+  const next = (formData.get('next') as string) || '/inicio';
 
   if (!email || !password) {
     return { error: 'Email y contraseña son obligatorios.' };
@@ -46,7 +47,7 @@ export async function signInWithEmail(_prev: unknown, formData: FormData) {
     return { error: error.message };
   }
 
-  redirect('/inicio');
+  redirect(next);
 }
 
 export async function signOut() {
@@ -60,6 +61,7 @@ export async function signUpWithEmail(_prev: unknown, formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;
   const confirmPassword = formData.get('confirmPassword') as string;
+  const next = (formData.get('next') as string) || '/inicio';
 
   if (!email || !password || !username) {
     return { error: 'Todos los campos son obligatorios.' };
@@ -83,7 +85,7 @@ export async function signUpWithEmail(_prev: unknown, formData: FormData) {
     password,
     options: {
       data: { username },
-      emailRedirectTo: `${origin}/login?confirmed=1`,
+      emailRedirectTo: `${origin}/login?confirmed=1&next=${encodeURIComponent(next)}`,
     },
   });
 
@@ -98,7 +100,7 @@ export async function signUpWithEmail(_prev: unknown, formData: FormData) {
     return { success: 'Revisa tu correo para confirmar tu cuenta.' };
   }
 
-  redirect('/inicio');
+  redirect(next);
 }
 
 export async function resetPasswordForEmail(_prev: unknown, formData: FormData) {

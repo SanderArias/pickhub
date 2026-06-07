@@ -7,7 +7,7 @@ const BADGE_STYLES = {
 };
 
 const BADGE_LABELS = {
-  winner: 'Ganador del Pick\u2019em',
+  winner: 'Ganador del Pick\'em',
   prized: 'Premiado',
   subscriber: 'Beneficio de sub',
   tiebreaker: 'Ganador de desempate',

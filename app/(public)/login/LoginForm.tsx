@@ -1,10 +1,10 @@
-﻿'use client';
+'use client';
 
 import { useState, useActionState } from 'react';
 import { signInWithEmail, signUpWithEmail } from '@/app/actions/auth';
 import { PasswordField } from '@/components/auth/PasswordField';
 
-export function AuthForm({ isConfirmed }: { isConfirmed?: boolean }) {
+export function AuthForm({ isConfirmed, next }: { isConfirmed?: boolean; next?: string }) {
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [loginState, loginAction, loginPending] = useActionState(signInWithEmail, null);
   const [signupState, signupAction, signupPending] = useActionState(signUpWithEmail, null);
@@ -76,6 +76,7 @@ export function AuthForm({ isConfirmed }: { isConfirmed?: boolean }) {
         </div>
       ) : (
         <form action={formAction} className="flex flex-col gap-4" noValidate>
+          {next && <input type="hidden" name="next" value={next} />}
           {tab === 'signup' && (
             <div>
               <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-text-secondary">

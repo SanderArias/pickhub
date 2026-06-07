@@ -1,4 +1,4 @@
-﻿import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
 import { UpdatePasswordForm } from './UpdatePasswordForm';
 import { AuthBrandHeader } from '@/components/auth/AuthBrandHeader';

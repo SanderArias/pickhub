@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useCallback, useRef, useMemo, type ReactNode } from 'react';
 import { updateEventPrizes } from '@/app/actions/creator';
@@ -41,7 +41,7 @@ function cloneDraft(d: PrizeDraft, overrides: Partial<PrizeDraft> = {}): PrizeDr
 }
 
 function ordinal(n: number): string {
-  return `${n}.\u00BA`;
+  return `${n}.º`;
 }
 
 function subscriberRankLabel(rank: number): string {
@@ -136,7 +136,7 @@ function getSaveErrorUserMessage(error: FlatPrizeError): string {
     return 'No pudimos guardar los premios. La configuración no se perdió.';
   }
   if (error.code === '42501' || error.message.includes('permission denied') || error.message.includes('row-level security')) {
-    return 'No tienes permisos para modificar los premios de este Pick\u2019em.';
+    return 'No tienes permisos para modificar los premios de este Pick\'em.';
   }
   if (error.code === '23505') {
     return 'Ya existe un premio con esa configuración. Revisa los datos e inténtalo nuevamente.';
@@ -763,7 +763,7 @@ function PrizeSectionInner({
     if (subPrizes.length > 0 && isTwitchBlocked) {
       setExpandedLocalId(subPrizes[0].localId);
       expandAndFocus(subPrizes[0].localId);
-      setFormError('Activa la verificaci\u00f3n de Twitch antes de guardar beneficios para suscriptores.');
+      setFormError('Activa la verificación de Twitch antes de guardar beneficios para suscriptores.');
       return;
     }
 

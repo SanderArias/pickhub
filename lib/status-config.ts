@@ -42,7 +42,7 @@ export const EVENT_STATUS_CONFIG: Record<EventStatus, StatusConfig> = {
   draft: {
     dot: 'bg-purple-primary',
     title: 'Borrador',
-    description: 'Configura tu Pick\u2019em antes de publicarlo.',
+    description: 'Configura tu Pick\'em antes de publicarlo.',
   },
   open: {
     dot: 'bg-purple-primary',
@@ -57,6 +57,6 @@ export const EVENT_STATUS_CONFIG: Record<EventStatus, StatusConfig> = {
   completed: {
     dot: 'bg-success',
     title: 'Evento completado',
-    description: 'La clasificaci\u00f3n final y los premios ya est\u00e1n disponibles.',
+    description: 'La clasificación final y los premios ya están disponibles.',
   },
 };

@@ -1,4 +1,4 @@
-﻿'use server';
+'use server';
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -274,19 +274,23 @@ export async function createPickem(formData: FormData) {
   const twitchRaw = formData.get('twitch_channel') as string | null;
   const twitchChannel = normalizeTwitchChannel(twitchRaw);
 
+  const eventPayload: Record<string, unknown> = {
+    creator_id: creatorId,
+    dynamic_type_id: pickemType.id,
+    title,
+    slug,
+    description,
+    ends_at: endsAt,
+    status: 'draft',
+    twitch_channel: twitchChannel,
+  };
+  if (predictionsCloseTimezone) {
+    eventPayload.predictions_close_timezone = predictionsCloseTimezone;
+  }
+
   const { data: event, error: eventError } = await supabase
     .from('events')
-    .insert({
-      creator_id: creatorId,
-      dynamic_type_id: pickemType.id,
-      title,
-      slug,
-      description,
-      ends_at: endsAt,
-      predictions_close_timezone: predictionsCloseTimezone,
-      status: 'draft',
-      twitch_channel: twitchChannel,
-    })
+    .insert(eventPayload)
     .select('id')
     .single();
 
@@ -740,15 +744,19 @@ export async function updatePickemGeneralInfo(eventId: string, _prev: unknown, f
   const twitchRaw = formData.get('twitch_channel') as string | null;
   const twitchChannel = normalizeTwitchChannel(twitchRaw);
 
+  const updatePayload: Record<string, unknown> = {
+    title,
+    description,
+    ends_at: endsAt,
+    twitch_channel: twitchChannel,
+  };
+  if (predictionsCloseTimezone) {
+    updatePayload.predictions_close_timezone = predictionsCloseTimezone;
+  }
+
   const { error: uErr } = await supabase
     .from('events')
-    .update({
-      title,
-      description,
-      ends_at: endsAt,
-      predictions_close_timezone: predictionsCloseTimezone,
-      twitch_channel: twitchChannel,
-    })
+    .update(updatePayload)
     .eq('id', eventId);
 
   if (uErr) return { error: `Error al actualizar: ${uErr.message}` };

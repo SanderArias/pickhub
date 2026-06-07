@@ -1,20 +1,28 @@
-﻿import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { getUser, signInWithTwitch } from '@/app/actions/auth';
 import { AuthForm } from './LoginForm';
 import { AuthBrandHeader } from '@/components/auth/AuthBrandHeader';
 import { SocialAuthDivider } from '@/components/auth/SocialAuthDivider';
 import { OAuthErrorBanner } from '@/components/auth/OAuthErrorBanner';
 
+function validateNext(value: string | null): string | null {
+  if (!value) return null;
+  if (!value.startsWith('/')) return null;
+  if (value.startsWith('//')) return null;
+  return value;
+}
+
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ confirmed?: string }>;
+  searchParams: Promise<{ confirmed?: string; next?: string }>;
 }) {
-  const { confirmed } = await searchParams;
+  const { confirmed, next: rawNext } = await searchParams;
+  const next = validateNext(rawNext) ?? '/inicio';
   const user = await getUser();
 
   if (user) {
-    redirect('/inicio');
+    redirect(next);
   }
 
   return (
@@ -25,11 +33,11 @@ export default async function LoginPage({
         <OAuthErrorBanner />
 
         <div className="rounded-xl border border-border bg-surface p-6 sm:p-8 shadow-sm">
-          <AuthForm isConfirmed={confirmed === '1'} />
+          <AuthForm isConfirmed={confirmed === '1'} next={next} />
 
           <SocialAuthDivider />
 
-          <form action={signInWithTwitch}>
+          <form action={signInWithTwitch.bind(null, next)}>
             <button
               type="submit"
               className="flex w-full items-center justify-center gap-2.5 rounded-lg border border-purple-primary/40 px-4 py-2.5 text-sm font-medium text-purple-primary transition-all hover:bg-purple-primary/10 focus:outline-none focus:ring-2 focus:ring-purple-primary/30"

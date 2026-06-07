@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useRef, useState, useEffect, useActionState, useTransition } from 'react';
 import { updatePickemGeneralInfo, uploadEventLogo, removeEventLogo } from '@/app/actions/creator';
@@ -168,7 +168,7 @@ export function GeneralInfoSection({
                     disabled={uploadPending}
                     className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:border-border-hover disabled:opacity-50"
                   >
-                    {uploadPending ? 'Subiendo\u2026' : 'Subir logo'}
+                    {uploadPending ? 'Subiendo…' : 'Subir logo'}
                   </button>
                   {logoUrl && (
                     <button
@@ -187,7 +187,7 @@ export function GeneralInfoSection({
                       disabled={removePending}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-danger/30 px-3 py-1.5 text-sm text-danger transition-colors hover:border-danger/60 disabled:opacity-50"
                     >
-                      {removePending ? 'Eliminando\u2026' : 'Eliminar logo'}
+                      {removePending ? 'Eliminando…' : 'Eliminar logo'}
                     </button>
                   )}
                 </div>
@@ -217,7 +217,7 @@ export function GeneralInfoSection({
                 disabled={pending}
                 className="rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white disabled:opacity-50"
               >
-                {pending ? 'Guardando\u2026' : 'Guardar cambios'}
+                {pending ? 'Guardando…' : 'Guardar cambios'}
               </button>
               <button
                 type="button"

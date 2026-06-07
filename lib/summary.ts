@@ -11,7 +11,7 @@ export function getPredictionConfigurationSummary(
   const templatePred = active.find((p) => p.template_type);
   if (templatePred) {
     const positions = (templatePred.config?.positions as number) ?? 8;
-    return `Top ${positions} \u00b7 Plantilla PickHub`;
+    return `Top ${positions} · Plantilla PickHub`;
   }
 
   if (active.length === 0) return 'Sin predicciones';
@@ -19,7 +19,7 @@ export function getPredictionConfigurationSummary(
   if (active.length === 1) {
     const q = active[0];
     if (q.pick_type === 'player' && q.max_selections) {
-      return `1 pregunta \u00b7 Top ${q.max_selections}`;
+      return `1 pregunta · Top ${q.max_selections}`;
     }
     return '1 pregunta';
   }
@@ -54,7 +54,7 @@ export function getPrizeConfigurationSummary(
     const label = sub.length === 1 ? 'beneficio para subs' : 'beneficios para subs';
     parts.push(`${sub.length} ${label}`);
   }
-  const primary = parts.join(' \u00b7 ');
+  const primary = parts.join(' · ');
 
   const withValue = prizes.filter((p) => p.amount !== null && p.amount !== undefined);
   if (withValue.length > 0) {

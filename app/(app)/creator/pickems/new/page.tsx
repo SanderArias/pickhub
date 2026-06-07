@@ -1,4 +1,4 @@
-﻿import { requireCreator } from '@/lib/auth';
+import { requireCreator } from '@/lib/auth';
 import { createPickem } from '@/app/actions/creator';
 import { PageHeader, ActionButton } from '@/components/ui';
 import { ClosureSection } from './ClosureSection';

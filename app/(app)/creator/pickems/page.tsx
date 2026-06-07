@@ -1,4 +1,4 @@
-﻿import { getCreatorPickems } from '@/app/actions/creator';
+import { getCreatorPickems } from '@/app/actions/creator';
 import { PickemsList } from '@/components/pickem/PickemsList';
 
 export default async function PickemsPage() {

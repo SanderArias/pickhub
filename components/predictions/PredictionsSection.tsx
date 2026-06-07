@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState, useRef, useEffect, useActionState, useCallback } from 'react';
 import { createPredictionQuestion, updatePredictionQuestion, deletePredictionQuestion } from '@/app/actions/creator';

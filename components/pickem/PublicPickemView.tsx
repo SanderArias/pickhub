@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useActionState, useState, useMemo, useEffect, useRef } from 'react';
 import Image from 'next/image';
@@ -114,7 +114,7 @@ export function PublicPickemView({
       return {
         position: a.position ?? 0,
         optionId: a.option_id,
-        label: opt?.label ?? '\u2014',
+        label: opt?.label ?? '—',
         playerId: opt?.player_id ?? null,
         countryCode,
       };
@@ -323,8 +323,8 @@ export function PublicPickemView({
           eventTitle={event.title}
           eventSlug={event.slug}
           eventLogoUrl={event.logo_url}
-          creatorLabel={event.creator?.display_name ?? event.creator?.handle ?? '\u2014'}
-          participantName={participantName ?? '\u2014'}
+          creatorLabel={event.creator?.display_name ?? event.creator?.handle ?? '—'}
+          participantName={participantName ?? '—'}
           submittedAt={mySubmission?.submitted_at ?? null}
           rankedPlayers={rankedPlayers}
         />
@@ -409,7 +409,7 @@ export function PublicPickemView({
                 {q.description && <p className="mt-0.5 text-xs text-text-secondary">{q.description}</p>}
                 <p className="mt-0.5 text-xs text-text-muted">
                   {q.points_per_correct} punto{q.points_per_correct !== 1 ? 's' : ''} por acierto
-                  {q.question_type === 'single' ? ' \u00b7 Selecci\u00f3n \u00fanica' : ` \u00b7 Selecciona hasta ${q.max_selections} opciones`}
+                  {q.question_type === 'single' ? ' · Selección única' : ` · Selecciona hasta ${q.max_selections} opciones`}
                 </p>
               </legend>
 
@@ -436,7 +436,7 @@ export function PublicPickemView({
             disabled={pending || !allTop8Filled}
             className="self-start rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
           >
-            {pending ? 'Enviando predicci\u00f3n\u2026' : 'Enviar predicci\u00f3n'}
+            {pending ? 'Enviando predicción…' : 'Enviar predicción'}
           </button>
         </form>
       )}
@@ -444,7 +444,7 @@ export function PublicPickemView({
       {/* Closed without submission */}
       {isAuthenticated && !mySubmission && isClosed && (
         <section className="rounded-xl border border-border bg-surface p-6 text-center">
-          <p className="text-sm text-text-muted">Las predicciones ya est\u00e1n cerradas.</p>
+          <p className="text-sm text-text-muted">Las predicciones ya están cerradas.</p>
         </section>
       )}
 

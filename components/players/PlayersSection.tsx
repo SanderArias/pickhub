@@ -174,9 +174,9 @@ export function PlayersSection({
     summaryText = 'Sin jugadores';
   } else {
     if (countryCount === 0) {
-      summaryText = `${players.length} jugador${players.length !== 1 ? 'es' : ''} · pa\u00edses sin completar`;
+      summaryText = `${players.length} jugador${players.length !== 1 ? 'es' : ''} · países sin completar`;
     } else {
-      summaryText = `${players.length} jugador${players.length !== 1 ? 'es' : ''} · ${countryCount} pa\u00eds${countryCount !== 1 ? 'es' : ''}`;
+      summaryText = `${players.length} jugador${players.length !== 1 ? 'es' : ''} · ${countryCount} país${countryCount !== 1 ? 'es' : ''}`;
     }
   }
 
@@ -249,7 +249,7 @@ export function PlayersSection({
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium text-text-secondary">Pa\u00eds</label>
+                <label className="mb-1 block text-xs font-medium text-text-secondary">País</label>
                 <CountryCombobox
                   value={countryCode}
                   onChange={(code) => setCountryCode(code ?? '')}
@@ -272,7 +272,7 @@ export function PlayersSection({
 
         {players.length === 0 ? (
           <p className="py-4 text-center text-sm text-text-muted">
-            A\u00fan no has agregado jugadores. Agrega al menos 2 jugadores para activar las predicciones.
+            Aún no has agregado jugadores. Agrega al menos 2 jugadores para activar las predicciones.
           </p>
         ) : (
           <div className={`overflow-x-auto rounded-lg border border-border ${players.length >= 12 ? 'max-h-[420px] overflow-y-auto' : ''}`}>
@@ -282,7 +282,7 @@ export function PlayersSection({
                   <th className="px-3 py-2 font-medium">#</th>
                   <th className="px-3 py-2 font-medium">Jugador</th>
                   <th className="px-3 py-2 font-medium">Seed</th>
-                  <th className="px-3 py-2 font-medium">Pa\u00eds</th>
+                  <th className="px-3 py-2 font-medium">País</th>
                   <th className="px-3 py-2 font-medium">Agregado</th>
                   {!readOnly && <th className="w-14 px-3 py-2" />}
                 </tr>
@@ -301,15 +301,15 @@ export function PlayersSection({
                       <td className="px-3 py-2">
                         <span className="font-medium text-text-primary">{player.name}</span>
                         {isOptimistic && (
-                          <span className="ml-2 text-xs text-text-muted">Guardando\u2026</span>
+                          <span className="ml-2 text-xs text-text-muted">Guardando…</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-xs text-text-muted">
-                        {player.seed ?? '\u2014'}
+                        {player.seed ?? '—'}
                       </td>
                       <td className="px-3 py-2">
                         {isOptimistic ? (
-                          <span className="text-xs text-text-muted">\u2014</span>
+                          <span className="text-xs text-text-muted">—</span>
                         ) : (
                           <CountryCell player={player} eventId={eventId} />
                         )}

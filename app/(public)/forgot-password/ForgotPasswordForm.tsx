@@ -51,7 +51,7 @@ export function ForgotPasswordForm() {
             <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />
           </svg>
         )}
-        {pending ? 'Enviando\u2026' : 'Enviar enlace'}
+        {pending ? 'Enviando…' : 'Enviar enlace'}
       </button>
     </form>
   );

@@ -33,7 +33,7 @@ export async function runLegacyPrizeBackfillAction(
 
     return {
       success: false,
-      message: 'No pudimos migrar los premios. Int\u00e9ntalo nuevamente.',
+      message: 'No pudimos migrar los premios. Inténtalo nuevamente.',
     };
   }
 }

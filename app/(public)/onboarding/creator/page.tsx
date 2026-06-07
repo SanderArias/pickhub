@@ -1,4 +1,4 @@
-﻿import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
 import { getCreatorProfile, createCreatorProfile } from '@/app/actions/creator';
 import { Logo } from '@/components/ui/Logo';

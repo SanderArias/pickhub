@@ -1,4 +1,4 @@
-﻿'use server';
+'use server';
 
 import { revalidatePath } from 'next/cache';
 import { createServerClient } from '@/services/supabase';
@@ -142,7 +142,7 @@ export async function suspendCreator(profileId: string, formData: FormData): Pro
   }
 
   const reason = (formData.get('reason') as string)?.trim();
-  if (!reason) return { error: 'El motivo de suspensiÃ³n es obligatorio.' };
+  if (!reason) return { error: 'El motivo de suspensión es obligatorio.' };
 
   const supabase = await createServerClient();
 
@@ -326,7 +326,7 @@ function parseFormInterval(formData: FormData, key: string): string | null {
   if (!raw || raw.trim().length === 0) return null;
   const cleaned = raw.trim().toLowerCase();
   const match = cleaned.match(/^(\d+)\s*(h|hour|hours|m|min|minute|minutes)?$/);
-  if (!match) throw new Error(`Valor invÃ¡lido para ${key}. Usa formato como "2h" o "30m".`);
+  if (!match) throw new Error(`Valor inválido para ${key}. Usa formato como "2h" o "30m".`);
   const num = parseInt(match[1], 10);
   const unit = match[2]?.[0] ?? 'h';
   return `${num} ${unit === 'm' ? 'minutes' : 'hours'}`;

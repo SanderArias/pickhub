@@ -60,7 +60,7 @@ export function SubscriberBenefit({
 
       <p className="text-xs text-text-muted">
         {stackingPolicy === 'allow_multiple_prizes'
-          ? 'Los suscriptores tambi\u00e9n compiten por los premios generales.'
+          ? 'Los suscriptores también compiten por los premios generales.'
           : 'Si un suscriptor gana un premio general, el beneficio exclusivo pasa al siguiente suscriptor.'
         }
       </p>

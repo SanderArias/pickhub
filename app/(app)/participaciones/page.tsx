@@ -1,4 +1,4 @@
-﻿import { redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 import { getCurrentProfile } from '@/lib/auth';
 import { getUserParticipations } from '@/app/actions/participant';
 import { ParticipacionesClient } from './ParticipacionesClient';

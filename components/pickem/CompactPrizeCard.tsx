@@ -10,10 +10,10 @@ const POSITION_LABELS: Record<number, string> = {
 
 const SUB_LABELS: Record<number, string> = {
   1: 'Mejor sub',
-  2: '2.\u00ba mejor sub',
-  3: '3.\u00ba mejor sub',
-  4: '4.\u00ba mejor sub',
-  5: '5.\u00ba mejor sub',
+  2: '2.º mejor sub',
+  3: '3.º mejor sub',
+  4: '4.º mejor sub',
+  5: '5.º mejor sub',
 };
 
 export function CompactPrizeCard({

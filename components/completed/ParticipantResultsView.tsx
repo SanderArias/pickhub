@@ -12,8 +12,8 @@ import type { OfficialResultEntry } from '@/app/actions/results-data';
 
 const TABS = [
   { id: 'summary', label: 'Resumen' },
-  { id: 'my-picks', label: 'Mi selecci\u00f3n' },
-  { id: 'ranking', label: 'Clasificaci\u00f3n final' },
+  { id: 'my-picks', label: 'Mi selección' },
+  { id: 'ranking', label: 'Clasificación final' },
   { id: 'official-results', label: 'Resultados oficiales' },
 ] as const;
 

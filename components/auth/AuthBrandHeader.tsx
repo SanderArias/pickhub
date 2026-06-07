@@ -1,4 +1,4 @@
-﻿import { PickHubLogo } from '@/components/brand/PickHubLogo';
+import { PickHubLogo } from '@/components/brand/PickHubLogo';
 
 export function AuthBrandHeader() {
   return (

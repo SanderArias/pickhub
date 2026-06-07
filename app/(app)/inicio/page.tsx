@@ -1,4 +1,4 @@
-﻿import Link from 'next/link';
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
 import { getCurrentProfile, checkTwitchLinked } from '@/lib/auth';

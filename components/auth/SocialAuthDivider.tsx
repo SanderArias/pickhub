@@ -1,4 +1,4 @@
-﻿export function SocialAuthDivider() {
+export function SocialAuthDivider() {
   return (
     <div className="relative my-6">
       <div className="absolute inset-0 flex items-center">

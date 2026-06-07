@@ -1,4 +1,4 @@
-﻿import { notFound } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
 import { getPublicPickem, getParticipantOfficialResults } from '@/app/actions/participant';
 import type { Prize } from '@/app/actions/participant';
@@ -128,7 +128,7 @@ export default async function PickemPublicPage({
         const points = (hasPresence ? 1 : 0) + (hasExactPosition ? 1 : 0);
         return {
           position: a.position ?? 0,
-          playerName: opt?.name ?? '\u2014',
+          playerName: opt?.name ?? '—',
           countryCode,
           officialPosition: officialPos,
           hasPresence,

@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useRef, useState, useCallback } from 'react';
 import { toPng } from 'html-to-image';

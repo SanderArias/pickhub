@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { PredictionCloseScheduler } from '@/components/ui/PredictionCloseScheduler';
 
