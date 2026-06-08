@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { performTiebreaker } from '@/app/actions/tiebreaker';
-import type { TieGroup, TiebreakerDraw } from '@/app/actions/tiebreaker';
+import type { TieGroup, TiebreakerDraw, TiebreakerFinalizationResult } from '@/app/actions/tiebreaker';
 
 interface TiebreakerModalProps {
   group: TieGroup;
@@ -12,12 +12,13 @@ interface TiebreakerModalProps {
   remainingTiebreakerCount?: number;
 }
 
-type Phase = 'idle' | 'rolling' | 'done' | 'error';
+type Phase = 'idle' | 'rolling' | 'done' | 'finalizing' | 'error';
 
-export function TiebreakerModal({ group, eventId, onClose, onDone, remainingTiebreakerCount }: TiebreakerModalProps) {
+export function TiebreakerModal({ group, eventId, onClose, onDone }: TiebreakerModalProps) {
   const [phase, setPhase] = useState<Phase>('idle');
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const [finalDraws, setFinalDraws] = useState<TiebreakerDraw[] | null>(null);
+  const [finalizationResult, setFinalizationResult] = useState<TiebreakerFinalizationResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
@@ -30,7 +31,7 @@ export function TiebreakerModal({ group, eventId, onClose, onDone, remainingTieb
     return () => clearAllTimers();
   }, [clearAllTimers]);
 
-  // ESC key
+  // ESC key (disabled during rolling/finalizing)
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -57,23 +58,30 @@ export function TiebreakerModal({ group, eventId, onClose, onDone, remainingTieb
     setErrorMsg(null);
 
     const res = await performTiebreaker(eventId, group.score);
-    if (res.error || !res.draws) {
+    if (!res.success) {
       setErrorMsg(res.error ?? 'Error al realizar el sorteo.');
       setPhase('error');
       return;
     }
-    setFinalDraws(res.draws);
+    setFinalizationResult(res);
+
+    // Use the actual draw order from the server for the winner reveal
+    const drawsFromServer: TiebreakerDraw[] = res.draws ?? [];
+    setFinalDraws(drawsFromServer);
 
     const n = group.participants.length;
     const minCycles = 8;
     const totalSteps = Math.max(minCycles * n, 30);
     let step = 0;
 
+    // Determine the index of the winner (draw_order === 1)
+    const winnerProfileId = drawsFromServer.find((d) => d.draw_order === 1)?.profile_id;
+    const winnerIdx = winnerProfileId
+      ? group.participants.findIndex((p) => p.profile_id === winnerProfileId)
+      : 0;
+
     const scheduleNext = () => {
       if (step >= totalSteps) {
-        const winnerIdx = group.participants.findIndex(
-          (p) => p.profile_id === res.draws![0].profile_id,
-        );
         setActiveIndex(winnerIdx >= 0 ? winnerIdx : 0);
         setPhase('done');
         return;
@@ -82,7 +90,6 @@ export function TiebreakerModal({ group, eventId, onClose, onDone, remainingTieb
       setActiveIndex(step % n);
       step++;
 
-      // Decelerate: starts at ~60ms, ends at ~400ms
       const progress = step / totalSteps;
       const delay = 60 + progress * progress * 390;
 
@@ -92,7 +99,7 @@ export function TiebreakerModal({ group, eventId, onClose, onDone, remainingTieb
 
     const id = setTimeout(scheduleNext, 60);
     timersRef.current.push(id);
-  }, [eventId, group, onDone]);
+  }, [eventId, group]);
 
   const handleOverlayClick = useCallback(
     (e: React.MouseEvent) => {
@@ -104,6 +111,11 @@ export function TiebreakerModal({ group, eventId, onClose, onDone, remainingTieb
     },
     [phase, onClose],
   );
+
+  const handleFinalize = useCallback(() => {
+    setPhase('finalizing');
+    onDone();
+  }, [onDone]);
 
   const handleCloseAfterDone = useCallback(() => {
     onClose();
@@ -200,6 +212,21 @@ export function TiebreakerModal({ group, eventId, onClose, onDone, remainingTieb
           </div>
         )}
 
+        {/* Status message */}
+        {phase === 'done' && finalizationResult?.success && (
+          <div className="mt-3 text-center">
+            {finalizationResult.status === 'completed' ? (
+              <p className="text-sm text-green-400">
+                Desempate resuelto. Los resultados y premios fueron finalizados.
+              </p>
+            ) : (
+              <p className="text-sm text-amber-400">
+                Desempate resuelto. Todav&iacute;a queda{finalizationResult.remainingTiebreakers > 1 ? 'n' : ''} otro desempate pendiente.
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="mt-5 flex items-center justify-center gap-3">
           {phase === 'idle' && (
@@ -247,19 +274,48 @@ export function TiebreakerModal({ group, eventId, onClose, onDone, remainingTieb
           {phase === 'done' && (
             <button
               type="button"
-              onClick={handleCloseAfterDone}
+              onClick={
+                finalizationResult?.success && finalizationResult.status === 'completed'
+                  ? handleFinalize
+                  : handleCloseAfterDone
+              }
               className={
-                remainingTiebreakerCount !== undefined && remainingTiebreakerCount === 0
+                finalizationResult?.success && finalizationResult.status === 'completed'
                   ? 'rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600'
                   : 'rounded-lg border border-border px-6 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-surface-hover'
               }
             >
-              {remainingTiebreakerCount !== undefined && remainingTiebreakerCount > 0
-                ? `Siguiente desempate (${remainingTiebreakerCount})`
-                : remainingTiebreakerCount !== undefined && remainingTiebreakerCount === 0
+              {finalizationResult?.success && finalizationResult.status === 'tiebreaker_pending' && finalizationResult.remainingTiebreakers > 0
+                ? `Siguiente desempate (${finalizationResult.remainingTiebreakers})`
+                : finalizationResult?.success && finalizationResult.status === 'completed'
                   ? 'Finalizar clasificación'
                   : 'Cerrar'}
             </button>
+          )}
+
+          {phase === 'finalizing' && (
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex items-center gap-2 text-sm text-text-muted">
+                <svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" className="opacity-25" />
+                  <path d="M12 2a10 10 0 019.95 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="opacity-75" />
+                </svg>
+                Finalizando desempate
+              </div>
+              <p className="text-xs text-text-muted">
+                Estamos guardando el resultado, asignando los premios y actualizando la clasificación.
+              </p>
+              <p className="text-xs text-text-muted">
+                Esto puede tardar unos segundos.
+              </p>
+              <button
+                type="button"
+                disabled
+                className="rounded-lg bg-surface-hover px-6 py-2.5 text-sm font-medium text-text-muted opacity-60 cursor-not-allowed"
+              >
+                Procesando...
+              </button>
+            </div>
           )}
         </div>
       </div>

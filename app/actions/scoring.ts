@@ -4,6 +4,7 @@ import { createServerClient } from '@/services/supabase';
 import { requireCreator } from '@/lib/auth';
 import { revalidatePickemPaths } from '@/activities/pickem/lib/revalidation.server';
 import { checkPickemCapability, requirePickemCapability } from '@/activities/pickem/lib/capability-guards.server';
+import { pickemRoutes } from '@/activities/pickem/routes';
 
 export async function getEventResults(eventId: string) {
   requirePickemCapability('readHistoricalData');
@@ -30,13 +31,19 @@ export async function getEventResults(eventId: string) {
   return results ?? [];
 }
 
+export type PublishResultsOutcome =
+  | { success: true; status: 'completed'; pendingTiebreakerCount: 0; redirectTo: string }
+  | { success: true; status: 'tiebreaker_pending'; pendingTiebreakerCount: number; redirectTo: string }
+  | { success: false; error: string };
+
 export async function publishResultsAndCalculateScores(
   eventId: string,
   standardResults: Record<string, string[]>,
   rankingResults: Record<string, { position: number; option_id: string }[]>,
-): Promise<{ error: string | null }> {
+): Promise<PublishResultsOutcome> {
+  console.info('[publish-results:start]', { eventId });
   const mgmtErr = checkPickemCapability('manageExisting');
-  if (mgmtErr) return { error: mgmtErr };
+  if (mgmtErr) return { success: false, error: mgmtErr };
 
   const profile = await requireCreator();
   const creatorId = profile.creator_profile!.id;
@@ -51,14 +58,14 @@ export async function publishResultsAndCalculateScores(
     .eq('creator_id', creatorId)
     .single();
 
-  if (!event) return { error: 'Evento no encontrado.' };
+  if (!event) return { success: false, error: 'Evento no encontrado.' };
 
   // 2. Validate event status
   if (event.status === 'completed') {
-    return { error: 'Este Pick\'em ya fue completado.' };
+    return { success: false, error: 'Este Pick\'em ya fue completado.' };
   }
   if (event.status !== 'predictions_closed') {
-    return { error: 'El Pick\'em debe estar en estado "Predicciones cerradas" para publicar resultados.' };
+    return { success: false, error: 'El Pick\'em debe estar en estado "Predicciones cerradas" para publicar resultados.' };
   }
 
   // 3. Validate standard results
@@ -71,13 +78,14 @@ export async function publishResultsAndCalculateScores(
       .in('id', stdQuestionIds);
 
     if (!questions || questions.length === 0) {
-      return { error: 'No se encontraron preguntas.' };
+      return { success: false, error: 'No se encontraron preguntas.' };
     }
 
     for (const q of questions) {
       const selected = standardResults[q.id] ?? [];
       if (q.question_type === 'single' && selected.length > 1) {
         return {
+          success: false,
           error: `La pregunta "${q.id}" es de tipo única y solo permite una opción correcta.`,
         };
       }
@@ -96,20 +104,19 @@ export async function publishResultsAndCalculateScores(
     for (const q of rankQuestions ?? []) {
       const positions = rankingResults[q.id] ?? [];
       if (q.template_type === 'top8_ordered' && positions.length !== 8) {
-        return { error: `La pregunta "${q.id}" requiere exactamente 8 posiciones.` };
+        return { success: false, error: `La pregunta "${q.id}" requiere exactamente 8 posiciones.` };
       }
     }
   }
 
-  // 5. Delete old prediction_results
+  // 5. Persist results
   const { error: delErr } = await supabase
     .from('prediction_results')
     .delete()
     .eq('event_id', eventId);
 
-  if (delErr) return { error: `Error al limpiar resultados anteriores: ${delErr.message}` };
+  if (delErr) return { success: false, error: `Error al limpiar resultados anteriores: ${delErr.message}` };
 
-  // 6. Insert standard results
   const stdRows: { event_id: string; question_id: string; option_id: string; is_correct: boolean }[] = [];
   for (const questionId of stdQuestionIds) {
     for (const optionId of standardResults[questionId] ?? []) {
@@ -119,10 +126,9 @@ export async function publishResultsAndCalculateScores(
 
   if (stdRows.length > 0) {
     const { error: insErr } = await supabase.from('prediction_results').insert(stdRows);
-    if (insErr) return { error: `Error al guardar resultados: ${insErr.message}` };
+    if (insErr) return { success: false, error: `Error al guardar resultados: ${insErr.message}` };
   }
 
-  // 7. Insert ranking results
   const rankRows: { event_id: string; question_id: string; option_id: string; position: number; is_correct: boolean }[] = [];
   for (const [questionId, positions] of Object.entries(rankingResults)) {
     for (const { position, option_id } of positions) {
@@ -132,10 +138,10 @@ export async function publishResultsAndCalculateScores(
 
   if (rankRows.length > 0) {
     const { error: insErr } = await supabase.from('prediction_results').insert(rankRows);
-    if (insErr) return { error: `Error al guardar resultados de ranking: ${insErr.message}` };
+    if (insErr) return { success: false, error: `Error al guardar resultados de ranking: ${insErr.message}` };
   }
 
-  // 8. Calculate scores
+  // 6. Calculate scores
   const { data: results } = await supabase
     .from('prediction_results')
     .select('question_id, option_id, position')
@@ -143,7 +149,7 @@ export async function publishResultsAndCalculateScores(
     .eq('is_correct', true);
 
   if (!results || results.length === 0) {
-    return { error: 'No hay resultados guardados para calcular puntuaciones.' };
+    return { success: false, error: 'No hay resultados guardados para calcular puntuaciones.' };
   }
 
   const correctSet = new Map<string, Set<string>>();
@@ -175,7 +181,7 @@ export async function publishResultsAndCalculateScores(
     .eq('status', 'submitted');
 
   if (!submissions || submissions.length === 0) {
-    return { error: 'No hay participaciones para puntuar.' };
+    return { success: false, error: 'No hay participaciones para puntuar.' };
   }
 
   const submissionIds = submissions.map((s) => s.id);
@@ -192,7 +198,6 @@ export async function publishResultsAndCalculateScores(
   }
 
   const participantIds = submissions.map((s) => s.participant_id);
-
   const { data: participants } = await supabase
     .from('event_participants')
     .select('id, profile_id')
@@ -286,87 +291,97 @@ export async function publishResultsAndCalculateScores(
     submissionTotals.set(submission.id, totalScore);
   }
 
-  // 9. Delete old scores and insert new ones
+  // 7. Persist scores
   const { error: delScoreErr } = await supabase
     .from('prediction_scores')
     .delete()
     .eq('event_id', eventId);
 
-  if (delScoreErr) return { error: `Error al limpiar puntuaciones anteriores: ${delScoreErr.message}` };
+  if (delScoreErr) return { success: false, error: `Error al limpiar puntuaciones anteriores: ${delScoreErr.message}` };
 
   if (scoreRows.length > 0) {
     const { error: insScoreErr } = await supabase
       .from('prediction_scores')
       .upsert(scoreRows, { onConflict: 'event_id,profile_id,question_id' });
-    if (insScoreErr) return { error: `Error al guardar puntuaciones: ${insScoreErr.message}` };
+    if (insScoreErr) return { success: false, error: `Error al guardar puntuaciones: ${insScoreErr.message}` };
   }
 
-  // 10. Update submissions to scored
+  // 8. Update submissions to scored
   for (const [subId, total] of submissionTotals) {
     const { error: upErr } = await supabase
       .from('submissions')
       .update({ status: 'scored', total_score: total })
       .eq('id', subId);
 
-    if (upErr) return { error: `Error al actualizar participación: ${upErr.message}` };
+    if (upErr) return { success: false, error: `Error al actualizar participación: ${upErr.message}` };
   }
 
-  // 11. Prize assignment via unified engine
+  console.info('[publish-results:scoring-complete]', { eventId, scoreRows: scoreRows.length });
+
+  // 9. Prize assignment (creates awards, detects ties)
   const { assignPickemPrizes } = await import('@/activities/pickem/prizes/domain/assign-prizes');
   const prizeResult = await assignPickemPrizes(eventId);
+
+  console.info('[publish-results:prizes-complete]', { eventId, assigned: prizeResult.assigned, pending: prizeResult.pending, manualTieGroups: prizeResult.manualTieGroups.length });
 
   if (prizeResult.errors.length > 0) {
     console.error('[publishResults] prize assignment errors:', prizeResult.errors);
     revalidatePickemPaths(eventId);
-    return { error: `Error al asignar premios: ${prizeResult.errors.slice(0, 3).join(', ')}` };
+    return { success: false, error: `Error al asignar premios: ${prizeResult.errors.slice(0, 3).join(', ')}` };
   }
 
-  // 12. Validate finalization invariants
-  const { validatePickemFinalization } = await import('@/activities/pickem/lib/validate-finalization');
-  const validation = await validatePickemFinalization(eventId);
+  // 10. Decide final status
+  const pendingCount = prizeResult.pending;
+  const hasManualTies = prizeResult.manualTieGroups.length > 0;
 
-  if (validation.errors.length > 0) {
-    console.error('[publishResults] validation errors:', validation.errors);
+  if (hasManualTies) {
+    const { error: statusErr } = await supabase
+      .from('events')
+      .update({ status: 'tiebreaker_pending' })
+      .eq('id', eventId);
+    if (statusErr) return { success: false, error: `Error al actualizar estado: ${statusErr.message}` };
+
     revalidatePickemPaths(eventId);
-    return { error: 'No pudimos finalizar el Pick\'em. Todavía existen premios o desempates pendientes.' };
-  }
 
-  // 13. Set status based on validation
-  let finalStatus: string;
-  if (validation.pendingManualTiebreakerCount > 0) {
-    finalStatus = 'tiebreaker_pending';
-  } else {
-    finalStatus = 'completed';
+    const redirectTo = pickemRoutes.creator.detail(eventId);
+    console.info('[publish-results:return]', { eventId, status: 'tiebreaker_pending', redirectTo, pendingTiebreakerCount: prizeResult.manualTieGroups.length });
+
+    return { success: true, status: 'tiebreaker_pending', pendingTiebreakerCount: prizeResult.manualTieGroups.length, redirectTo };
   }
 
   const { error: statusErr } = await supabase
     .from('events')
-    .update({ status: finalStatus })
+    .update({ status: 'completed' })
     .eq('id', eventId);
+  if (statusErr) return { success: false, error: `Error al actualizar estado: ${statusErr.message}` };
 
-  if (statusErr) return { error: `Error al actualizar estado del Pick\'em: ${statusErr.message}` };
-
-  console.info('[publishResults] final status:', finalStatus, '| validation:', {
-    canFinalize: validation.canFinalize,
-    pendingAwardCount: validation.pendingAwardCount,
-    pendingManualTiebreakerCount: validation.pendingManualTiebreakerCount,
-  });
-
-  // 14. Revalidate paths
   revalidatePickemPaths(eventId);
 
-  return { error: null };
+  const redirectTo = `${pickemRoutes.creator.detail(eventId)}?tab=summary`;
+  console.info('[publish-results:return]', { eventId, status: 'completed', redirectTo, assigned: prizeResult.assigned, pending: pendingCount });
+
+  return { success: true, status: 'completed', pendingTiebreakerCount: 0, redirectTo };
 }
 
+import type { TiebreakerFinalizationResult } from './tiebreaker';
+
 /**
- * Called after all tiebreakers have been manually resolved by the creator.
- * Assigns prizes that were deferred during publishResultsAndCalculateScores.
+ * Called after tiebreakers have been resolved by the creator.
+ * Loads FRESH data, assigns prizes, recalculates remaining manual groups,
+ * and updates event status.
+ *
+ * Returns a discriminated result:
+ *   - success + completed        → no remaining tiebreakers
+ *   - success + tiebreaker_pending → other groups remain (legitimate, not an error)
+ *   - success: false              → real error (DB constraint, duplicate, etc.)
  */
 export async function finalizeEventAfterTiebreakers(
   eventId: string,
-): Promise<{ error: string | null }> {
+): Promise<TiebreakerFinalizationResult> {
+  console.info('[pickem:finalization:start]', { eventId });
+
   const mgmtErr = checkPickemCapability('manageExisting');
-  if (mgmtErr) return { error: mgmtErr };
+  if (mgmtErr) return { success: false, error: mgmtErr };
 
   const profile = await requireCreator();
   const creatorId = profile.creator_profile!.id;
@@ -374,58 +389,119 @@ export async function finalizeEventAfterTiebreakers(
   const supabase = await createServerClient();
 
   // Verify creator owns event
-  const { data: event } = await supabase
+  const { data: event, error: eventErr } = await supabase
     .from('events')
     .select('id, status, title')
     .eq('id', eventId)
     .eq('creator_id', creatorId)
-    .single();
+    .maybeSingle();
 
-  if (!event) return { error: 'Evento no encontrado.' };
+  console.info('[pickem:finalization:event-query]', {
+    eventId,
+    creatorId,
+    eventFound: !!event,
+    eventStatus: event?.status ?? null,
+    error: eventErr?.message ?? null,
+    errorCode: eventErr?.code ?? null,
+  });
 
-  // Use the unified assign engine (handles draw reordering, tie classification,
-  // pending vs assigned, subscriber benefits, etc.)
+  if (eventErr) {
+    console.error('[pickem:finalization:event-query-error]', { eventId, code: eventErr.code, message: eventErr.message, details: eventErr.details });
+    return { success: false, error: 'Error de base de datos al verificar el evento.' };
+  }
+
+  if (!event) return { success: false, error: 'Evento no encontrado.' };
+
+  // 1. Assign prizes with unified engine (loads FRESH leaderboard + draws)
   const { assignPickemPrizes } = await import('@/activities/pickem/prizes/domain/assign-prizes');
   const prizeResult = await assignPickemPrizes(eventId);
+
+  console.info('[tiebreaker:assignment-result]', {
+    eventId,
+    pendingAwards: prizeResult.pending,
+    assignedAwards: prizeResult.assigned,
+    skippedAwards: prizeResult.skipped,
+    errors: prizeResult.errors,
+  });
 
   if (prizeResult.errors.length > 0) {
     const errMsg = `Error al asignar premios: ${prizeResult.errors.slice(0, 3).join(', ')}`;
     console.error('[finalizeEventAfterTiebreakers]', errMsg);
     revalidatePickemPaths(eventId);
-    return { error: errMsg };
+    return { success: false, error: errMsg };
   }
 
-  // Validate finalization invariants before changing status
+  // 2. Validate invariants (fresh data) — distinguishes real errors from
+  //    legitimate remaining tie groups
   const { validatePickemFinalization } = await import('@/activities/pickem/lib/validate-finalization');
   const validation = await validatePickemFinalization(eventId);
 
+  console.info('[tiebreaker:remaining]', {
+    eventId,
+    remainingManualTiebreakers: validation.pendingManualTiebreakerCount,
+    pendingAwards: validation.pendingAwardCount,
+    nextStatus: validation.pendingManualTiebreakerCount > 0 ? 'tiebreaker_pending' : 'completed',
+  });
+
   if (validation.errors.length > 0) {
+    // Real invariant violations (duplicates, constraint issues, etc.)
     console.error('[finalizeEventAfterTiebreakers] validation errors:', validation.errors);
     revalidatePickemPaths(eventId);
-    return { error: 'No pudimos finalizar el Pick\'em. Todavía existen premios o desempates pendientes.' };
+    return { success: false, error: 'No pudimos completar el desempate. El sorteo guardado no fue modificado. Inténtalo nuevamente.' };
   }
 
+  // 3. Update event status based on remaining groups
   let finalStatus: string;
-  if (validation.pendingManualTiebreakerCount > 0) {
+  const remaining = validation.pendingManualTiebreakerCount;
+  if (remaining > 0) {
     finalStatus = 'tiebreaker_pending';
-    console.warn('[finalizeEventAfterTiebreakers] pending manual tiebreakers remain:', validation.pendingManualTiebreakerCount);
+    console.info('[finalizeEventAfterTiebreakers] remaining tiebreakers:', remaining);
   } else {
     finalStatus = 'completed';
     console.info('[finalizeEventAfterTiebreakers] all prizes assigned and validated, status=completed');
   }
 
-  const { error: statusErr } = await supabase
+  const { data: updatedEvent, error: statusErr } = await supabase
     .from('events')
     .update({ status: finalStatus })
-    .eq('id', eventId);
+    .eq('id', eventId)
+    .select('id')
+    .maybeSingle();
 
   if (statusErr) {
     console.error('[finalizeEventAfterTiebreakers] error updating status:', statusErr);
     revalidatePickemPaths(eventId);
-    return { error: 'Error al actualizar el estado del evento.' };
+    return { success: false, error: 'Error al actualizar el estado del evento.' };
+  }
+
+  if (!updatedEvent) {
+    console.error('[finalizeEventAfterTiebreakers] update affected 0 rows', { eventId, finalStatus });
+    revalidatePickemPaths(eventId);
+    return { success: false, error: 'El evento no pudo ser actualizado. Inténtalo nuevamente.' };
   }
 
   revalidatePickemPaths(eventId);
 
-  return { error: null };
+  // Load draws for the result
+  const { data: finalDraws } = await supabase
+    .from('tiebreaker_draws')
+    .select('profile_id, draw_order')
+    .eq('event_id', eventId);
+
+  const draws = (finalDraws ?? []).map((d: any) => ({ profile_id: d.profile_id, draw_order: d.draw_order }));
+
+  if (remaining > 0) {
+    return {
+      success: true,
+      status: 'tiebreaker_pending' as const,
+      remainingTiebreakers: remaining,
+      draws,
+    };
+  }
+  return {
+    success: true,
+    status: 'completed' as const,
+    remainingTiebreakers: 0,
+    draws,
+  };
 }

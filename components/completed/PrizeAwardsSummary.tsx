@@ -20,15 +20,19 @@ function PrizeMiniCard({ award }: { award: PrizeAwardEntry }) {
           )}
         </div>
         <div className="shrink-0 text-right">
-          {award.award_status === 'blocked_by_tiebreaker' ? (
-            <p className="text-xs font-medium text-warning italic">En espera de desempate</p>
-          ) : award.display_name ? (
+          {award.award_status === 'assigned' && award.display_name ? (
             <p className="text-xs font-medium text-text-primary truncate max-w-[140px]">
-              {award.display_name}
+              Asignado a {award.display_name}
             </p>
-          ) : (
+          ) : award.award_status === 'assigned' ? (
+            <p className="text-xs font-medium text-text-primary italic">Asignado</p>
+          ) : award.award_status === 'unassigned_no_eligible_winner' ? (
+            <p className="text-xs font-medium text-text-muted italic">Sin ganador elegible</p>
+          ) : award.award_status === 'blocked_by_tiebreaker' ? (
+            <p className="text-xs font-medium text-warning italic">En espera de desempate</p>
+          ) : award.award_status === 'unassigned' ? (
             <p className="text-xs font-medium text-text-muted italic">Sin asignar</p>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

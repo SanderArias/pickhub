@@ -24,15 +24,16 @@ export function EventSummaryTab({
 
   const pendingGroups = summary.pendingManualTiebreakers;
   const hasPending = pendingGroups.length > 0;
-  const hasResolvedTies = summary.tiebreakerGroups.length > 0 && !hasPending;
+  const hasResolvedTies = summary.eventStatus === 'completed' && summary.tiebreakerGroups.length > 0 && !hasPending;
 
   const remainingAfterThis = modalGroup
     ? pendingGroups.filter((g) => g !== modalGroup).length
     : 0;
 
   const handleTiebreakerDone = useCallback(async () => {
-    setModalGroup(null);
+    // Modal stays visible with "finalizing" state — refresh first, then close
     await onRefresh();
+    setModalGroup(null);
   }, [onRefresh]);
 
   const handleModalClose = useCallback(() => {

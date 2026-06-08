@@ -1,12 +1,5 @@
 import type { Prize } from '@/app/actions/participant';
-
-const SUB_LABELS: Record<number, string> = {
-  1: 'Mejor suscriptor',
-  2: 'Segundo mejor suscriptor',
-  3: 'Tercer mejor suscriptor',
-  4: 'Cuarto mejor suscriptor',
-  5: 'Quinto mejor suscriptor',
-};
+import { getPrizeTargetLabel } from '@/activities/pickem/prizes/format';
 
 export function SubscriberBenefit({
   prizes,
@@ -27,8 +20,8 @@ export function SubscriberBenefit({
       </p>
 
       <div className="flex flex-col gap-1.5">
-        {prizes.map((p, i) => {
-          const label = SUB_LABELS[i + 1] ?? `${p.label} #${i + 1}`;
+        {prizes.map((p) => {
+          const label = getPrizeTargetLabel(null, p.subscriberOrder, 'subscriber_bonus') ?? '';
 
           return (
             <div

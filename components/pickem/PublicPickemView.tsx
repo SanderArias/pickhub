@@ -31,20 +31,22 @@ function formatDate(dateStr: string): string {
 
 function defToPrizeDisplay(d: { id: string; title: string; description: string | null; category: string; rankPosition: number | null; subscriberOrder: number | null; sortOrder: number; amount: number | null; currency: string | null }): Prize {
   const isGeneral = d.category === 'general_rank';
-  return {
-    id: d.id,
-    event_id: '',
-    label: d.title,
-    description: d.description,
-    amount: d.amount,
-    currency: d.currency,
-    quantity: 1,
-    eligibility_type: isGeneral ? 'all' : 'subscribers',
-    assignment_method: 'ranking',
-    eligible_rank_start: d.rankPosition ?? d.subscriberOrder ?? 1,
-    sort_order: d.sortOrder,
-    prize_category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
-  };
+    return {
+      id: d.id,
+      event_id: '',
+      label: d.title,
+      description: d.description,
+      amount: d.amount,
+      currency: d.currency,
+      quantity: 1,
+      eligibility_type: isGeneral ? 'all' : 'subscribers',
+      assignment_method: 'ranking',
+      eligible_rank_start: d.rankPosition ?? d.subscriberOrder ?? 1,
+      sort_order: d.sortOrder,
+      prize_category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
+      rankPosition: d.rankPosition,
+      subscriberOrder: d.subscriberOrder,
+    };
 }
 
 export function PublicPickemView({
@@ -74,6 +76,7 @@ export function PublicPickemView({
   resultStatus,
   sharedRank = null,
   canParticipate = true,
+  allAwards,
 }: {
   event: PublicEventData;
   players: EventPlayer[];
@@ -101,6 +104,7 @@ export function PublicPickemView({
   prizeStatuses?: Array<{ definitionId: string; status: string; label: string; amount: number | null; currency: string | null; category: string }>;
   resultStatus?: string | null;
   sharedRank?: number | null;
+  allAwards?: Array<{ profileId: string; prizeLabel: string; amount: number | null; currency: string | null }>;
 }) {
   const prizes = legacyPrizes ?? [];
   const generalDisplay = prizeConfiguration.generalPrizes.map(defToPrizeDisplay);
@@ -303,6 +307,9 @@ export function PublicPickemView({
             prizeStatuses={prizeStatuses}
             resultStatus={resultStatus}
             sharedRank={sharedRank}
+            showRanking={isCompleted}
+            showOfficialResults={isCompleted}
+            allAwards={allAwards}
           />
         </div>
 
@@ -311,7 +318,7 @@ export function PublicPickemView({
             {/* Scoring rules */}
             {hasTop8 && (
               <section className="flex flex-col gap-1.5">
-                <h3 className="text-sm font-semibold text-text-primary">C&oacute;mo se punt&uacute;a</h3>
+                <h3 className="text-sm font-semibold text-text-primary">Cómo se puntúa</h3>
                 <div className="flex flex-wrap gap-2">
                   <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
                     <span className="font-semibold text-purple-primary">+1</span>
@@ -319,11 +326,11 @@ export function PublicPickemView({
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
                     <span className="font-semibold text-purple-primary">+1</span>
-                    <span className="text-text-secondary">Posici&oacute;n exacta</span>
+                    <span className="text-text-secondary">Posición exacta</span>
                   </span>
                 </div>
                 <p className="text-xs text-text-muted">
-                  M&aacute;ximo: {activePlayers.length * 2} pts
+                  Máximo: {activePlayers.length * 2} pts
                 </p>
               </section>
             )}
@@ -333,7 +340,7 @@ export function PublicPickemView({
               <div className="flex flex-col gap-6">
                 {leaderboard.length > 0 && (
                   <section className="flex flex-col gap-3">
-                    <h2 className="text-sm font-semibold text-text-primary">Clasificaci&oacute;n</h2>
+                    <h2 className="text-sm font-semibold text-text-primary">Clasificación</h2>
                     <div className="rounded-lg border border-border bg-surface p-4">
                       {leaderboard.map((entry) => {
                         const isMe = entry.profile_id === myProfileId;
@@ -344,7 +351,7 @@ export function PublicPickemView({
                             </span>
                             <span className={`text-sm ${isMe ? 'font-medium text-purple-primary' : 'text-text-primary'}`}>
                               {entry.display_name ?? 'Participante'}
-                              {isMe && <span className="ml-1 text-xs text-purple-primary">(t&uacute;)</span>}
+                              {isMe && <span className="ml-1 text-xs text-purple-primary">(tú)</span>}
                             </span>
                             <span className="ml-auto text-sm font-semibold text-text-primary">
                               {entry.total_score} pts
@@ -404,14 +411,14 @@ export function PublicPickemView({
       {!isAuthenticated && (
         <section className="rounded-xl border border-border bg-surface p-6 text-center">
           <p className="mb-4 text-sm text-text-secondary">
-            Inicia sesi&oacute;n con Twitch para participar.
+            Inicia sesión con Twitch para participar.
           </p>
           <form action={signInWithTwitch}>
             <button
               type="submit"
               className="rounded-lg bg-purple-primary px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600"
             >
-              Iniciar sesi&oacute;n con Twitch
+              Iniciar sesión con Twitch
             </button>
           </form>
         </section>
@@ -421,7 +428,7 @@ export function PublicPickemView({
       {isAuthenticated && !mySubmission && !isClosed && !canParticipate && (
         <section className="rounded-xl border border-warning-border bg-warning-bg p-6 text-center">
           <p className="text-sm text-warning">
-            Las nuevas participaciones est&aacute;n temporalmente deshabilitadas.
+            Las nuevas participaciones están temporalmente deshabilitadas.
           </p>
           <p className="mt-1 text-xs text-text-muted">
             Tus participaciones anteriores y resultados siguen disponibles.

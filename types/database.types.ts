@@ -1468,6 +1468,10 @@ export type Database = {
         Args: { p_profile_id: string }
         Returns: boolean
       }
+      apply_pickem_prize_assignments: {
+        Args: { p_event_id: string; p_assignments: Json }
+        Returns: undefined
+      }
       is_event_creator: { Args: { p_event_id: string }; Returns: boolean }
       sync_twitch_from_auth: {
         Args: { profile_id: string }

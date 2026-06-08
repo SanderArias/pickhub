@@ -30,11 +30,11 @@ export function OfficialResultsTab({ results }: { results: OfficialResultEntry[]
         <div>
           <h2 className="text-sm font-semibold text-text-primary">Resultados oficiales</h2>
           <p className="mt-0.5 text-xs text-text-muted">
-            Clasificaci&oacute;n final de los jugadores del evento.
+            Clasificación de los jugadores del evento.
           </p>
         </div>
         <div className="rounded-lg border border-border bg-surface p-8 text-center">
-          <p className="text-sm text-text-muted">Los resultados oficiales a&uacute;n no est&aacute;n disponibles.</p>
+          <p className="text-sm text-text-muted">Los resultados oficiales aún no están disponibles.</p>
         </div>
       </div>
     );
@@ -45,7 +45,7 @@ export function OfficialResultsTab({ results }: { results: OfficialResultEntry[]
       <div>
         <h2 className="text-sm font-semibold text-text-primary">Resultados oficiales</h2>
         <p className="mt-0.5 text-xs text-text-muted">
-          Clasificaci&oacute;n final de los jugadores del evento.
+          Clasificación de los jugadores del evento.
         </p>
       </div>
 

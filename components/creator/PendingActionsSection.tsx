@@ -99,7 +99,7 @@ export function PendingActionsSection({
   if (items.length === 0) {
     return (
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-text-primary">Requieren atenci&oacute;n</h2>
+        <h2 className="text-sm font-semibold text-text-primary">Requieren atención</h2>
         <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-5 py-4">
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-success/10 text-success">
             <svg className="size-4" viewBox="0 0 16 16" fill="none">
@@ -108,7 +108,7 @@ export function PendingActionsSection({
             </svg>
           </span>
           <div>
-            <p className="text-sm font-medium text-text-primary">Todo est&aacute; al d&iacute;a</p>
+            <p className="text-sm font-medium text-text-primary">Todo está al día</p>
             <p className="text-xs text-text-muted">No tienes acciones pendientes en este momento.</p>
           </div>
         </div>
@@ -118,7 +118,7 @@ export function PendingActionsSection({
 
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold text-text-primary">Requieren atenci&oacute;n</h2>
+      <h2 className="text-sm font-semibold text-text-primary">Requieren atención</h2>
       <div className="flex flex-col gap-2">
         {items.map((item) => {
           const config = ACTION_CONFIG[item.actionType];

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { publishResultsAndCalculateScores } from '@/app/actions/scoring';
+import { useRouter } from 'next/navigation';
+import { publishResultsAndCalculateScores, type PublishResultsOutcome } from '@/app/actions/scoring';
 import { Top8OfficialResults } from '@/components/pickem/Top8OfficialResults';
 import { ConfirmActionModal } from '@/components/pickem/ConfirmActionModal';
 
@@ -41,6 +42,7 @@ interface ResultsSectionProps {
 }
 
 export function ResultsSection({ eventId, predictions, existingResults, status, players, onPublished }: ResultsSectionProps) {
+  const router = useRouter();
   const activePredictions = predictions.filter((p) => p.is_active !== false);
 
   const initialSelection = () => {
@@ -99,6 +101,7 @@ export function ResultsSection({ eventId, predictions, existingResults, status, 
   const doPublish = useCallback(async () => {
     setPublishing(true);
     setError(null);
+    setShowConfirm(false);
 
     const standardQs = activePredictions.filter((p) => p.template_type !== 'top8_ordered');
     const standardResults: Record<string, string[]> = {};
@@ -116,20 +119,24 @@ export function ResultsSection({ eventId, predictions, existingResults, status, 
       }));
     }
 
-    const result = await publishResultsAndCalculateScores(eventId, standardResults, rankingResults);
-    setPublishing(false);
-    setShowConfirm(false);
+    console.info('[publish-results:client] calling server action', { eventId });
 
-    if (result.error) {
+    const result = await publishResultsAndCalculateScores(eventId, standardResults, rankingResults);
+
+    console.info('[publish-results:client-result]', result);
+
+    if (!result.success) {
+      setPublishing(false);
       setError(result.error);
-    } else if (onPublished) {
-      if (typeof onPublished === 'string') {
-        window.location.href = onPublished;
-      } else {
-        onPublished();
-      }
+      return;
     }
-  }, [eventId, selection, rankingSelection, activePredictions, onPublished]);
+
+    console.info('[publish-results:client] navigating to', result.redirectTo);
+
+    // Navigate — the publishing state stays true until the component unmounts
+    router.replace(result.redirectTo);
+    router.refresh();
+  }, [eventId, selection, rankingSelection, activePredictions, router]);
 
   if (activePredictions.length === 0) {
     return <p className="text-sm text-text-muted">No hay predicciones activas en este Pick'em.</p>;
@@ -258,8 +265,48 @@ export function ResultsSection({ eventId, predictions, existingResults, status, 
         </section>
       )}
 
+      {/* Processing overlay */}
+      {canEditResults && publishing && (
+        <div className="rounded-xl border border-border bg-surface p-8">
+          <div className="flex flex-col items-center gap-4 text-center">
+            <svg className="size-8 animate-spin text-purple-primary" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeOpacity="0.2" />
+              <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            </svg>
+            <div>
+              <h3 className="text-sm font-semibold text-text-primary">Publicando resultados</h3>
+              <p className="mt-1 text-xs text-text-secondary">
+                Estamos calculando la clasificación y preparando los premios.
+              </p>
+            </div>
+            <div className="mt-1 space-y-1">
+              {[
+                { label: 'Resultados oficiales', done: true },
+                { label: 'Puntuaciones', done: false },
+                { label: 'Clasificación', done: false },
+                { label: 'Empates', done: false },
+                { label: 'Premios', done: false },
+              ].map((step) => (
+                <div key={step.label} className="flex items-center gap-1.5 text-xs text-text-secondary">
+                  {step.done ? (
+                    <svg className="size-3 text-success shrink-0" viewBox="0 0 16 16" fill="none">
+                      <path d="M4 8L6.5 10.5L12 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  ) : (
+                    <svg className="size-3 text-text-muted shrink-0 animate-pulse" viewBox="0 0 16 16" fill="none">
+                      <circle cx="8" cy="8" r="3" fill="currentColor" />
+                    </svg>
+                  )}
+                  {step.label}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Validation block */}
-      {canEditResults && (
+      {canEditResults && !publishing && (
         <div className="rounded-xl border border-border bg-surface p-5">
           <div className="flex items-start gap-3">
             {top8Prediction && (
@@ -326,10 +373,10 @@ export function ResultsSection({ eventId, predictions, existingResults, status, 
             <button
               type="button"
               onClick={() => setShowConfirm(true)}
-              disabled={publishing || !hasAnySelection}
+              disabled={!hasAnySelection}
               className="w-full sm:w-auto rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
             >
-              {publishing ? 'Publicando...' : 'Publicar resultados'}
+              Publicar resultados
             </button>
           </div>
         </div>
@@ -337,7 +384,15 @@ export function ResultsSection({ eventId, predictions, existingResults, status, 
 
       {/* Error */}
       {error && (
-        <p className="text-xs text-red-400">{error}</p>
+        <div className="rounded-lg border border-danger/30 bg-danger/[0.03] px-4 py-3 text-sm text-danger">
+          <p className="font-medium">No pudimos publicar los resultados.</p>
+          <p className="mt-1 text-xs opacity-80">
+            Tus selecciones se mantienen. Inténtalo nuevamente.
+          </p>
+          {error && (
+            <p className="mt-1 text-xs opacity-60">{error}</p>
+          )}
+        </div>
       )}
 
       {/* Confirmation modal */}

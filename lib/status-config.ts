@@ -25,9 +25,9 @@ export const SUBMITTED_PREDICTION_STATUS_CONFIG: Record<string, SubmittedStatusC
     tone: 'success',
   },
   predictions_closed: {
-    label: 'Predicción enviada',
+    label: 'Predicciones cerradas',
     description: 'Tu Top 8 quedó registrado correctamente.',
-    contextualMessage: 'Las predicciones ya están cerradas. Tu selección quedó bloqueada.',
+    contextualMessage: 'A espera de los resultados oficiales.',
     tone: 'warning',
   },
   completed: {

@@ -25,13 +25,17 @@ export function ParticipantMyPicksTab({ picks }: ParticipantMyPicksTabProps) {
     );
   }
 
+  const hasScoring = picks.some((p) => p.points > 0 || p.hasPresence || p.hasExactPosition);
+
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-sm font-semibold text-text-primary">Tu selección</h2>
-        <p className="mt-0.5 text-xs text-text-muted">
-          Cada pick muestra los puntos que aportó a tu puntuación final.
-        </p>
+        <h2 className="text-sm font-semibold text-text-primary">Mi selección</h2>
+        {hasScoring && (
+          <p className="mt-0.5 text-xs text-text-muted">
+            Cada pick muestra los puntos que aportó a tu puntuación final.
+          </p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -40,7 +44,7 @@ export function ParticipantMyPicksTab({ picks }: ParticipantMyPicksTabProps) {
             ? { label: 'Posición exacta', style: 'bg-green-500/15 text-green-400' }
             : pick.hasPresence
               ? { label: 'Top acertado', style: 'bg-blue-500/15 text-blue-400' }
-              : { label: 'Sin acierto', style: 'bg-surface-hover text-text-muted' };
+              : null;
 
           return (
             <div
@@ -67,32 +71,33 @@ export function ParticipantMyPicksTab({ picks }: ParticipantMyPicksTabProps) {
                     {pick.playerName}
                   </p>
                 </div>
-                <p className="mt-0.5 text-xs text-text-muted">
-                  {pick.officialPosition !== null
-                    ? `Resultado real: ${pick.officialPosition}.º`
-                    : 'Resultado real: No clasificó'}
-                </p>
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="inline-flex items-center gap-1 rounded-md border border-purple-primary/30 bg-purple-primary/[0.04] px-2 py-0.5 text-xs font-semibold text-purple-primary">
-                  +{pick.points} pt{pick.points !== 1 ? 's' : ''}
-                </span>
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.style}`}>
-                  {badge.label}
-                </span>
-              </div>
+              {hasScoring && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="inline-flex items-center gap-1 rounded-md border border-purple-primary/30 bg-purple-primary/[0.04] px-2 py-0.5 text-xs font-semibold text-purple-primary">
+                    +{pick.points} pt{pick.points !== 1 ? 's' : ''}
+                  </span>
+                  {badge && (
+                    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.style}`}>
+                      {badge.label}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      <div className="rounded-lg border border-border bg-surface px-4 py-3">
-        <p className="text-xs text-text-muted">
-          <span className="font-medium text-purple-primary">+1</span> Jugador correcto dentro del Top 8{' · '}
-          <span className="font-medium text-purple-primary">+1</span> Posición exacta
-        </p>
-      </div>
+      {hasScoring && (
+        <div className="rounded-lg border border-border bg-surface px-4 py-3">
+          <p className="text-xs text-text-muted">
+            <span className="font-medium text-purple-primary">+1</span> Jugador correcto dentro del Top 8{' · '}
+            <span className="font-medium text-purple-primary">+1</span> Posición exacta
+          </p>
+        </div>
+      )}
     </section>
   );
 }

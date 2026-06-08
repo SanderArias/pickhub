@@ -23,6 +23,10 @@ export default async function PickemResultsPage({
     redirect(`/creator/pickems/${id}?tab=summary`);
   }
 
+  if (event.status === 'tiebreaker_pending') {
+    redirect(`/creator/pickems/${id}`);
+  }
+
   if (event.status === 'open') {
     return (
       <div className="flex flex-col gap-6">

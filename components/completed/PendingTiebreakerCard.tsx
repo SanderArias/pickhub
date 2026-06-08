@@ -39,7 +39,7 @@ export function PendingTiebreakerCard({ group, onResolve }: PendingTiebreakerCar
         </div>
 
         <p className="mb-4 text-xs text-text-muted">
-          La posici&oacute;n final se decidir&aacute; mediante un sorteo.
+          La posición final se decidirá mediante un sorteo.
         </p>
 
         <button

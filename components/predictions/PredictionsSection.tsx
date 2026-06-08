@@ -281,7 +281,7 @@ export function PredictionsSection({
                 </span>
                 <span className="inline-flex items-center gap-1.5 rounded-md border border-border bg-surface px-2 py-1 text-xs">
                   <span className="font-semibold text-purple-primary">+1</span>
-                  <span className="text-text-secondary">Posici&oacute;n exacta</span>
+                  <span className="text-text-secondary">Posición exacta</span>
                 </span>
               </div>
               <p className="mt-2 text-xs text-text-muted">

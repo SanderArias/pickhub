@@ -89,15 +89,39 @@ export async function getTiebreakerDraws(eventId: string): Promise<Record<string
   return map;
 }
 
+export interface FinalizedDraw {
+  profile_id: string;
+  draw_order: number;
+}
+
+export type TiebreakerFinalizationResult =
+  | { success: true; status: 'completed'; remainingTiebreakers: 0; draws: FinalizedDraw[] }
+  | { success: true; status: 'tiebreaker_pending'; remainingTiebreakers: number; draws: FinalizedDraw[] }
+  | { success: false; error: string };
+
+/**
+ * Performs a random draw (Fisher-Yates shuffle) for a tied score group.
+ *
+ * Flow:
+ *   1. Validates the group requires manual tiebreaker
+ *   2. Checks that draws don't already exist (idempotent guard)
+ *   3. Generates shuffled order
+ *   4. Persists all tiebreaker_draws rows
+ *   5. Calls assignPickemPrizes with fresh data
+ *   6. Recalculates remaining manual groups
+ *   7. Updates event status
+ *   8. Revalidates paths
+ *   9. Returns discriminated result
+ */
 export async function performTiebreaker(
   eventId: string,
   score: number,
-): Promise<{ error: string | null; draws: TiebreakerDraw[] | null }> {
+): Promise<TiebreakerFinalizationResult> {
   const mgmtErr = checkPickemCapability('manageExisting');
-  if (mgmtErr) return { error: mgmtErr, draws: null };
+  if (mgmtErr) return { success: false, error: mgmtErr };
 
   const user = await getUser();
-  if (!user) return { error: 'Debes iniciar sesión.', draws: null };
+  if (!user) return { success: false, error: 'Debes iniciar sesión.' };
 
   const supabase = await createServerClient();
 
@@ -108,7 +132,7 @@ export async function performTiebreaker(
     .eq('id', eventId)
     .maybeSingle();
 
-  if (!event) return { error: 'Evento no encontrado.', draws: null };
+  if (!event) return { success: false, error: 'Evento no encontrado.' };
 
   // Find tied participants for this score
   const { data: submissions } = await supabase
@@ -119,7 +143,7 @@ export async function performTiebreaker(
     .eq('total_score', score);
 
   if (!submissions || submissions.length < 2) {
-    return { error: 'No hay suficientes participantes empatados.', draws: null };
+    return { success: false, error: 'No hay suficientes participantes empatados.' };
   }
 
   const participantIds = submissions.map((s) => s.participant_id);
@@ -130,11 +154,12 @@ export async function performTiebreaker(
     .in('id', participantIds);
 
   if (!participants || participants.length < 2) {
-    return { error: 'No hay suficientes participantes empatados.', draws: null };
+    return { success: false, error: 'No hay suficientes participantes empatados.' };
   }
 
-  // Check if draws already exist for this event+score group (idempotent)
   const profileIds = participants.map((p) => p.profile_id);
+
+  // Check if draws already exist for this event+score group (idempotent retry)
   const { data: existingDraws } = await supabase
     .from('tiebreaker_draws')
     .select('profile_id, draw_order')
@@ -143,17 +168,19 @@ export async function performTiebreaker(
 
   if (existingDraws && existingDraws.length > 0) {
     if (existingDraws.length === profileIds.length) {
-      // Draws already exist (idempotent retry) — still run finalization in case
-      // the previous call saved draws but prize assignment failed.
+      // Idempotent retry — draws already saved but prize assignment may have failed.
       const { finalizeEventAfterTiebreakers } = await import('./scoring');
       const finalResult = await finalizeEventAfterTiebreakers(eventId);
-      if (finalResult.error) {
-        return { error: finalResult.error, draws: null };
+      if (!finalResult.success) {
+        return finalResult;
       }
-      return { error: null, draws: existingDraws };
+      const draws = existingDraws.map((d) => ({ profile_id: d.profile_id, draw_order: d.draw_order }));
+      if (finalResult.status === 'completed') {
+        return { success: true as const, status: 'completed' as const, remainingTiebreakers: 0 as const, draws };
+      }
+      return { success: true as const, status: 'tiebreaker_pending' as const, remainingTiebreakers: finalResult.remainingTiebreakers, draws };
     }
-    // Inconsistent state: only some participants have draws — admin must resolve
-    return { error: 'El desempate tiene un estado inconsistente. Contacta al administrador.', draws: null };
+    return { success: false as const, error: 'El desempate tiene un estado inconsistente. Contacta al administrador.' };
   }
 
   // Fisher-Yates shuffle
@@ -170,22 +197,29 @@ export async function performTiebreaker(
     draw_order: i + 1,
   }));
 
+  console.info('[tiebreaker:draw-save]', {
+    eventId,
+    score,
+    participantIds: rows.map((r) => r.profile_id),
+    drawCount: rows.length,
+  });
+
   const { error: insErr } = await supabase
     .from('tiebreaker_draws')
     .insert(rows);
 
-  if (insErr) return { error: `Error al guardar sorteo: ${insErr.message}`, draws: null };
+  if (insErr) return { success: false, error: `Error al guardar sorteo: ${insErr.message}` };
 
-  // After successful draw, run prize assignment and finalization
+  // After successful draw, run prize assignment and finalization with FRESH data
   const { finalizeEventAfterTiebreakers } = await import('./scoring');
   const finalResult = await finalizeEventAfterTiebreakers(eventId);
-  if (finalResult.error) {
-    // Draw was saved but finalization failed — user must retry
-    return { error: finalResult.error, draws: null };
+  if (!finalResult.success) {
+    return finalResult;
   }
 
-  return {
-    error: null,
-    draws: rows.map((r) => ({ profile_id: r.profile_id, draw_order: r.draw_order })),
-  };
+  const draws = rows.map((r) => ({ profile_id: r.profile_id, draw_order: r.draw_order }));
+  if (finalResult.status === 'completed') {
+    return { success: true as const, status: 'completed' as const, remainingTiebreakers: 0 as const, draws };
+  }
+  return { success: true as const, status: 'tiebreaker_pending' as const, remainingTiebreakers: finalResult.remainingTiebreakers, draws };
 }

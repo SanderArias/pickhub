@@ -140,6 +140,7 @@ export function CompletedResultsClient({
             eventId={eventId}
             hasPendingTiebreakers={hasPending}
             hasPrizes={hasEventPrizes}
+            prizeAwards={summary?.prizeAwards}
           />
         </section>
 

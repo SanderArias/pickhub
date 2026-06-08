@@ -14,7 +14,7 @@ export function PredictionIntro({
           Arma tu Top {selectionLimit}
         </h2>
         <p className="text-sm text-text-secondary">
-          Ordena los jugadores del puesto 1 al {selectionLimit} seg&uacute;n tu predicci&oacute;n.
+          Ordena los jugadores del puesto 1 al {selectionLimit} según tu predicción.
         </p>
         <p className="text-xs text-text-muted">
           Arrastra o pulsa Agregar para completar tu ranking.
@@ -26,7 +26,7 @@ export function PredictionIntro({
           </span>
           <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
             <span className="font-semibold text-purple-primary">+1</span>
-            <span className="text-text-secondary">Posici&oacute;n exacta</span>
+            <span className="text-text-secondary">Posición exacta</span>
           </span>
         </div>
       </div>

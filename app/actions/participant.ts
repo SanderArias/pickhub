@@ -84,6 +84,8 @@ export interface Prize {
   eligible_rank_start: number;
   sort_order: number;
   prize_category: string | null;
+  rankPosition: number | null;
+  subscriberOrder: number | null;
 }
 
 export interface Answer {
@@ -836,7 +838,7 @@ export async function getParticipantOfficialResults(eventId: string): Promise<Of
 
 export type ParticipantResultStatus = 'pending' | 'provisional' | 'tiebreaker_pending' | 'finalized';
 
-export type ParticipantPrizeStatus = 'available' | 'pending_assignment' | 'won' | 'not_won' | 'on_hold_tiebreaker';
+export type ParticipantPrizeStatus = 'available' | 'pending_assignment' | 'won' | 'not_won' | 'on_hold_tiebreaker' | 'unassigned_no_eligible_winner' | 'assigned_to_other';
 
 export interface ParticipantPrizeViewModel {
   definitionId: string;
@@ -860,6 +862,12 @@ export interface ParticipantResultViewModel {
     isFinalWinner: boolean;
   };
   prizes: ParticipantPrizeViewModel[];
+  allAwards: Array<{
+    profileId: string;
+    prizeLabel: string;
+    amount: number | null;
+    currency: string | null;
+  }>;
 }
 
 /**
@@ -883,18 +891,24 @@ export async function getParticipantResultSummary(
     .eq('is_active', true)
     .order('sort_order', { ascending: true });
 
-  // 2. Prize awards for this participant
+  // 2. Prize awards via SECURITY DEFINER RPC (bypasses RLS)
   const defIds: string[] = (prizeDefs ?? []).map((p: any) => p.id);
   let myAwardDefIds = new Set<string>();
+  let noEligibleWinnerDefIds = new Set<string>();
   let awardWinnerMap = new Map<string, string | null>();
+  let rawAllAwards: Array<{ prize_definition_id: string; profile_id: string | null; assignment_status: string }> = [];
 
   if (defIds.length > 0) {
-    const { data: allAwards } = await db
-      .from('pickem_prize_awards')
-      .select('prize_definition_id, profile_id, assignment_status')
-      .in('prize_definition_id', defIds);
+    const { data: rpcAwards, error: rpcErr } = await (supabase.rpc as any)(
+      'get_pickem_prize_awards',
+      { p_event_id: eventId },
+    );
+    if (rpcErr) {
+      console.error('[pickem:participant-awards] RPC error', { eventId, code: rpcErr.code, message: rpcErr.message });
+    }
+    rawAllAwards = Array.isArray(rpcAwards) ? rpcAwards : [];
 
-    for (const a of (allAwards ?? []) as Array<{ prize_definition_id: string; profile_id: string | null; assignment_status: string }>) {
+    for (const a of rawAllAwards as Array<{ prize_definition_id: string; profile_id: string | null; assignment_status: string }>) {
       if (a.profile_id === profileId && a.assignment_status === 'assigned') {
         myAwardDefIds.add(a.prize_definition_id);
       }
@@ -903,12 +917,15 @@ export async function getParticipantResultSummary(
           awardWinnerMap.set(a.prize_definition_id, a.profile_id);
         }
       }
+      if (a.assignment_status === 'unassigned_no_eligible_winner') {
+        noEligibleWinnerDefIds.add(a.prize_definition_id);
+      }
     }
   }
 
   // 3. Leaderboard + score
   const { data: lb } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
-  const leaderboard = (lb ?? []) as Array<{
+  let leaderboard = (lb ?? []) as Array<{
     rank: number;
     profile_id: string;
     display_name: string | null;
@@ -917,70 +934,132 @@ export async function getParticipantResultSummary(
     total_questions: number;
   }>;
 
-  const myEntry = leaderboard.find((e) => e.profile_id === profileId) ?? null;
-
-  // 4. Detect ties
-  const { data: submissions } = await supabase
-    .from('submissions')
-    .select('total_score')
-    .eq('event_id', eventId)
-    .eq('status', 'scored');
-
-  const scoreCounts = new Map<number, number>();
-  for (const s of submissions ?? []) {
-    if (s.total_score === null) continue;
-    scoreCounts.set(s.total_score, (scoreCounts.get(s.total_score) ?? 0) + 1);
-  }
-
-  // Compute shared rank: within the same score group, use the lowest rank
-  let sharedRank: number | null = null;
-  if (myEntry && scoreCounts.get(myEntry.total_score ?? -1)! > 1) {
-    const minRank = Math.min(
-      ...leaderboard
-        .filter((e) => e.total_score === myEntry.total_score)
-        .map((e) => e.rank),
-    );
-    sharedRank = minRank;
-  }
-
-  // 5. Tiebreaker draws
+  // Apply draw reordering matching getLeaderboard() logic
   const { data: draws } = await supabase
     .from('tiebreaker_draws')
     .select('profile_id, draw_order')
     .eq('event_id', eventId);
 
-  // Determine if the participant's OWN score group has draws (not global)
-  const sameScorePids = leaderboard
-    .filter((e) => e.total_score === myEntry?.total_score)
-    .map((e) => e.profile_id);
-  const drawsForMyGroup = (draws ?? []).filter((d) => sameScorePids.includes(d.profile_id));
-  const myGroupHasDraws = drawsForMyGroup.length > 0;
+  const drawMap = new Map((draws ?? []).map((d) => [d.profile_id, d.draw_order]));
+  if (draws && draws.length > 0) {
+    const byScore = new Map<number, typeof leaderboard>();
+    for (const e of leaderboard) {
+      const g = byScore.get(e.total_score) ?? [];
+      g.push(e);
+      byScore.set(e.total_score, g);
+    }
+    const reordered: typeof leaderboard = [];
+    for (const score of [...byScore.keys()].sort((a, b) => b - a)) {
+      const group = byScore.get(score)!;
+      const hasDraws = group.some((e) => drawMap.has(e.profile_id));
+      if (hasDraws) {
+        group.sort((a, b) => (drawMap.get(a.profile_id) ?? 999) - (drawMap.get(b.profile_id) ?? 999));
+      }
+      reordered.push(...group);
+    }
+    reordered.forEach((e, i) => { e.rank = i + 1; });
+    leaderboard = reordered;
+  }
 
-  const participantScore = myEntry?.total_score ?? null;
-  const isInTiedScoreGroup = participantScore !== null && (scoreCounts.get(participantScore) ?? 1) > 1;
-  const isInPendingTiebreaker = isInTiedScoreGroup && !myGroupHasDraws;
+  const myEntry = leaderboard.find((e) => e.profile_id === profileId) ?? null;
 
-  // 6. Event status
+  // 4. Event status
   const { data: event } = await supabase
     .from('events')
     .select('status')
     .eq('id', eventId)
-    .single();
+    .maybeSingle();
 
   const eventStatus = event?.status ?? 'unknown';
-  const isCompleted = eventStatus === 'completed' || eventStatus === 'tiebreaker_pending';
+
+  const drawProfileIds = new Set((draws ?? []).map((d) => d.profile_id));
+
+  // 5. Build score groups from the leaderboard and detect ties
+  //    Group ALL entries by total_score to find ties regardless of RPC row_number
+  const scoreGroups = new Map<number, { profileIds: string[]; ranks: number[] }>();
+  for (const e of leaderboard) {
+    const group = scoreGroups.get(e.total_score) ?? { profileIds: [], ranks: [] };
+    group.profileIds.push(e.profile_id);
+    group.ranks.push(e.rank);
+    scoreGroups.set(e.total_score, group);
+  }
+
+  // Determine if a score group affects prizes by checking prize definitions
+  const affectedPrizeRanks = new Set<number>();
+  let hasSubscriberBenefits = false;
+  for (const d of prizeDefs ?? []) {
+    if (d.category === 'general_rank' && d.rank_position != null) {
+      affectedPrizeRanks.add(d.rank_position);
+    }
+    if (d.category === 'subscriber_benefit' && d.subscriber_order != null) {
+      hasSubscriberBenefits = true;
+    }
+  }
+
+  // Find the participant's tie group (if any)
+  let participantTieGroup: {
+    score: number;
+    profileIds: string[];
+    tiedAtRank: number;
+    affectedRanks: number[];
+    requiresManualTiebreaker: boolean;
+  } | null = null;
+
+  if (myEntry) {
+    for (const [score, group] of scoreGroups) {
+      if (group.profileIds.length < 2) continue;
+      if (!group.profileIds.includes(myEntry.profile_id)) continue;
+
+      const tiedAtRank = Math.min(...group.ranks);
+      const affectedRanks: number[] = [];
+      for (let i = 0; i < group.profileIds.length; i++) {
+        affectedRanks.push(tiedAtRank + i);
+      }
+
+      const affectsGeneral = affectedRanks.some((r) => affectedPrizeRanks.has(r));
+      const affectsSubBenefit = hasSubscriberBenefits && group.profileIds.some(
+        (pid) => leaderboard.find((e) => e.profile_id === pid),
+      );
+      const requiresManual = affectsGeneral || affectsSubBenefit;
+
+      participantTieGroup = {
+        score,
+        profileIds: group.profileIds,
+        tiedAtRank,
+        affectedRanks,
+        requiresManualTiebreaker: requiresManual,
+      };
+      break;
+    }
+  }
+
+  const isInPendingManualTie =
+    participantTieGroup !== null &&
+    participantTieGroup.requiresManualTiebreaker &&
+    !participantTieGroup.profileIds.every((pid) => drawProfileIds.has(pid));
+
+  // sharedRank is only meaningful when the tie is still unresolved
+  const sharedRank =
+    (isInPendingManualTie || (eventStatus === 'tiebreaker_pending' && participantTieGroup !== null))
+      ? participantTieGroup!.tiedAtRank
+      : null;
 
   // 7. Determine result status
   let resultStatus: ParticipantResultStatus;
   let isFinalWinner = false;
 
-  if (isInPendingTiebreaker) {
+  if (isInPendingManualTie) {
     resultStatus = 'tiebreaker_pending';
-  } else if (isCompleted) {
+  } else if (eventStatus === 'tiebreaker_pending' && participantTieGroup !== null) {
+    // Event is in tiebreaker state and this participant IS in a tie group
+    resultStatus = 'tiebreaker_pending';
+  } else if (eventStatus === 'completed') {
     resultStatus = 'finalized';
-    if (myEntry && myEntry.rank === 1 && !isInTiedScoreGroup) {
+    if (myEntry && myEntry.rank === 1 && participantTieGroup === null) {
       isFinalWinner = true;
     }
+  } else if (eventStatus === 'tiebreaker_pending') {
+    resultStatus = 'finalized';
   } else if (myEntry) {
     resultStatus = 'provisional';
   } else {
@@ -1000,7 +1079,7 @@ export async function getParticipantResultSummary(
   interface ParticipantPrizeViewModelPrize extends ParticipantPrizeViewModel {} // eslint-disable-line
 
   const result: ParticipantResultViewModelResult = {
-    rank: myEntry?.rank ?? null,
+    rank: isInPendingManualTie ? null : myEntry?.rank ?? null,
     sharedRank,
     total_score: myEntry?.total_score ?? null,
     correct_answers: myEntry?.correct_answers ?? 0,
@@ -1009,20 +1088,51 @@ export async function getParticipantResultSummary(
     isFinalWinner,
   };
 
+  const isEventCompleted = eventStatus === 'completed' || eventStatus === 'tiebreaker_pending';
+
+  // Load profile names for award winners
+  const winnerProfileIds = [...new Set(awardWinnerMap.values())].filter((id): id is string => id != null);
+  const { data: winnerProfiles } = winnerProfileIds.length > 0
+    ? await supabase.from('profiles').select('id, display_name').in('id', winnerProfileIds)
+    : { data: [] };
+  const winnerNameMap = new Map((winnerProfiles ?? []).map((p: any) => [p.id, p.display_name]));
+
+  // Determine per-definition blocking to avoid globally marking all as on_hold
+  const defBlockedByPendingTie = new Set<string>();
+  if (!isInPendingManualTie && participantTieGroup) {
+    // Even after draws exist, check if this participant's definitions are
+    // blocked by a group that hasn't been finalized to completed yet
+  }
+  if (isInPendingManualTie) {
+    // All definitions are blocked
+    const allDefIds = (prizeDefs ?? []).map((p: any) => p.id);
+    for (const id of allDefIds) defBlockedByPendingTie.add(id);
+  }
+
   const prizes: ParticipantPrizeViewModel[] = (prizeDefs ?? []).map((d: any) => {
     const isGeneral = d.category === 'general_rank';
-    let status: ParticipantPrizeStatus = 'available';
+    let status: ParticipantPrizeStatus;
 
-    if (isInPendingTiebreaker) {
-      status = 'on_hold_tiebreaker' as ParticipantPrizeStatus;
-    } else if (myAwardDefIds.has(d.id)) {
+    if (myAwardDefIds.has(d.id)) {
       status = 'won';
-    } else if (isCompleted) {
-      status = 'not_won';
+    } else if (noEligibleWinnerDefIds.has(d.id)) {
+      status = 'unassigned_no_eligible_winner';
+    } else if (eventStatus === 'completed') {
+      if (awardWinnerMap.has(d.id)) {
+        status = 'assigned_to_other';
+      } else {
+        status = 'not_won';
+      }
+    } else if (defBlockedByPendingTie.has(d.id) || isInPendingManualTie) {
+      status = 'on_hold_tiebreaker';
+    } else {
+      status = 'available';
     }
 
     const winnerId = awardWinnerMap.get(d.id) ?? null;
-    const winnerName = winnerId && winnerId !== profileId ? winnerId : null;
+    const winnerName = winnerId && winnerId !== profileId
+      ? (winnerNameMap.get(winnerId) ?? null)
+      : null;
 
     return {
       definitionId: d.id,
@@ -1036,5 +1146,21 @@ export async function getParticipantResultSummary(
     };
   });
 
-  return { result, prizes };
+  // Build full award list for ranking tab (all participants' assigned prizes)
+  const defInfoMap = new Map<string, { title: string; amount: number | null; currency: string | null }>(
+    (prizeDefs ?? []).map((d: any) => [d.id, { title: d.title ?? 'Premio', amount: d.amount ?? null, currency: d.currency ?? null }])
+  );
+  const allAwards: ParticipantResultViewModel['allAwards'] = rawAllAwards
+    .filter((a) => a.assignment_status === 'assigned' && a.profile_id)
+    .map((a) => {
+      const info = defInfoMap.get(a.prize_definition_id);
+      return {
+        profileId: a.profile_id!,
+        prizeLabel: info?.title ?? 'Premio',
+        amount: info?.amount ?? null,
+        currency: info?.currency ?? null,
+      };
+    });
+
+  return { result, prizes, allAwards };
 }

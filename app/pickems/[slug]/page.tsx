@@ -45,6 +45,8 @@ export default async function PickemPublicPage({
       eligible_rank_start: d.rankPosition ?? d.subscriberOrder ?? 1,
       sort_order: d.sortOrder,
       prize_category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
+      rankPosition: d.rankPosition,
+      subscriberOrder: d.subscriberOrder,
     };
   }
 
@@ -104,9 +106,9 @@ export default async function PickemPublicPage({
     .map(([pid]) => pid);
 
   const myEntry = leaderboard.find((e) => e.profile_id === user?.id) ?? null;
-  const isTiebreakerWinner = myEntry ? tiebreakerWinners.includes(myEntry.profile_id) : false;
-  const hasResolvedTies = Object.keys(drawsMap).length > 0;
-  const isTiebreakerPending = participantSummary?.result.resultStatus === 'tiebreaker_pending';
+  const isTiebreakerPending = event.status === 'tiebreaker_pending' || participantSummary?.result.resultStatus === 'tiebreaker_pending';
+  const isTiebreakerWinner = isTiebreakerPending ? false : myEntry ? tiebreakerWinners.includes(myEntry.profile_id) : false;
+  const hasResolvedTies = !isTiebreakerPending && Object.keys(drawsMap).length > 0;
   const resultStatus = participantSummary?.result.resultStatus;
   const sharedRank = participantSummary?.result.sharedRank ?? null;
 
@@ -120,7 +122,7 @@ export default async function PickemPublicPage({
     points: number;
   }> = [];
 
-  if (result.mySubmission && isCompleted) {
+  if (result.mySubmission) {
     const top8Q = result.predictions.find((q) => q.template_type === 'top8_ordered');
     const top8Answers = top8Q
       ? result.mySubmission.answers
@@ -129,46 +131,62 @@ export default async function PickemPublicPage({
       : [];
 
     if (top8Answers.length > 0) {
-      const supabase = await createServerClient();
-      const { data: correctResults } = await supabase
-        .from('prediction_results')
-        .select('option_id, position')
-        .eq('event_id', event.id)
-        .eq('question_id', top8Q!.id)
-        .eq('is_correct', true);
-
-      const officialPositions = new Map<string, number>(
-        (correctResults ?? []).filter((r): r is typeof r & { position: number } => r.position !== null).map((r) => [r.option_id, r.position]),
-      );
-      const officialOptionIds = new Set(officialPositions.keys());
-
       const activePlayers = result.players.filter((p) => p.is_active);
       const playerLookup = new Map(activePlayers.map((p) => [p.id, p.country_code]));
       const optionPlayerLookup = new Map(
         top8Q!.options.map((o) => [o.id, { name: o.label, playerId: o.player_id }]),
       );
 
-      enrichedPicks = top8Answers.map((a) => {
-        const opt = optionPlayerLookup.get(a.option_id);
-        const countryCode = opt?.playerId ? playerLookup.get(opt.playerId) ?? null : null;
-        const officialPos = officialPositions.get(a.option_id) ?? null;
-        const hasPresence = officialOptionIds.has(a.option_id);
-        const hasExactPosition = officialPos !== null && officialPos === a.position;
-        const points = (hasPresence ? 1 : 0) + (hasExactPosition ? 1 : 0);
-        return {
-          position: a.position ?? 0,
-          playerName: opt?.name ?? '—',
-          countryCode,
-          officialPosition: officialPos,
-          hasPresence,
-          hasExactPosition,
-          points,
-        };
-      });
+      if (isCompleted) {
+        const supabase = await createServerClient();
+        const { data: correctResults } = await supabase
+          .from('prediction_results')
+          .select('option_id, position')
+          .eq('event_id', event.id)
+          .eq('question_id', top8Q!.id)
+          .eq('is_correct', true);
+
+        const officialPositions = new Map<string, number>(
+          (correctResults ?? []).filter((r): r is typeof r & { position: number } => r.position !== null).map((r) => [r.option_id, r.position]),
+        );
+        const officialOptionIds = new Set(officialPositions.keys());
+
+        enrichedPicks = top8Answers.map((a) => {
+          const opt = optionPlayerLookup.get(a.option_id);
+          const countryCode = opt?.playerId ? playerLookup.get(opt.playerId) ?? null : null;
+          const officialPos = officialPositions.get(a.option_id) ?? null;
+          const hasPresence = officialOptionIds.has(a.option_id);
+          const hasExactPosition = officialPos !== null && officialPos === a.position;
+          const points = (hasPresence ? 1 : 0) + (hasExactPosition ? 1 : 0);
+          return {
+            position: a.position ?? 0,
+            playerName: opt?.name ?? '—',
+            countryCode,
+            officialPosition: officialPos,
+            hasPresence,
+            hasExactPosition,
+            points,
+          };
+        });
+      } else {
+        enrichedPicks = top8Answers.map((a) => {
+          const opt = optionPlayerLookup.get(a.option_id);
+          const countryCode = opt?.playerId ? playerLookup.get(opt.playerId) ?? null : null;
+          return {
+            position: a.position ?? 0,
+            playerName: opt?.name ?? '—',
+            countryCode,
+            officialPosition: null,
+            hasPresence: false,
+            hasExactPosition: false,
+            points: 0,
+          };
+        });
+      }
     }
   }
 
-  const isTiebreakerLoser = hasResolvedTies && myEntry
+  const isTiebreakerLoser = !isTiebreakerPending && hasResolvedTies && myEntry
     ? tiebreakerWinners.length > 0 && !isTiebreakerWinner
     : false;
 
@@ -201,6 +219,7 @@ export default async function PickemPublicPage({
         prizeStatuses={prizeStatuses}
         resultStatus={resultStatus}
         sharedRank={sharedRank}
+        allAwards={participantSummary?.allAwards}
       />
     </div>
   );

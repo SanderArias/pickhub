@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
-import type { PaginatedRanking } from '@/activities/pickem/actions/results-data';
+import type { PaginatedRanking, PrizeAwardEntry } from '@/activities/pickem/actions/results-data';
 import { getFinalRanking } from '@/activities/pickem/actions/results-data';
 import { RankingTable, RankingTableSkeleton } from './RankingTable';
 
@@ -10,10 +10,12 @@ export function FinalRankingTab({
   eventId,
   hasPendingTiebreakers,
   hasPrizes: hasEventPrizes,
+  prizeAwards,
 }: {
   eventId: string;
   hasPendingTiebreakers?: boolean;
   hasPrizes?: boolean;
+  prizeAwards?: PrizeAwardEntry[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -32,12 +34,28 @@ export function FinalRankingTab({
       setLoading(true);
       const result = await getFinalRanking(eventId, currentPage, 50, currentQuery);
       if (!cancelled) {
+        // Override prizes with summary data (source of truth, bypasses RLS)
+        if (prizeAwards && prizeAwards.length > 0) {
+          const map = new Map<string, string[]>();
+          for (const a of prizeAwards) {
+            if (a.award_status === 'assigned' && a.profile_id && a.prize_label) {
+              const list = map.get(a.profile_id) ?? [];
+              const label = a.prize_amount != null ? `${a.prize_label} · ${a.prize_amount.toLocaleString('es-ES')} ${a.prize_currency ?? 'USD'}` : a.prize_label;
+              list.push(label);
+              map.set(a.profile_id, list);
+            }
+          }
+          result.entries = result.entries.map((e) => ({
+            ...e,
+            prizes: map.get(e.profile_id) ?? [],
+          }));
+        }
         setData(result);
         setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [eventId, currentPage, currentQuery]);
+  }, [eventId, currentPage, currentQuery, prizeAwards]);
 
   function updateUrl(params: Record<string, string | undefined>) {
     const sp = new URLSearchParams(searchParams.toString());

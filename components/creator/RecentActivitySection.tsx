@@ -57,7 +57,7 @@ export function RecentActivitySection({
             >
               <p className="min-w-0 truncate text-sm text-text-primary">
                 <span className="font-semibold">{a.display_name ?? 'Un participante'}</span>
-                <span className="text-text-muted"> particip&oacute; en </span>
+                <span className="text-text-muted"> participó en </span>
                 {a.event_title ? (
                   <span className="font-semibold">{a.event_title}</span>
                 ) : (

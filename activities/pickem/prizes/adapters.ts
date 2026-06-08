@@ -1,4 +1,5 @@
 import type { PrizeConfiguration, PrizeDefinition, SavePrizeConfigurationPayload } from './types';
+import { normalizePrizeMoney } from './prize-money';
 
 // UI-facing model for PrizeSection
 export interface PrizeSectionModel {
@@ -80,44 +81,35 @@ export interface PrizeSectionSaveState {
   stackingPolicy: string;
 }
 
-function parseAmount(s: string): number | null {
-  const trimmed = s.trim();
-  if (trimmed.length === 0) return null;
-  const n = Number(trimmed);
-  return Number.isFinite(n) ? n : null;
-}
-
 export function mapSectionStateToSavePayload(
   eventId: string,
   state: PrizeSectionSaveState,
 ): SavePrizeConfigurationPayload {
   const stackingPolicy = (REVERSE_STACKING_POLICY_MAP[state.stackingPolicy] ?? 'allow_both') as 'allow_both' | 'pass_subscriber_benefit';
 
-  const generalDefs = state.generalPrizes.map((p) => ({
-    clientId: p.localId,
-    id: p.persistedId ?? undefined,
-    category: 'general_rank' as const,
-    rankPosition: p.rank,
-    subscriberOrder: null,
-    title: p.label.trim(),
-    description: p.description || null,
-    amount: parseAmount(p.amount),
-    currency: p.currency.trim() || null,
-    sortOrder: p.rank,
-  }));
+  const mapDraft = (p: PrizeSectionSaveState['generalPrizes'][number], category: 'general_rank' | 'subscriber_benefit', rankPosition: number | null, subscriberOrder: number | null, sortOrder: number) => {
+    const money = normalizePrizeMoney(p.amount, p.currency);
+    return {
+      clientId: p.localId,
+      id: p.persistedId ?? undefined,
+      category,
+      rankPosition,
+      subscriberOrder,
+      title: p.label.trim(),
+      description: p.description || null,
+      amount: money.amount,
+      currency: money.currency,
+      sortOrder,
+    };
+  };
 
-  const subDefs = state.subPrizes.map((p) => ({
-    clientId: p.localId,
-    id: p.persistedId ?? undefined,
-    category: 'subscriber_benefit' as const,
-    rankPosition: null,
-    subscriberOrder: p.rank,
-    title: p.label.trim(),
-    description: p.description || null,
-    amount: parseAmount(p.amount),
-    currency: p.currency.trim() || null,
-    sortOrder: 1000 + p.rank,
-  }));
+  const generalDefs = state.generalPrizes.map((p) =>
+    mapDraft(p, 'general_rank', p.rank, null, p.rank),
+  );
+
+  const subDefs = state.subPrizes.map((p) =>
+    mapDraft(p, 'subscriber_benefit', null, p.rank, 1000 + p.rank),
+  );
 
   return {
     eventId,

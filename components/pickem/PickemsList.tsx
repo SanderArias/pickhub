@@ -324,7 +324,7 @@ function PickemListItem({ pickem }: { pickem: PickemItem }) {
         </div>
         <div className="mt-1 flex items-center gap-3 text-xs text-text-muted">
           <span>
-            {pickem.submissionCount} participaci&oacute;n{pickem.submissionCount !== 1 ? 'es' : ''}
+            {pickem.submissionCount} participación{pickem.submissionCount !== 1 ? 'es' : ''}
           </span>
           {pickem.description && (
             <>

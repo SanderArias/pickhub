@@ -19,6 +19,15 @@ export interface AssignPrizesOutput {
   automaticTieGroups: TieGroupAnalysis[];
 }
 
+type PrizeAssignment = {
+  prize_definition_id: string;
+  assignment_source: string;
+  assignment_status: string;
+  profile_id: string | null;
+  awarded_rank: number | null;
+  awarded_at: string | null;
+};
+
 function getTargetRank(def: PrizeDefinition): number | null {
   if (def.category === 'general_rank') return def.rankPosition;
   return def.subscriberOrder;
@@ -144,7 +153,20 @@ export async function assignPickemPrizes(
     (existingAwardRows ?? []).filter((a: any) => a.assignment_status === 'assigned').map((a: any) => a.prize_definition_id),
   );
 
-  // 11. Build the ranking maps
+  // 11. Read existing assigned profiles (for stacking policy)
+  const { data: existingAssignedAwards } = await db
+    .from('pickem_prize_awards')
+    .select('profile_id')
+    .eq('event_id', eventId)
+    .eq('assignment_status', 'assigned');
+  const locallyAssignedProfiles = new Set(
+    (existingAssignedAwards ?? []).map((a: any) => a.profile_id).filter(Boolean) as string[],
+  );
+
+  // 12. Batch collection for RPC
+  const assignments: PrizeAssignment[] = [];
+
+  // 13. Build the ranking maps
   const rankingByRank = new Map<number, FinalRankingEntry>();
   for (const e of finalRanking) {
     rankingByRank.set(e.rank, e);
@@ -155,7 +177,7 @@ export async function assignPickemPrizes(
     rankingByProfile.set(e.profileId, e);
   }
 
-  // 12. Process each definition
+  // 14. Process each definition (batch assignments in memory)
   for (const def of allDefs) {
     const targetRank = getTargetRank(def);
     if (targetRank === null) continue;
@@ -169,19 +191,32 @@ export async function assignPickemPrizes(
     try {
       if (def.category === 'general_rank') {
         await assignGeneralPrize(
-          db, eventId, def, targetRank,
+          def, targetRank,
           rankingByRank, manualAffectedRanks, output,
+          assignments, locallyAssignedProfiles,
         );
       } else {
         await assignSubscriberBenefit(
-          supabase, db, eventId, def, targetRank,
+          def, targetRank,
           finalRanking, rankingByProfile, manualAffectedRanks,
           prizeConfig.settings.stackingPolicy, output,
+          assignments, locallyAssignedProfiles,
         );
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       output.errors.push(`[${def.id}] ${msg}`);
+    }
+  }
+
+  // 15. Persist all assignments via SECURITY DEFINER RPC (bypasses RLS)
+  if (assignments.length > 0) {
+    const { error: rpcErr } = await supabase.rpc('apply_pickem_prize_assignments', {
+      p_event_id: eventId,
+      p_assignments: assignments,
+    });
+    if (rpcErr) {
+      output.errors.push(`Fallo al persistir asignaciones: ${rpcErr.message}`);
     }
   }
 
@@ -205,51 +240,52 @@ export async function assignPickemPrizes(
 /* ------------------------------------------------------------------ */
 
 async function assignGeneralPrize(
-  db: any,
-  eventId: string,
   def: PrizeDefinition,
   targetRank: number,
   rankingByRank: Map<number, FinalRankingEntry>,
   manualAffectedRanks: Set<number>,
   output: AssignPrizesOutput,
+  assignments: PrizeAssignment[],
+  locallyAssignedProfiles: Set<string>,
 ): Promise<void> {
   const isAffected = manualAffectedRanks.has(targetRank);
 
   if (isAffected) {
-    await upsertAward(db, eventId, def.id, null, targetRank, 'pending', null);
-    output.pending++;
-    console.info('[pickem:prize-assignment:item]', {
-      definitionId: def.id,
-      rankPosition: def.rankPosition,
-      targetRank,
-      status: 'pending',
-      reason: 'affected_by_manual_tie',
+    assignments.push({
+      prize_definition_id: def.id,
+      assignment_source: 'automatic_ranking',
+      assignment_status: 'pending',
+      profile_id: null,
+      awarded_rank: null,
+      awarded_at: null,
     });
+    output.pending++;
     return;
   }
 
   const winner = rankingByRank.get(targetRank);
 
   if (winner) {
-    await upsertAward(db, eventId, def.id, winner.profileId, targetRank, 'assigned', new Date().toISOString());
+    assignments.push({
+      prize_definition_id: def.id,
+      assignment_source: 'automatic_ranking',
+      assignment_status: 'assigned',
+      profile_id: winner.profileId,
+      awarded_rank: targetRank,
+      awarded_at: new Date().toISOString(),
+    });
+    locallyAssignedProfiles.add(winner.profileId);
     output.assigned++;
-    console.info('[pickem:prize-assignment:item]', {
-      definitionId: def.id,
-      rankPosition: def.rankPosition,
-      targetRank,
-      status: 'assigned',
-      winnerProfileId: winner.profileId,
-    });
   } else {
-    await upsertAward(db, eventId, def.id, null, targetRank, 'unassigned_no_eligible_winner', null);
-    output.skipped++;
-    console.info('[pickem:prize-assignment:item]', {
-      definitionId: def.id,
-      rankPosition: def.rankPosition,
-      targetRank,
-      status: 'unassigned_no_eligible_winner',
-      reason: 'no_participant_at_rank',
+    assignments.push({
+      prize_definition_id: def.id,
+      assignment_source: 'automatic_ranking',
+      assignment_status: 'unassigned_no_eligible_winner',
+      profile_id: null,
+      awarded_rank: null,
+      awarded_at: null,
     });
+    output.skipped++;
   }
 }
 
@@ -258,9 +294,6 @@ async function assignGeneralPrize(
 /* ------------------------------------------------------------------ */
 
 async function assignSubscriberBenefit(
-  supabase: any,
-  db: any,
-  eventId: string,
   def: PrizeDefinition,
   subscriberOrder: number,
   finalRanking: FinalRankingEntry[],
@@ -268,6 +301,8 @@ async function assignSubscriberBenefit(
   manualAffectedRanks: Set<number>,
   stackingPolicy: PrizeStackingPolicy,
   output: AssignPrizesOutput,
+  assignments: PrizeAssignment[],
+  locallyAssignedProfiles: Set<string>,
 ): Promise<void> {
   // Check if any verified subscriber's rank is affected by manual ties
   const verifiedSubs = finalRanking.filter((e) => e.isVerifiedSubscriber);
@@ -275,34 +310,25 @@ async function assignSubscriberBenefit(
   const subRankAffected = subRanks.some((r) => manualAffectedRanks.has(r));
 
   if (subRankAffected) {
-    await upsertAward(db, eventId, def.id, null, null, 'pending', null);
-    output.pending++;
-    console.info('[pickem:prize-assignment:item]', {
-      definitionId: def.id,
-      subscriberOrder,
-      status: 'pending',
-      reason: 'sub_ranking_affected_by_tie',
+    assignments.push({
+      prize_definition_id: def.id,
+      assignment_source: 'automatic_ranking',
+      assignment_status: 'pending',
+      profile_id: null,
+      awarded_rank: null,
+      awarded_at: null,
     });
+    output.pending++;
     return;
   }
 
   // Build sorted subscriber ranking
   const sortedSubs = [...verifiedSubs].sort((a, b) => a.rank - b.rank);
 
-  // Apply stacking policy
+  // Apply stacking policy (using in-memory tracking instead of DB query)
   let eligibleSubs: FinalRankingEntry[];
   if (stackingPolicy === 'pass_subscriber_benefit') {
-    const { data: generalAwards } = await db
-      .from('pickem_prize_awards')
-      .select('profile_id')
-      .eq('event_id', eventId)
-      .eq('assignment_status', 'assigned');
-
-    const assignedGeneralProfiles = new Set(
-      (generalAwards ?? []).map((a: any) => a.profile_id).filter(Boolean),
-    );
-
-    eligibleSubs = sortedSubs.filter((s) => !assignedGeneralProfiles.has(s.profileId));
+    eligibleSubs = sortedSubs.filter((s) => !locallyAssignedProfiles.has(s.profileId));
   } else {
     eligibleSubs = sortedSubs;
   }
@@ -310,51 +336,27 @@ async function assignSubscriberBenefit(
   const winner = eligibleSubs[subscriberOrder - 1] ?? null;
 
   if (winner) {
-    await upsertAward(db, eventId, def.id, winner.profileId, winner.rank, 'assigned', new Date().toISOString());
+    assignments.push({
+      prize_definition_id: def.id,
+      assignment_source: 'automatic_ranking',
+      assignment_status: 'assigned',
+      profile_id: winner.profileId,
+      awarded_rank: winner.rank,
+      awarded_at: new Date().toISOString(),
+    });
+    locallyAssignedProfiles.add(winner.profileId);
     output.assigned++;
-    console.info('[pickem:prize-assignment:item]', {
-      definitionId: def.id,
-      subscriberOrder,
-      status: 'assigned',
-      winnerProfileId: winner.profileId,
-    });
   } else {
-    await upsertAward(db, eventId, def.id, null, null, 'unassigned_no_eligible_winner', null);
-    output.skipped++;
-    console.info('[pickem:prize-assignment:item]', {
-      definitionId: def.id,
-      subscriberOrder,
-      status: 'unassigned_no_eligible_winner',
-      reason: 'no_eligible_subscriber',
+    assignments.push({
+      prize_definition_id: def.id,
+      assignment_source: 'automatic_ranking',
+      assignment_status: 'unassigned_no_eligible_winner',
+      profile_id: null,
+      awarded_rank: null,
+      awarded_at: null,
     });
+    output.skipped++;
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Upsert award (idempotent)                                          */
-/* ------------------------------------------------------------------ */
 
-async function upsertAward(
-  db: any,
-  eventId: string,
-  prizeDefinitionId: string,
-  profileId: string | null,
-  awardedRank: number | null,
-  assignmentStatus: string,
-  awardedAt: string | null,
-): Promise<void> {
-  const payload: Record<string, unknown> = {
-    event_id: eventId,
-    prize_definition_id: prizeDefinitionId,
-    assignment_source: 'automatic_ranking',
-    assignment_status: assignmentStatus,
-  };
-
-  if (profileId !== undefined) payload.profile_id = profileId;
-  if (awardedRank !== undefined) payload.awarded_rank = awardedRank;
-  if (awardedAt !== undefined) payload.awarded_at = awardedAt;
-
-  await db.from('pickem_prize_awards').upsert(payload, {
-    onConflict: 'prize_definition_id',
-  });
-}

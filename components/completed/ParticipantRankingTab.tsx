@@ -13,6 +13,7 @@ interface ParticipantRankingTabProps {
   wonPrizeIds: Set<string>;
   prizes: Prize[];
   isTiebreakerPending?: boolean;
+  allAwards?: Array<{ profileId: string; prizeLabel: string; amount: number | null; currency: string | null }>;
 }
 
 export function ParticipantRankingTab({
@@ -22,20 +23,27 @@ export function ParticipantRankingTab({
   wonPrizeIds,
   prizes,
   isTiebreakerPending,
+  allAwards,
 }: ParticipantRankingTabProps) {
   const tiebreakerSet = useMemo(() => new Set(tiebreakerWinners), [tiebreakerWinners]);
   const prizeLabelById = useMemo(() => new Map(prizes.map((p) => [p.id, p.label])), [prizes]);
+  const prizesByProfile = useMemo(() => {
+    const map = new Map<string, string[]>();
+    if (allAwards) {
+      for (const a of allAwards) {
+        const list = map.get(a.profileId) ?? [];
+        const label = a.amount != null ? `${a.prizeLabel} · ${a.amount.toLocaleString('es-ES')} ${a.currency ?? 'USD'}` : a.prizeLabel;
+        list.push(label);
+        map.set(a.profileId, list);
+      }
+    }
+    return map;
+  }, [allAwards]);
 
   const entries: RankingEntry[] = useMemo(() => {
     return leaderboard.map((e) => {
       const isTiebreakerWinner = tiebreakerSet.has(e.profile_id);
-      const wonLabels: string[] = [];
-      if (myProfileId && e.profile_id === myProfileId) {
-        for (const pid of wonPrizeIds) {
-          const label = prizeLabelById.get(pid);
-          if (label) wonLabels.push(label);
-        }
-      }
+      const wonLabels = prizesByProfile.get(e.profile_id) ?? [];
       return {
         rank: e.rank,
         profile_id: e.profile_id,
@@ -49,17 +57,17 @@ export function ParticipantRankingTab({
         is_verified_subscriber: false,
       };
     });
-  }, [leaderboard, tiebreakerSet, myProfileId, wonPrizeIds, prizeLabelById]);
+  }, [leaderboard, tiebreakerSet, prizesByProfile]);
 
   return (
     <section className="flex flex-col gap-3">
       <div>
         <h2 className="text-sm font-semibold text-text-primary">
-          {isTiebreakerPending ? 'Clasificaci&oacute;n' : 'Clasificaci&oacute;n final'}
+          Clasificación
         </h2>
         {!isTiebreakerPending && (
           <p className="mt-0.5 text-xs text-text-muted">
-            Posiciones definitivas despu&eacute;s de desempates y asignaci&oacute;n de premios.
+            Posiciones definitivas después de desempates y asignación de premios.
           </p>
         )}
       </div>

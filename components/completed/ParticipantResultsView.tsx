@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { ResultsTabs } from './ResultsTabs';
 import { ParticipantSummaryTab } from './ParticipantSummaryTab';
 import { ParticipantMyPicksTab, type EnrichedPick } from './ParticipantMyPicksTab';
@@ -10,14 +10,11 @@ import type { LeaderboardEntry } from '@/app/actions/leaderboard';
 import type { Prize } from '@/app/actions/participant';
 import type { OfficialResultEntry } from '@/activities/pickem/actions/results-data';
 
-const TABS = [
-  { id: 'summary', label: 'Resumen' },
-  { id: 'my-picks', label: 'Mi selección' },
-  { id: 'ranking', label: 'Clasificación' },
-  { id: 'official-results', label: 'Resultados oficiales' },
-] as const;
-
-type TabId = (typeof TABS)[number]['id'];
+interface TabDef {
+  id: string;
+  label: string;
+  visible: boolean;
+}
 
 interface ParticipantResultsViewProps {
   myEntry: { rank: number; display_name: string | null } | null;
@@ -33,9 +30,12 @@ interface ParticipantResultsViewProps {
   enrichedPicks: EnrichedPick[];
   officialResults: OfficialResultEntry[];
   isTiebreakerPending?: boolean;
-  prizeStatuses?: Array<{ definitionId: string; status: string; label: string; amount: number | null; currency: string | null; category: string }>;
+  prizeStatuses?: Array<{ definitionId: string; status: string; label: string; amount: number | null; currency: string | null; category: string; winnerName?: string | null }>;
   resultStatus?: string | null;
   sharedRank?: number | null;
+  showRanking?: boolean;
+  showOfficialResults?: boolean;
+  allAwards?: Array<{ profileId: string; prizeLabel: string; amount: number | null; currency: string | null }>;
 }
 
 export function ParticipantResultsView({
@@ -55,28 +55,64 @@ export function ParticipantResultsView({
   prizeStatuses,
   resultStatus,
   sharedRank,
+  showRanking = false,
+  showOfficialResults = false,
+  allAwards,
 }: ParticipantResultsViewProps) {
   const wonSet = new Set(wonPrizeIds);
 
-  const [activeTab, setActiveTab] = useState<TabId>(() => {
+  const tabs: TabDef[] = useMemo(() => [
+    { id: 'summary', label: 'Resumen', visible: true },
+    { id: 'my-picks', label: 'Mi selección', visible: true },
+    { id: 'ranking', label: 'Clasificación', visible: showRanking },
+    { id: 'official-results', label: 'Resultados oficiales', visible: showOfficialResults },
+  ], [showRanking, showOfficialResults]);
+
+  const visibleTabs = useMemo(() => tabs.filter((t) => t.visible), [tabs]);
+  const visibleIds = useMemo(() => new Set(visibleTabs.map((t) => t.id)), [visibleTabs]);
+
+  const [activeTab, setActiveTab] = useState<string>('summary');
+
+  // Initialize active tab from URL on mount, defaulting to summary if invalid
+  useEffect(() => {
     if (typeof window !== 'undefined') {
       const tab = new URLSearchParams(window.location.search).get('tab');
-      if (TABS.some((t) => t.id === tab)) return tab as TabId;
+      if (tab && visibleIds.has(tab)) {
+        setActiveTab(tab);
+      } else {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'summary');
+        window.history.replaceState({ tab: 'summary' }, '', url.toString());
+      }
     }
-    return 'summary';
-  });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Normalize active tab to summary if it becomes hidden
+  useEffect(() => {
+    if (!visibleIds.has(activeTab)) {
+      setActiveTab('summary');
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', 'summary');
+      window.history.replaceState({ tab: 'summary' }, '', url.toString());
+    }
+  }, [activeTab, visibleIds]);
 
   function handleTabChange(tab: string) {
-    const tid = tab as TabId;
-    setActiveTab(tid);
+    setActiveTab(tab);
     const url = new URL(window.location.href);
     url.searchParams.set('tab', tab);
-    window.history.replaceState({ tab: tid }, '', url.toString());
+    window.history.replaceState({ tab }, '', url.toString());
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <ResultsTabs tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
+      {visibleTabs.length > 1 && (
+        <ResultsTabs
+          tabs={visibleTabs.map(({ id, label }) => ({ id, label }))}
+          activeTab={activeTab}
+          onTabChange={handleTabChange}
+        />
+      )}
 
       <section hidden={activeTab !== 'summary'} role="tabpanel" id="panel-summary" aria-labelledby="tab-summary">
         <ParticipantSummaryTab
@@ -100,20 +136,25 @@ export function ParticipantResultsView({
         <ParticipantMyPicksTab picks={enrichedPicks} />
       </section>
 
-      <section hidden={activeTab !== 'ranking'} role="tabpanel" id="panel-ranking" aria-labelledby="tab-ranking">
-        <ParticipantRankingTab
-          leaderboard={leaderboard}
-          myProfileId={myProfileId}
-          tiebreakerWinners={tiebreakerWinners}
-          wonPrizeIds={wonSet}
-          prizes={prizes}
-          isTiebreakerPending={isTiebreakerPending}
-        />
-      </section>
+      {showRanking && (
+        <section hidden={activeTab !== 'ranking'} role="tabpanel" id="panel-ranking" aria-labelledby="tab-ranking">
+          <ParticipantRankingTab
+            leaderboard={leaderboard}
+            myProfileId={myProfileId}
+            tiebreakerWinners={tiebreakerWinners}
+            wonPrizeIds={wonSet}
+            prizes={prizes}
+            isTiebreakerPending={isTiebreakerPending}
+            allAwards={allAwards}
+          />
+        </section>
+      )}
 
-      <section hidden={activeTab !== 'official-results'} role="tabpanel" id="panel-official-results" aria-labelledby="tab-official-results">
-        <OfficialResultsTab results={officialResults} />
-      </section>
+      {showOfficialResults && (
+        <section hidden={activeTab !== 'official-results'} role="tabpanel" id="panel-official-results" aria-labelledby="tab-official-results">
+          <OfficialResultsTab results={officialResults} />
+        </section>
+      )}
     </div>
   );
 }

@@ -181,7 +181,7 @@ export function ReceiptModal({
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <div className="min-w-0">
               <h2 className="text-lg font-bold text-white">Mi comprobante</h2>
-              <p className="mt-0.5 text-sm text-text-muted">Comparte tu predicci&oacute;n del Pick&rsquo;em.</p>
+              <p className="mt-0.5 text-sm text-text-muted">Comparte tu predicción del Pick&rsquo;em.</p>
             </div>
             <button
               type="button"

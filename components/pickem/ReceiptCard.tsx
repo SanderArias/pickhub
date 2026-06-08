@@ -217,7 +217,7 @@ export const ReceiptCard = forwardRef<HTMLDivElement, ReceiptCardProps>(
         {/* USER */}
         <div style={{ height: 70, padding: '12px 0', display: 'flex', flexDirection: 'column' }}>
           <div style={{ color: s.userLabel.color, fontSize: 10, fontWeight: 500, letterSpacing: '1px', marginBottom: 4, textTransform: 'uppercase' }}>
-            Predicci&oacute;n de
+            Predicción de
           </div>
           <div style={{
             fontSize: 22,

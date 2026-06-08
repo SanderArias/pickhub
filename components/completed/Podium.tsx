@@ -12,19 +12,20 @@ export function Podium({ entries }: { entries: PodiumEntry[] }) {
       <div className="flex flex-col gap-1.5">
         {entries.map((entry, i) => {
           const isTied = entry.tiedScore;
+          const showPending = isTied && !entry.tieResolved;
 
           return (
             <div
               key={entry.profile_id}
               className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${
-                isTied ? 'border-amber-500/20' : (
+                showPending ? 'border-amber-500/20' : (
                   i === 0 ? 'border-amber-500/25' :
                   i === 1 ? 'border-slate-400/15' :
                   'border-orange-600/15'
                 )
               }`}
             >
-              {isTied ? (
+              {showPending ? (
                 <span
                   className="flex size-8 shrink-0 items-center justify-center rounded-full border border-amber-500/30 bg-amber-500/10 text-sm font-semibold text-amber-400"
                   aria-label="Posición pendiente de desempate"
@@ -62,7 +63,7 @@ export function Podium({ entries }: { entries: PodiumEntry[] }) {
                   </p>
                 )}
 
-                {isTied && !entry.tiebreaker_winner && (
+                {showPending && (
                   <p className="mt-0.5 text-[11px] leading-tight text-amber-400 italic">
                     Empate pendiente
                   </p>

@@ -115,7 +115,7 @@ export function PickemStatusCard({
             </p>
 
             <p className={`text-text-muted ${compact ? 'mt-1.5 text-xs' : 'mt-2 text-xs'}`}>
-              {submissionCount} participaci&oacute;n{submissionCount !== 1 ? 'es' : ''}
+              {submissionCount} participación{submissionCount !== 1 ? 'es' : ''}
             </p>
 
             {visualState === 'tiebreaker_pending' && pendingTiebreakerCount > 1 && (

@@ -78,11 +78,11 @@ export function PrizeCarousel({
           className="flex gap-2 overflow-x-auto scroll-smooth snap-x snap-mandatory pb-1 scrollbar-none"
           style={{ scrollbarWidth: 'none' }}
         >
-          {generalPrizes.map((p, i) => (
-            <CompactPrizeCard key={p.id} prize={p} position={i + 1} isSub={false} />
+          {generalPrizes.map((p) => (
+            <CompactPrizeCard key={p.id} prize={p} />
           ))}
-          {subPrizes.map((p, i) => (
-            <CompactPrizeCard key={p.id} prize={p} position={i + 1} isSub={true} />
+          {subPrizes.map((p) => (
+            <CompactPrizeCard key={p.id} prize={p} />
           ))}
         </div>
 

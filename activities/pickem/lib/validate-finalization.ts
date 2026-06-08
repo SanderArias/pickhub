@@ -26,13 +26,25 @@ export async function validatePickemFinalization(
   const db = supabase as any;
 
   // 1. Load event
-  const { data: event } = await supabase
+  const { data: event, error: eventErr } = await supabase
     .from('events')
-    .select('id, status, prize_stacking_policy')
+    .select('id, status')
     .eq('id', eventId)
-    .single();
+    .maybeSingle();
+
+  if (eventErr) {
+    console.error('[validate-finalization:event-error]', { eventId, code: eventErr.code, message: eventErr.message, details: eventErr.details });
+    return {
+      canFinalize: false,
+      pendingAwardCount: 0,
+      pendingManualTiebreakerCount: 0,
+      unresolvedManualTieGroups: [],
+      errors: ['Error de base de datos al validar el evento.'],
+    };
+  }
 
   if (!event) {
+    console.error('[validate-finalization:event-not-found]', { eventId });
     return {
       canFinalize: false,
       pendingAwardCount: 0,

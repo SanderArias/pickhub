@@ -40,7 +40,7 @@ export function PrizeAwardCard({ award }: { award: PrizeAwardEntry }) {
         <span className="shrink-0 text-xs text-warning italic">Pendiente de desempate</span>
       )}
       {award.award_status === 'review_required' && (
-        <span className="shrink-0 text-xs text-danger">Requiere revisi&oacute;n</span>
+        <span className="shrink-0 text-xs text-danger">Requiere revisión</span>
       )}
     </div>
   );

@@ -25,6 +25,7 @@ export interface PodiumEntry {
   tiebreaker_winner: boolean;
   is_verified_subscriber: boolean;
   tiedScore: boolean;
+  tieResolved: boolean;
   awards: Array<{
     prize_id: string;
     category: string;
@@ -44,7 +45,7 @@ export interface PrizeAwardEntry {
   profile_id: string | null;
   display_name: string | null;
   rank_achieved: number | null;
-  award_status: 'assigned' | 'unassigned' | 'blocked_by_tiebreaker' | 'review_required';
+  award_status: 'assigned' | 'unassigned' | 'unassigned_no_eligible_winner' | 'blocked_by_tiebreaker' | 'review_required';
 }
 
 export interface CompletedSummary {
@@ -72,6 +73,7 @@ export interface CompletedSummary {
   maxScore: number | null;
   avgScore: number | null;
   prizesAssignedCount: number;
+  eventStatus: string;
 }
 
 export interface RankingEntry {
@@ -161,9 +163,9 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
 
   const { data: event } = await supabase
     .from('events')
-    .select('title, description, prize_stacking_policy, status')
+    .select('title, description, status')
     .eq('id', eventId)
-    .single();
+    .maybeSingle();
 
   const { count: submissionCount } = await supabase
     .from('submissions')
@@ -273,12 +275,16 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     }
   }
 
+  const eventStatus = event?.status ?? '';
+  const isEffectivelyCompleted = eventStatus === 'completed';
+  const hasDraws = (draws ?? []).length > 0;
   const podium: PodiumEntry[] = podiumEntries.map((e) => ({
     ...e,
     avatar_url: podiumAvatarMap.get(e.profile_id) ?? null,
-    tiebreaker_winner: drawMap.has(e.profile_id) && drawMap.get(e.profile_id) === 1,
+    tiebreaker_winner: isEffectivelyCompleted && drawMap.has(e.profile_id) && drawMap.get(e.profile_id) === 1,
     is_verified_subscriber: participantSubMap.get(e.profile_id) === 'verified_sub',
     tiedScore: tiedScoreSet.has(e.total_score),
+    tieResolved: isEffectivelyCompleted && tiedScoreSet.has(e.total_score) && hasDraws,
     awards: awardsByProfile.get(e.profile_id) ?? [],
   }));
 
@@ -288,38 +294,59 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
       ? Math.round((leaderboard.reduce((s, e) => s + e.total_score, 0) / leaderboard.length) * 10) / 10
       : null;
 
-  // Prize awards — load definitions via getPrizeConfiguration (RPC-based, avoids schema-cache issues)
+  // Prize definitions via getPrizeConfiguration (uses security-definer RPC, avoids schema-cache issues)
   const prizeConfig = await getPrizeConfiguration(eventId);
-  const prizeDefs = [
+  const prizeDefDefs = [
     ...prizeConfig.generalPrizes,
     ...prizeConfig.subscriberBenefits,
-  ].map((d) => ({
+  ];
+  const prizeDefs = prizeDefDefs.map((d: any) => ({
     ...d,
     rank_position: d.rankPosition,
     subscriber_order: d.subscriberOrder,
     sort_order: d.sortOrder,
   }));
 
-  const prizeDefIds: string[] = (prizeDefs ?? []).map((p: any) => p.id);
+  console.info('[pickem:completed-prizes-ui] definition count:', prizeDefs.length);
+
+  // Awards via SECURITY DEFINER RPC (bypasses RLS that blocks direct table reads)
   const db2 = supabase as any;
-  const { data: awardRows } = await db2
-    .from('pickem_prize_awards')
-    .select('prize_definition_id, profile_id, awarded_rank, subscriber_rank, assignment_status')
-    .in('prize_definition_id', prizeDefIds);
+  const { data: rpcAwards, error: rpcAwardsErr } = await (supabase.rpc as any)(
+    'get_pickem_prize_awards',
+    { p_event_id: eventId },
+  );
+  console.info('[pickem:awards-read]', {
+    eventId,
+    count: Array.isArray(rpcAwards) ? rpcAwards.length : 0,
+    error: rpcAwardsErr
+      ? { code: rpcAwardsErr.code, message: rpcAwardsErr.message, details: rpcAwardsErr.details, hint: rpcAwardsErr.hint }
+      : null,
+  });
+  if (rpcAwardsErr) {
+    console.error('[pickem:awards-read] RPC error', { eventId, code: rpcAwardsErr.code, message: rpcAwardsErr.message, details: rpcAwardsErr.details });
+  }
+  const allAwardRows: any[] = Array.isArray(rpcAwards) ? rpcAwards : [];
 
   const awardByDefId = new Map<string, any>();
-  for (const a of awardRows ?? []) {
+  for (const a of allAwardRows ?? []) {
     awardByDefId.set(a.prize_definition_id, a);
   }
 
-  const rawProfileIds = (awardRows ?? []).map((a: any) => a.profile_id as string | undefined).filter((id: string | undefined) => id != null) as string[];
+  const rawProfileIds = (allAwardRows ?? []).map((a: any) => a.profile_id as string | undefined).filter((id: string | undefined) => id != null) as string[];
   const profileIds = [...new Set(rawProfileIds)];
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, display_name')
-    .in('id', profileIds);
+  const { data: profiles } = profileIds.length > 0
+    ? await supabase.from('profiles').select('id, display_name, avatar_url').in('id', profileIds)
+    : { data: [] };
 
   const profileNameMap = new Map((profiles ?? []).map((p: any) => [p.id, p.display_name]));
+
+  // Load stacking policy for tie analysis
+  const { data: settingsRow } = await db2
+    .from('pickem_prize_settings')
+    .select('stacking_policy')
+    .eq('event_id', eventId)
+    .maybeSingle();
+  const stackingPolicy: string = settingsRow?.stacking_policy ?? 'allow_both';
 
   // Tiebreaker info (computed before prizeAwards since prizeAwards references tiebreakerGroups)
   const { data: tiebreakerDraws } = await supabase
@@ -386,14 +413,21 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     totalScore: e.total_score,
     isVerifiedSubscriber: participantSubMap.get(e.profile_id) === 'verified_sub',
   }));
-  const tieAnalysis = await analyzeTieGroups(eventId, finalRanking, prizeDefs as any, { stackingPolicy: event?.prize_stacking_policy as any ?? 'allow_both' });
+  const tieAnalysis = await analyzeTieGroups(eventId, finalRanking, prizeDefDefs, { stackingPolicy: stackingPolicy as any });
   const manualScoreSet = new Set(
     tieAnalysis.filter((g) => g.requiresManualTiebreaker).map((g) => g.score),
   );
-  const pendingManualTiebreakers = tiebreakerGroups.filter((g) => manualScoreSet.has(g.score));
-  const pendingTiebreakerCount = pendingManualTiebreakers.filter(
-    (g) => g.participants.length !== g.draws.length,
-  ).length;
+  const pendingManualTiebreakers = tiebreakerGroups.filter(
+    (g) => manualScoreSet.has(g.score) && g.participants.length !== g.draws.length,
+  );
+  const pendingTiebreakerCount = pendingManualTiebreakers.length;
+
+  // Update podium entries: tiebreaker_winner is only valid when no pending ties
+  if (pendingTiebreakerCount > 0) {
+    for (const entry of podium) {
+      entry.tiebreaker_winner = false;
+    }
+  }
 
   const prizeAwards: PrizeAwardEntry[] = (prizeDefs ?? []).map((d: any) => {
     const award = awardByDefId.get(d.id);
@@ -410,7 +444,7 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
         profile_id: null,
         display_name: null,
         rank_achieved: null,
-        award_status: (tiebreakerGroups.length > 0 ? 'blocked_by_tiebreaker' : 'unassigned') as 'blocked_by_tiebreaker' | 'unassigned',
+        award_status: (pendingTiebreakerCount > 0 ? 'blocked_by_tiebreaker' : 'unassigned') as 'blocked_by_tiebreaker' | 'unassigned',
       };
     }
     if (award.assignment_status === 'pending') {
@@ -425,7 +459,37 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
         profile_id: null,
         display_name: null,
         rank_achieved: null,
-        award_status: 'blocked_by_tiebreaker' as const,
+        award_status: (pendingTiebreakerCount > 0 ? 'blocked_by_tiebreaker' : 'unassigned') as 'blocked_by_tiebreaker' | 'unassigned',
+      };
+    }
+    if (award.assignment_status === 'revoked') {
+      return {
+        prize_id: d.id,
+        prize_label: d.title,
+        prize_amount: d.amount,
+        prize_currency: d.currency,
+        prize_category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
+        prize_quantity: 1,
+        eligibility_type: isGeneral ? 'all' : 'subscribers',
+        profile_id: null,
+        display_name: null,
+        rank_achieved: null,
+        award_status: 'unassigned_no_eligible_winner' as const,
+      };
+    }
+    if (award.assignment_status === 'unassigned_no_eligible_winner') {
+      return {
+        prize_id: d.id,
+        prize_label: d.title,
+        prize_amount: d.amount,
+        prize_currency: d.currency,
+        prize_category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
+        prize_quantity: 1,
+        eligibility_type: isGeneral ? 'all' : 'subscribers',
+        profile_id: null,
+        display_name: null,
+        rank_achieved: null,
+        award_status: 'unassigned_no_eligible_winner' as const,
       };
     }
     return {
@@ -439,9 +503,19 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
       profile_id: award.profile_id,
       display_name: award.profile_id ? (profileNameMap.get(award.profile_id) ?? null) : null,
       rank_achieved: award.awarded_rank ?? award.subscriber_rank ?? null,
-      award_status: award.assignment_status === 'assigned' ? ('assigned' as const) : ('review_required' as const),
+      award_status: 'assigned' as const,
     };
   });
+
+  // When event is not yet completed, hide assigned awards as blocked
+  // to prevent revealing partial results while tiebreaker_pending
+  if (!isEffectivelyCompleted) {
+    for (const a of prizeAwards) {
+      if (a.award_status === 'assigned') {
+        a.award_status = 'blocked_by_tiebreaker';
+      }
+    }
+  }
 
   const prizesAssignedCount = prizeAwards.filter((a) => a.award_status === 'assigned').length;
 
@@ -462,6 +536,7 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     maxScore,
     avgScore,
     prizesAssignedCount,
+    eventStatus,
   };
 }
 
@@ -482,13 +557,23 @@ export async function getFinalRanking(
   const leaderboard = await getRawLeaderboard(eventId);
   if (leaderboard.length === 0) return { entries: [], totalCount: 0, page, pageSize, totalPages: 0, totalSlots: 0, hasPrizes: false };
 
+  // Only show tiebreaker winners when no pending ties remain
   const { data: draws } = await supabase
     .from('tiebreaker_draws')
     .select('profile_id, draw_order')
     .eq('event_id', eventId);
 
+  const { data: eventForTies } = await supabase
+    .from('events')
+    .select('status')
+    .eq('id', eventId)
+    .single();
+
+  const eventIsCompleted = eventForTies?.status === 'completed';
   const drawWinnerSet = new Set(
-    (draws ?? []).filter((d) => d.draw_order === 1).map((d) => d.profile_id),
+    eventIsCompleted
+      ? (draws ?? []).filter((d) => d.draw_order === 1).map((d) => d.profile_id)
+      : [],
   );
 
   // Total prediction slots (correct denominator for aciertos)

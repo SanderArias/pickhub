@@ -73,7 +73,7 @@ function emptyGeneralDraft(rank: number): PrizeDraft {
     label: '',
     description: '',
     amount: '',
-    currency: 'USD',
+    currency: '',
   };
 }
 
@@ -86,7 +86,7 @@ function emptySubDraft(rank: number): PrizeDraft {
     label: '',
     description: '',
     amount: '',
-    currency: 'USD',
+    currency: '',
   };
 }
 
@@ -116,7 +116,7 @@ function getSaveErrorUserMessage(error: FlatPrizeError): string {
     return 'Ya existe un premio con esa configuración. Revisa los datos e inténtalo nuevamente.';
   }
   if (error.code === '23514') {
-    return 'Algunos valores no son válidos para los premios. Revisa la configuración.';
+    return 'No pudimos guardar los premios. Revisa que cada monto tenga una moneda válida.';
   }
   if (error.code === '23503') {
     return 'Referencia inválida. El evento podría haber sido eliminado.';
@@ -326,15 +326,22 @@ function PrizeCard({
                   <label className="mb-1 block text-xs font-medium text-text-secondary">
                     Valor estimado <span className="text-text-muted">(opcional)</span>
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    value={draft.amount}
-                    onChange={(e) => onChange({ ...draft, amount: e.target.value })}
-                    placeholder="25.00"
-                    className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none"
-                  />
+                    <input
+                      type="number"
+                      step="0.01"
+                      min={0}
+                      value={draft.amount}
+                      onChange={(e) => {
+                        const newAmount = e.target.value;
+                        const updated = { ...draft, amount: newAmount };
+                        if (newAmount.trim() && !draft.currency.trim()) {
+                          updated.currency = CURRENCIES[0];
+                        }
+                        onChange(updated);
+                      }}
+                      placeholder="25.00"
+                      className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-purple-primary focus:outline-none"
+                    />
                   {localErrors.amount && <p className="mt-1 text-xs text-danger">{localErrors.amount}</p>}
                 </div>
                 <div>
