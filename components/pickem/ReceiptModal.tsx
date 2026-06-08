@@ -2,7 +2,7 @@
 
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { toPng, toBlob } from 'html-to-image';
-import { ReceiptCard, CARD_W, CARD_H } from './ReceiptCard';
+import { ReceiptCard, CARD_W, getReceiptDimensions } from './ReceiptCard';
 import type { ReceiptTemplate } from '@/lib/receipt-templates';
 
 interface RankedPlayer {
@@ -41,15 +41,18 @@ export function ReceiptModal({
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'unsupported'>('idle');
   const [scale, setScale] = useState(1);
 
+  const { width: canvasW, height: canvasH } = getReceiptDimensions(rankedPlayers.length);
+
   const calcScale = useCallback(() => {
     if (!previewRef.current) return;
     const { clientWidth: w, clientHeight: h } = previewRef.current;
     if (w <= 0 || h <= 0) return;
+    const { width: cw, height: ch } = getReceiptDimensions(rankedPlayers.length);
     const aw = w - 40;
     const ah = h - 24;
-    const s = Math.min(aw / CARD_W, ah / CARD_H, 1);
+    const s = Math.min(aw / cw, ah / ch, 1);
     setScale(s);
-  }, []);
+  }, [rankedPlayers.length]);
 
   useEffect(() => {
     if (!previewRef.current) return;
@@ -74,8 +77,8 @@ export function ReceiptModal({
     return () => { document.body.style.overflow = prev; };
   }, [isOpen]);
 
-  const previewW = CARD_W * scale;
-  const previewH = CARD_H * scale;
+  const previewW = canvasW * scale;
+  const previewH = canvasH * scale;
 
   const waitForAssets = useCallback(async () => {
     await document.fonts.ready;
@@ -96,9 +99,10 @@ export function ReceiptModal({
     setDownloading(true);
     try {
       await waitForAssets();
+      const { width: ew, height: eh } = getReceiptDimensions(rankedPlayers.length);
       const dataUrl = await toPng(cardRef.current, {
-        width: CARD_W,
-        height: CARD_H,
+        width: ew,
+        height: eh,
         pixelRatio: 2,
         cacheBust: true,
         imagePlaceholder: '',
@@ -113,16 +117,17 @@ export function ReceiptModal({
     } finally {
       setDownloading(false);
     }
-  }, [eventSlug, participantName, waitForAssets]);
+  }, [eventSlug, participantName, waitForAssets, rankedPlayers.length]);
 
   const handleCopy = useCallback(async () => {
     if (!cardRef.current) return;
     setCopying(true);
     try {
       await waitForAssets();
+      const { width: ew, height: eh } = getReceiptDimensions(rankedPlayers.length);
       const blob = await toBlob(cardRef.current, {
-        width: CARD_W,
-        height: CARD_H,
+        width: ew,
+        height: eh,
         pixelRatio: 2,
         cacheBust: true,
         imagePlaceholder: '',
@@ -147,7 +152,7 @@ export function ReceiptModal({
     } finally {
       setCopying(false);
     }
-  }, [waitForAssets]);
+  }, [waitForAssets, rankedPlayers.length]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -173,7 +178,6 @@ export function ReceiptModal({
         }}
       >
         <div className="flex h-full flex-col" style={{ display: 'grid', gridTemplateRows: 'auto minmax(0, 1fr) auto' }}>
-          {/* Header */}
           <div className="flex items-center justify-between border-b border-border px-5 py-4">
             <div className="min-w-0">
               <h2 className="text-lg font-bold text-white">Mi comprobante</h2>
@@ -191,7 +195,6 @@ export function ReceiptModal({
             </button>
           </div>
 
-          {/* Preview */}
           <div
             ref={previewRef}
             className="flex min-h-0 items-center justify-center overflow-hidden px-5 py-3 max-sm:overflow-y-auto max-sm:items-start"
@@ -210,8 +213,8 @@ export function ReceiptModal({
                 style={{
                   transform: `scale(${scale})`,
                   transformOrigin: 'top left',
-                  width: CARD_W,
-                  height: CARD_H,
+                  width: canvasW,
+                  height: canvasH,
                 }}
               >
                 <ReceiptCard
@@ -227,7 +230,6 @@ export function ReceiptModal({
             </div>
           </div>
 
-          {/* Actions */}
           <div className="flex items-center justify-between gap-3 border-t border-border bg-[#0d0d0f] px-5 py-3">
             <div className="flex items-center gap-2">
               <button
