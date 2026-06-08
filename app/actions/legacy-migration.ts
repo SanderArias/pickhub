@@ -93,12 +93,26 @@ export async function backfillLegacyPrizeAwards(
     };
   }
 
-  const participants = leaderboardEntries.map((e) => ({
-    profile_id: e.profile_id,
-    rank: e.rank,
-    is_verified_subscriber: false,
-    is_verified_non_subscriber: false,
-  }));
+  // Fetch real subscriber verification status for all participants
+  const lbProfileIds = leaderboardEntries.map((e) => e.profile_id);
+  const { data: epSubs } = await supabase
+    .from('event_participants')
+    .select('profile_id, subscriber_verification_status')
+    .eq('event_id', eventId)
+    .in('profile_id', lbProfileIds);
+  const subStatusMap = new Map(
+    (epSubs ?? []).map((p) => [p.profile_id, p.subscriber_verification_status]),
+  );
+
+  const participants = leaderboardEntries.map((e) => {
+    const subStatus = subStatusMap.get(e.profile_id);
+    return {
+      profile_id: e.profile_id,
+      rank: e.rank,
+      is_verified_subscriber: subStatus === 'verified_sub',
+      is_verified_non_subscriber: subStatus === 'verified_non_sub',
+    };
+  });
 
   const policy: PrizeStackingPolicy =
     (event.prize_stacking_policy as PrizeStackingPolicy) ?? 'single_prize_per_participant';

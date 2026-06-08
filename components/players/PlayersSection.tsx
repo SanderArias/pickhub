@@ -80,14 +80,19 @@ export function PlayersSection({
   const nameRef = useRef<HTMLInputElement>(null);
 
   const storageKey = `pickhub:event:${eventId}:player-pool-open`;
-  const [isOpen, setIsOpen] = useState(() => {
-    if (typeof window === 'undefined') return initialPlayers.length === 0;
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
     try {
       const stored = sessionStorage.getItem(storageKey);
-      if (stored !== null) return stored === 'true';
+      if (stored !== null) {
+        setIsOpen(stored === 'true');
+      } else {
+        setIsOpen(initialPlayers.length === 0);
+      }
     } catch {}
-    return initialPlayers.length === 0;
-  });
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
+  }, []);
 
   useEffect(() => {
     try { sessionStorage.setItem(storageKey, String(isOpen)); } catch {}

@@ -20,8 +20,6 @@ export {
 } from './predictions';
 
 export {
-  upsertEventPrize,
-  deleteEventPrize,
   updateEventPrizes,
   updatePrizeStackingPolicy,
 } from './prizes';

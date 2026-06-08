@@ -840,7 +840,11 @@ function PrizeSectionInner({
           operation: result.errorOperation ?? null,
         };
         console.error('[prizes/save:client] Failed to save prizes', {
-          ...errorInfo,
+          message: errorInfo.message,
+          code: errorInfo.code,
+          operation: errorInfo.operation,
+          details: errorInfo.details,
+          hint: errorInfo.hint,
           eventId,
           prizeCount: payload.length,
         });
@@ -865,7 +869,7 @@ function PrizeSectionInner({
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
-      const serialized = { message: err instanceof Error ? err.message : 'Error desconocido', code: 'UNEXPECTED' as const, details: null as string | null, hint: null as string | null, operation: null as string | null };
+      const serialized = { message: err instanceof Error ? err.message : 'Error desconocido', code: 'UNEXPECTED' as const, details: null, hint: null, operation: null };
       console.error('[prizes/save:client] Unexpected error saving prizes', serialized);
       setFormError(getSaveErrorUserMessage(serialized));
     } finally {
