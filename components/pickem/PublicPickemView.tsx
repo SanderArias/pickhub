@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { signInWithTwitch } from '@/app/actions/auth';
 import { submitPredictions } from '@/app/actions/participant';
 import type { PublicEventData, EventPlayer, PredictionQuestion, Prize, Submission } from '@/app/actions/participant';
+import type { ReceiptTemplate } from '@/lib/receipt-templates';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
 import type { OfficialResultEntry } from '@/activities/pickem/actions/results-data';
 import { Top8DnD } from '@/components/pickem/Top8DnD';
@@ -100,7 +101,10 @@ export function PublicPickemView({
   const activePlayers = players.filter((p) => p.is_active);
 
   const top8Q = predictions.find((q) => q.template_type === 'top8_ordered');
-  const subtitle = top8Q ? `TOP ${top8Q.options.length}` : undefined;
+  const topN = top8Q
+    ? ((top8Q.config?.positions as number) ?? top8Q.max_selections ?? top8Q.options.length)
+    : 0;
+  const subtitle = topN > 0 ? `TOP ${topN}` : undefined;
 
   const rankedPlayers = useMemo(() => {
     const top8Q = predictions.find((q) => q.template_type === 'top8_ordered');
@@ -148,7 +152,10 @@ export function PublicPickemView({
   const allTop8Filled = useMemo(() => {
     const top8Questions = predictions.filter((q) => q.template_type === 'top8_ordered');
     if (top8Questions.length === 0) return true;
-    return top8Questions.every((q) => (top8Counts[q.id] ?? 0) >= 8);
+    return top8Questions.every((q) => {
+      const limit = (q.config?.positions as number) ?? q.max_selections ?? q.options.length;
+      return (top8Counts[q.id] ?? 0) >= limit;
+    });
   }, [predictions, top8Counts]);
 
   const hasSubmitted = isAuthenticated && !!mySubmission;
@@ -326,6 +333,7 @@ export function PublicPickemView({
           eventLogoUrl={event.logo_url}
           participantName={participantName || 'Usuario de PickHub'}
           rankedPlayers={rankedPlayers}
+          receiptTemplate={(event.receipt_template || 'classic') as ReceiptTemplate}
         />
       </div>
     );
@@ -398,6 +406,7 @@ export function PublicPickemView({
             const isTop8 = q.template_type === 'top8_ordered';
 
             if (isTop8) {
+              const selectionLimit = (q.config as Record<string, unknown>)?.positions as number | undefined ?? q.options.length;
               return (
                 <Top8DnD
                   key={q.id}
@@ -408,6 +417,7 @@ export function PublicPickemView({
                     playerId: opt.player_id ?? null,
                     label: opt.label,
                   }))}
+                  selectionLimit={selectionLimit}
                   onChange={(count) => setTop8Counts((prev) => ({ ...prev, [q.id]: count }))}
                 />
               );

@@ -275,9 +275,9 @@ export function PlayersSection({
             Aún no has agregado jugadores. Agrega al menos 2 jugadores para activar las predicciones.
           </p>
         ) : (
-          <div className={`overflow-x-auto rounded-lg border border-border ${players.length >= 12 ? 'max-h-[420px] overflow-y-auto' : ''}`}>
+          <div className={`overflow-x-auto rounded-lg border border-border pickhub-scrollbar ${players.length >= 12 ? 'max-h-[420px] overflow-y-auto' : ''}`}>
             <table className="w-full text-left text-sm">
-              <thead className={players.length >= 12 ? 'sticky top-0 bg-surface-elevated' : ''}>
+              <thead className={players.length >= 12 ? 'sticky top-0 z-10 bg-surface-elevated' : ''}>
                 <tr className="border-b border-border bg-surface-elevated text-xs font-medium text-text-muted">
                   <th className="px-3 py-2 font-medium">#</th>
                   <th className="px-3 py-2 font-medium">Jugador</th>

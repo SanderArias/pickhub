@@ -9,6 +9,7 @@ import { normalizeTwitchChannel } from '@/lib/twitch';
 import { slugify } from '../lib/validation';
 import { pickemRoutes } from '../routes';
 import type { EventInsert, EventUpdate } from '@/types/database-helpers';
+import { ALLOWED_RECEIPT_TEMPLATES } from '@/lib/receipt-templates';
 import {
   CREATOR_EVENT_DETAIL_COLUMNS,
   EVENT_PRIZE_COLUMNS,
@@ -65,12 +66,17 @@ export async function getCreatorPickemById(id: string) {
 
   const supabase = await createServerClient();
 
-  const { data: event } = await supabase
+  const { data: event, error: eventError } = await supabase
     .from('events')
     .select(CREATOR_EVENT_DETAIL_COLUMNS)
     .eq('id', id)
     .eq('creator_id', creatorId)
-    .single();
+    .maybeSingle();
+
+  if (eventError) {
+    console.error('[pickem:creator] query error', { id, code: eventError.code, message: eventError.message });
+    throw new Error(`Error al cargar el evento: ${eventError.message}`);
+  }
 
   if (!event) return null;
 
@@ -177,6 +183,9 @@ export async function createPickem(formData: FormData) {
   const twitchRaw = formData.get('twitch_channel') as string | null;
   const twitchChannel = normalizeTwitchChannel(twitchRaw);
 
+  const receiptTemplateRaw = formData.get('receipt_template') as string | null;
+  const receiptTemplate = receiptTemplateRaw === 'gradient' ? 'gradient' : 'classic';
+
   const eventPayload: EventInsert = {
     creator_id: creatorId,
     dynamic_type_id: pickemType.id,
@@ -187,6 +196,7 @@ export async function createPickem(formData: FormData) {
     status: 'draft',
     twitch_channel: twitchChannel,
     predictions_close_timezone: predictionsCloseTimezone ?? undefined,
+    receipt_template: receiptTemplate,
   };
 
   const { data: event, error: eventError } = await supabase
@@ -238,12 +248,24 @@ export async function updatePickemGeneralInfo(eventId: string, _prev: unknown, f
   const twitchRaw = formData.get('twitch_channel') as string | null;
   const twitchChannel = normalizeTwitchChannel(twitchRaw);
 
+  const receiptTemplateRaw = formData.get('receipt_template') as string | null;
+  if (
+    typeof receiptTemplateRaw !== 'string' ||
+    !ALLOWED_RECEIPT_TEMPLATES.includes(
+      receiptTemplateRaw as (typeof ALLOWED_RECEIPT_TEMPLATES)[number],
+    )
+  ) {
+    return { error: 'Diseño de comprobante no válido.' };
+  }
+  const receiptTemplate = receiptTemplateRaw;
+
   const updatePayload: EventUpdate = {
     title,
     description,
     ends_at: endsAt,
     twitch_channel: twitchChannel,
     predictions_close_timezone: predictionsCloseTimezone ?? undefined,
+    receipt_template: receiptTemplate,
   };
 
   const { error: uErr } = await supabase

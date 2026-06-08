@@ -102,27 +102,55 @@ export function CountryCombobox({
   const updateMenuPosition = useCallback(() => {
     if (!buttonRef.current) return;
     const rect = buttonRef.current.getBoundingClientRect();
-    const spacing = 4;
-    const estimatedHeight = 420;
+    const spacing = 6;
+    const estimatedHeight = 320;
     const spaceBelow = window.innerHeight - rect.bottom;
-    const top =
-      spaceBelow >= estimatedHeight
+    const spaceAbove = rect.top;
+    const fitsBelow = spaceBelow >= estimatedHeight;
+    const fitsAbove = spaceAbove >= estimatedHeight;
+    let top: number;
+    if (fitsBelow) {
+      top = rect.bottom + spacing;
+    } else if (fitsAbove) {
+      top = rect.top - spacing - estimatedHeight;
+    } else {
+      top = spaceBelow >= spaceAbove
         ? rect.bottom + spacing
         : Math.max(spacing, rect.top - estimatedHeight);
+    }
+    const menuWidth = 240;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8));
     setMenuStyle({
       position: 'fixed',
       top: `${top}px`,
-      left: `${Math.max(8, rect.left)}px`,
-      minWidth: `${Math.max(rect.width, compact ? 200 : 260)}px`,
+      left: `${left}px`,
+      width: `${menuWidth}px`,
+      maxWidth: 'calc(100vw - 24px)',
     });
-  }, [compact]);
+  }, []);
 
   useEffect(() => {
     if (!isOpen) return;
     updateMenuPosition();
-    window.addEventListener('resize', updateMenuPosition);
+
+    const handleScroll = () => {
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight) {
+          setIsOpen(false);
+          setSearchQuery('');
+          return;
+        }
+      }
+      updateMenuPosition();
+    };
+    const handleResize = () => updateMenuPosition();
+
+    window.addEventListener('resize', handleResize);
+    document.addEventListener('scroll', handleScroll, true);
     return () => {
-      window.removeEventListener('resize', updateMenuPosition);
+      window.removeEventListener('resize', handleResize);
+      document.removeEventListener('scroll', handleScroll, true);
     };
   }, [isOpen, updateMenuPosition]);
 
@@ -275,7 +303,7 @@ export function CountryCombobox({
           <div
             ref={listRef}
             style={menuStyle}
-            className="z-[9999] flex flex-col rounded-lg border border-border bg-surface shadow-lg"
+            className="z-50 flex flex-col rounded-lg border border-border bg-surface shadow-lg"
           >
             <div className="border-b border-border px-2 py-1.5">
               <input
@@ -292,7 +320,7 @@ export function CountryCombobox({
             <ul
               id={`${id}-listbox`}
               role="listbox"
-              className="pickhub-scrollbar max-h-[420px] overflow-auto"
+              className="pickhub-scrollbar max-h-[280px] overflow-auto"
               aria-label="Países"
               {...(compact ? { 'data-compact': '' as string } : {})}
             >

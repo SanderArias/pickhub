@@ -129,8 +129,10 @@ export function TwitchConnectionCard({
                 {subVerificationStatus.status === 'active'
                   ? 'PickHub puede detectar automáticamente qué participantes son suscriptores de tu canal.'
                   : subVerificationStatus.status === 'reauthorization_required'
-                    ? 'El token de acceso ha expirado. Vuelve a autorizar para mantener la verificación activa.'
-                    : 'Permite que PickHub detecte automáticamente qué participantes son suscriptores de tu canal.'}
+                    ? 'Es necesario volver a autorizar la conexión con Twitch para mantener la verificación activa.'
+                    : subVerificationStatus.status === 'error'
+                      ? 'Ocurrió un error al verificar la conexión. Intenta de nuevo o vuelve a autorizar.'
+                      : 'Permite que PickHub detecte automáticamente qué participantes son suscriptores de tu canal.'}
               </p>
 
               {subVerificationStatus.status === 'active' && (
@@ -167,10 +169,24 @@ export function TwitchConnectionCard({
                     <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                       <path d="M8 5V8.5M8 11H8.007M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                     </svg>
-                    Token expirado — reautorización necesaria
+                    Reautorización necesaria
                   </div>
                   <p className="text-xs text-text-muted">
-                    El token de acceso ha expirado. Vuelve a autorizar la conexión para mantener la verificación activa.
+                    Los permisos de la conexión han cambiado o el token no pudo renovarse. Vuelve a autorizar para mantener la verificación activa.
+                  </p>
+                </div>
+              )}
+
+              {subVerificationStatus.status === 'error' && (
+                <div className="mt-4 space-y-2 rounded-lg bg-bg px-4 py-3">
+                  <div className="flex items-center gap-1.5 text-xs text-danger">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                      <path d="M8 5V8.5M8 11H8.007M14 8A6 6 0 1 1 2 8a6 6 0 0 1 12 0Z" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                    Error de verificación
+                  </div>
+                  <p className="text-xs text-text-muted">
+                    Ocurrió un error inesperado al renovar la conexión. Intenta de nuevo o vuelve a autorizar manualmente.
                   </p>
                 </div>
               )}
@@ -197,6 +213,22 @@ export function TwitchConnectionCard({
                 >
                   Re-autorizar
                 </a>
+              ) : subVerificationStatus.status === 'error' ? (
+                <div className="flex items-center gap-2">
+                  <a
+                    href="/auth/twitch/sub-verification"
+                    className="inline-flex items-center rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+                  >
+                    Re-autorizar
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => router.refresh()}
+                    className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-surface-hover"
+                  >
+                    Reintentar
+                  </button>
+                </div>
               ) : subVerificationStatus.connected ? (
                 <button
                   type="button"

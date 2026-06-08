@@ -23,6 +23,7 @@ export interface PublicEventData {
   logo_url: string | null;
   twitch_channel: string | null;
   prize_stacking_policy: string | null;
+  receipt_template: string | null;
   creator: { display_name: string | null; handle: string | null; avatar_url: string | null } | null;
 }
 
@@ -100,7 +101,7 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
   const supabase = await createServerClient();
   const user = await getUser();
 
-  const { data: event } = await supabase
+  const { data: event, error: eventError } = await supabase
     .from('events')
     .select(PUBLIC_EVENT_COLUMNS)
     .eq('slug', slug)
@@ -109,12 +110,29 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
     .limit(1)
     .maybeSingle();
 
+  if (eventError) {
+    console.error('[pickem:public] query error', { slug, code: eventError.code, message: eventError.message });
+    return { event: null, players: [], predictions: [], prizes: [], mySubmission: null, error: 'Error al cargar el Pick\'em.' };
+  }
+
   if (!event) {
     return { event: null, players: [], predictions: [], prizes: [], mySubmission: null, error: 'Pick\'em no encontrado.' };
   }
 
   if (event.status === 'draft') {
     return { event: null, players: [], predictions: [], prizes: [], mySubmission: null, error: 'Este Pick\'em todavía no está disponible.' };
+  }
+
+  if (event.status === 'open' && event.ends_at && new Date(event.ends_at) <= new Date()) {
+    const { error: closeErr } = await (supabase as any)
+      .from('events')
+      .update({ status: 'predictions_closed' })
+      .eq('id', event.id)
+      .eq('status', 'open');
+    if (!closeErr) {
+      event.status = 'predictions_closed';
+      console.log('[pickem:auto-close] opportunistic close', { eventId: event.id, closeAt: event.ends_at });
+    }
   }
 
   let creatorInfo: { display_name: string | null; handle: string | null; avatar_url: string | null } | null = null;
@@ -187,12 +205,21 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
         .maybeSingle();
 
       if (submission) {
-        const { data: answers } = await supabase
+        const { data: answers, error: ansErr } = await supabase
           .from('prediction_answers')
           .select('id, question_id, option_id, position')
           .eq('submission_id', submission.id);
 
-        mySubmission = { ...submission, answers: answers ?? [] };
+        if (ansErr) {
+          console.error('[pickem:receipt] error loading prediction_answers', {
+            submissionId: submission.id,
+            code: ansErr.code,
+            message: ansErr.message,
+          });
+          mySubmission = { ...submission, answers: [] };
+        } else {
+          mySubmission = { ...submission, answers: answers ?? [] };
+        }
       }
     }
   }
@@ -222,7 +249,7 @@ export async function submitPredictions(
 
   const { data: event } = await supabase
     .from('events')
-    .select('id, status, creator_id')
+    .select('id, slug, status, creator_id, ends_at')
     .eq('id', eventId)
     .neq('status', 'draft')
     .maybeSingle();
@@ -230,9 +257,18 @@ export async function submitPredictions(
   if (!event) return { error: 'Pick\'em no encontrado.', success: false, submissionId: null };
   if (event.status !== 'open') return { error: 'Las predicciones ya están cerradas.', success: false, submissionId: null };
 
+  if (event.ends_at && new Date(event.ends_at) <= new Date()) {
+    await supabase
+      .from('events')
+      .update({ status: 'predictions_closed' })
+      .eq('id', eventId)
+      .eq('status', 'open');
+    return { error: 'Las predicciones de este Pick\'em ya cerraron.', success: false, submissionId: null };
+  }
+
   const { data: questions } = await supabase
     .from('prediction_questions')
-    .select('id, question_type, max_selections, template_type')
+    .select('id, question_type, max_selections, template_type, config')
     .eq('event_id', eventId)
     .eq('is_active', true);
 
@@ -243,19 +279,20 @@ export async function submitPredictions(
   // Validate each question has a valid answer
   for (const q of questions) {
     if (q.template_type === 'top8_ordered') {
-      for (let pos = 1; pos <= 8; pos++) {
+      const selectionLimit = (q.config as Record<string, unknown>)?.positions as number ?? q.max_selections ?? 8;
+      for (let pos = 1; pos <= selectionLimit; pos++) {
         const val = formData.get(`q_${q.id}_${pos}`) as string;
         if (!val || !val.trim()) {
-          return { error: 'Debes seleccionar 8 jugadores para enviar tu Top 8.', success: false, submissionId: null };
+          return { error: `Debes seleccionar ${selectionLimit} jugadores para enviar tu Top 8.`, success: false, submissionId: null };
         }
       }
       // Check no duplicate players
       const selected = [];
-      for (let pos = 1; pos <= 8; pos++) {
+      for (let pos = 1; pos <= selectionLimit; pos++) {
         selected.push(formData.get(`q_${q.id}_${pos}`) as string);
       }
       const unique = new Set(selected);
-      if (unique.size !== 8) {
+      if (unique.size !== selectionLimit) {
         return { error: 'No puedes seleccionar el mismo jugador en más de una posición.', success: false, submissionId: null };
       }
     } else {
@@ -410,7 +447,8 @@ export async function submitPredictions(
 
   for (const q of questions) {
     if (q.template_type === 'top8_ordered') {
-      for (let pos = 1; pos <= 8; pos++) {
+      const selectionLimit = (q.config as Record<string, unknown>)?.positions as number ?? q.max_selections ?? 8;
+      for (let pos = 1; pos <= selectionLimit; pos++) {
         const optionId = formData.get(`q_${q.id}_${pos}`) as string;
         answers.push({
           submission_id: submission.id,
@@ -441,7 +479,7 @@ export async function submitPredictions(
     return { error: `Error al guardar respuestas: ${ansErr?.message}`, success: false, submissionId: null };
   }
 
-  revalidatePath(pickemRoutes.public.detail(eventId));
+  revalidatePath(pickemRoutes.public.detail(event.slug));
   return { error: null, success: true, submissionId: submission.id };
 }
 
@@ -536,12 +574,17 @@ export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 
   const answerCounts = new Map<string, number>();
 
   if (submissionIds.length > 0) {
-    const { data: counts } = await supabase
+    const { data: counts, error: cntErr } = await supabase
       .from('prediction_answers')
       .select('submission_id')
       .in('submission_id', submissionIds);
 
-    if (counts) {
+    if (cntErr) {
+      console.error('[pickem:participations] error counting prediction_answers', {
+        code: cntErr.code,
+        message: cntErr.message,
+      });
+    } else if (counts) {
       for (const a of counts) {
         answerCounts.set(a.submission_id, (answerCounts.get(a.submission_id) ?? 0) + 1);
       }

@@ -1,3 +1,5 @@
+import { hasRequiredSubscriberScopes } from './twitch-scopes';
+
 export function normalizeTwitchChannel(raw: string | null): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
@@ -46,6 +48,7 @@ export function isSubscriberVerificationActive(
   if (!connection.twitch_user_id) return false;
   if (!connection.access_token_encrypted) return false;
   if (connection.revoked_at !== null) return false;
+  if (!hasRequiredSubscriberScopes(connection.scopes)) return false;
   if (connection.expires_at && new Date(connection.expires_at) < new Date()) {
     return Boolean(connection.refresh_token_encrypted);
   }
@@ -59,9 +62,9 @@ export function getTwitchVerificationStatus(
   if (connection.revoked_at !== null) return 'inactive';
   if (!connection.access_token_encrypted) return 'inactive';
   if (!connection.subscriber_verification_enabled) return 'inactive';
+  if (connection.scopes && !hasRequiredSubscriberScopes(connection.scopes)) return 'reauthorization_required';
   if (connection.expires_at && new Date(connection.expires_at) < new Date()) {
-    if (connection.refresh_token_encrypted) return 'reauthorization_required';
-    return 'inactive';
+    if (!connection.refresh_token_encrypted) return 'inactive';
   }
   return 'active';
 }

@@ -32,19 +32,23 @@ interface PlayerInfo {
   countryCode: string | null;
 }
 
-const SLOT_IDS = ['slot-0', 'slot-1', 'slot-2', 'slot-3', 'slot-4', 'slot-5', 'slot-6', 'slot-7'];
+function slotIds(count: number): string[] {
+  return Array.from({ length: count }, (_, i) => `slot-${i}`);
+}
 
 function SortableSlot({
   item,
   index,
+  slotId,
   onRemove,
 }: {
   item: PlayerInfo | null;
   index: number;
+  slotId: string;
   onRemove: (optionId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: SLOT_IDS[index],
+    id: slotId,
     data: { type: 'top8-slot', slotIndex: index },
   });
 
@@ -115,7 +119,7 @@ function SortableSlot({
             {index + 1}
           </span>
           <span className="text-xs text-text-muted">
-            Arrastra un jugador aquí
+            #{index + 1}
           </span>
         </>
       )}
@@ -190,12 +194,14 @@ export function Top8DnD({
   questionId,
   activePlayers,
   options,
+  selectionLimit,
   initialRanked,
   onChange,
 }: {
   questionId: string;
   activePlayers: Array<{ id: string; name: string; country_code: string | null }>;
   options: Array<{ id: string; playerId: string | null; label: string }>;
+  selectionLimit: number;
   initialRanked?: string[];
   onChange?: (count: number) => void;
 }) {
@@ -218,16 +224,18 @@ export function Top8DnD({
     });
   }, [options, playerLookup]);
 
+  const slotIdsList = useMemo(() => slotIds(selectionLimit), [selectionLimit]);
+
   const [top8, setTop8] = useState<(PlayerInfo | null)[]>(() => {
     if (initialRanked && initialRanked.length > 0) {
-      const arr: (PlayerInfo | null)[] = Array(8).fill(null);
-      for (let i = 0; i < Math.min(initialRanked.length, 8); i++) {
+      const arr: (PlayerInfo | null)[] = Array(selectionLimit).fill(null);
+      for (let i = 0; i < Math.min(initialRanked.length, selectionLimit); i++) {
         const item = allItems.find((p) => p.optionId === initialRanked[i]);
         if (item) arr[i] = item;
       }
       return arr;
     }
-    return Array(8).fill(null);
+    return Array(selectionLimit).fill(null);
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
@@ -269,16 +277,19 @@ export function Top8DnD({
   const handleAdd = useCallback(
     (optionId: string) => {
       setTop8((prev) => {
-        const next = [...prev];
-        const emptyIndex = next.findIndex((s) => s === null);
+        const filled = prev.filter(Boolean).length;
+        if (filled >= selectionLimit) return prev;
+        if (prev.some((s) => s?.optionId === optionId)) return prev;
+        const emptyIndex = prev.findIndex((s) => s === null);
         if (emptyIndex === -1) return prev;
         const item = allItems.find((p) => p.optionId === optionId);
         if (!item) return prev;
+        const next = [...prev];
         next[emptyIndex] = item;
         return next;
       });
     },
-    [allItems],
+    [allItems, selectionLimit],
   );
 
   const handleRemove = useCallback(
@@ -309,10 +320,12 @@ export function Top8DnD({
 
         if (over.id === 'pool-area') return;
 
-        const targetIndex = SLOT_IDS.indexOf(overId);
+        const targetIndex = slotIdsList.indexOf(overId);
         if (targetIndex === -1) return;
 
         setTop8((prev) => {
+          const filled = prev.filter(Boolean).length;
+          if (filled >= selectionLimit) return prev;
           if (prev[targetIndex] !== null) return prev;
           if (prev.some((s) => s?.optionId === optionId)) return prev;
           const item = allItems.find((p) => p.optionId === optionId);
@@ -323,7 +336,7 @@ export function Top8DnD({
         });
       } else if (activeType === 'top8-slot') {
         const activeIndex = active.data.current?.slotIndex as number;
-        const overIndex = SLOT_IDS.indexOf(overId);
+        const overIndex = slotIdsList.indexOf(overId);
 
         if (overIndex === -1) return;
 
@@ -339,7 +352,7 @@ export function Top8DnD({
         }
       }
     },
-    [allItems],
+    [allItems, selectionLimit, slotIdsList],
   );
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -352,10 +365,10 @@ export function Top8DnD({
       const optionId = activeDragId.slice(5);
       return allItems.find((i) => i.optionId === optionId) ?? null;
     }
-    const index = SLOT_IDS.indexOf(activeDragId);
+    const index = slotIdsList.indexOf(activeDragId);
     if (index === -1) return null;
     return top8[index];
-  }, [activeDragId, allItems, top8]);
+  }, [activeDragId, allItems, top8, slotIdsList]);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -370,11 +383,11 @@ export function Top8DnD({
         <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
           <div className="sm:w-1/2">
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-medium text-text-secondary">Mi Top 8</p>
-              <span className="text-xs text-text-muted">(0/8)</span>
+              <p className="text-xs font-medium text-text-secondary">Mi Top {selectionLimit}</p>
+              <span className="text-xs text-text-muted">(0/{selectionLimit})</span>
             </div>
             <div className="flex flex-col gap-1.5">
-              {Array.from({ length: 8 }).map((_, i) => (
+              {Array.from({ length: selectionLimit }).map((_, i) => (
                 <div key={i} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2.5 opacity-40">
                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-surface-hover text-xs font-bold text-text-muted">{i + 1}</span>
                   <span className="text-xs text-text-muted">—</span>
@@ -405,14 +418,17 @@ export function Top8DnD({
           <div className="flex flex-col gap-3 sm:order-2 sm:w-1/2">
             <div className="rounded-xl border border-border bg-surface p-4">
               <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-medium text-text-secondary">Mi Top 8</p>
-                <span className="text-xs text-text-muted">({rankedCount}/8)</span>
+                <p className="text-xs font-medium text-text-secondary">Mi Top {selectionLimit}</p>
+                <span className={`text-xs ${rankedCount >= selectionLimit ? 'font-medium text-purple-primary' : 'text-text-muted'}`}>
+                  {rankedCount}/{selectionLimit}
+                </span>
               </div>
               <div className="flex flex-col gap-1.5">
-                <SortableContext items={SLOT_IDS} strategy={verticalListSortingStrategy}>
+                <SortableContext items={slotIdsList} strategy={verticalListSortingStrategy}>
                   {top8.map((item, index) => (
                     <SortableSlot
-                      key={SLOT_IDS[index]}
+                      key={slotIdsList[index]}
+                      slotId={slotIdsList[index]}
                       item={item}
                       index={index}
                       onRemove={handleRemove}
