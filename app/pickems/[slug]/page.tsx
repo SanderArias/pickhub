@@ -220,6 +220,7 @@ export default async function PickemPublicPage({
         resultStatus={resultStatus}
         sharedRank={sharedRank}
         allAwards={participantSummary?.allAwards}
+        prizeAwards={participantSummary?.prizeAwards}
       />
     </div>
   );

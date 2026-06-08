@@ -77,6 +77,7 @@ export function PublicPickemView({
   sharedRank = null,
   canParticipate = true,
   allAwards,
+  prizeAwards,
 }: {
   event: PublicEventData;
   players: EventPlayer[];
@@ -105,6 +106,17 @@ export function PublicPickemView({
   resultStatus?: string | null;
   sharedRank?: number | null;
   allAwards?: Array<{ profileId: string; prizeLabel: string; amount: number | null; currency: string | null }>;
+  prizeAwards?: Array<{
+    prize_id: string;
+    prize_label: string;
+    prize_amount: number | null;
+    prize_currency: string | null;
+    prize_category: string | null;
+    profile_id: string | null;
+    display_name: string | null;
+    award_status: string;
+    rank_achieved: number | null;
+  }>;
 }) {
   const prizes = legacyPrizes ?? [];
   const generalDisplay = prizeConfiguration.generalPrizes.map(defToPrizeDisplay);
@@ -310,6 +322,7 @@ export function PublicPickemView({
             showRanking={isCompleted}
             showOfficialResults={isCompleted}
             allAwards={allAwards}
+            prizeAwards={prizeAwards}
           />
         </div>
 

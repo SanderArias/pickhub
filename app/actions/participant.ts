@@ -11,6 +11,7 @@ import {
   PREDICTION_OPTION_COLUMNS,
 } from '@/activities/pickem/data/selects';
 import { getPrizeConfiguration } from '@/activities/pickem/prizes/actions/get-prize-configuration';
+import type { PrizeAwardEntry } from '@/activities/pickem/actions/results-data';
 
 export interface PublicEventData {
   id: string;
@@ -868,6 +869,7 @@ export interface ParticipantResultViewModel {
     amount: number | null;
     currency: string | null;
   }>;
+  prizeAwards: PrizeAwardEntry[];
 }
 
 /**
@@ -881,28 +883,50 @@ export async function getParticipantResultSummary(
   requirePickemCapability('readHistoricalData');
 
   const supabase = await createServerClient();
-  const db = supabase as any;
 
-  // 1. Prize definitions — always loaded (source of truth for what prizes exist)
-  const { data: prizeDefs } = await db
-    .from('pickem_prize_definitions')
-    .select('id, category, title, description, amount, currency, rank_position, subscriber_order')
-    .eq('event_id', eventId)
-    .eq('is_active', true)
-    .order('sort_order', { ascending: true });
+  // 1. Prize definitions via getPrizeConfiguration (security-definer RPC, bypasses RLS and schema-cache issues)
+  const prizeConfig = await getPrizeConfiguration(eventId);
+  const prizeDefSource = [
+    ...prizeConfig.generalPrizes,
+    ...prizeConfig.subscriberBenefits,
+  ];
+  const prizeDefs = prizeDefSource.map((d: any) => ({
+    id: d.id,
+    category: d.category,
+    title: d.title,
+    description: d.description,
+    amount: d.amount,
+    currency: d.currency,
+    rank_position: d.rankPosition,
+    subscriber_order: d.subscriberOrder,
+    sort_order: d.sortOrder,
+  }));
 
   // 2. Prize awards via SECURITY DEFINER RPC (bypasses RLS)
-  const defIds: string[] = (prizeDefs ?? []).map((p: any) => p.id);
+  const defIds: string[] = prizeDefs.map((p: any) => p.id);
   let myAwardDefIds = new Set<string>();
   let noEligibleWinnerDefIds = new Set<string>();
   let awardWinnerMap = new Map<string, string | null>();
-  let rawAllAwards: Array<{ prize_definition_id: string; profile_id: string | null; assignment_status: string }> = [];
+  let rawAllAwards: Array<{
+    prize_definition_id: string;
+    profile_id: string | null;
+    assignment_status: string;
+    awarded_rank: number | null;
+    subscriber_rank: number | null;
+  }> = [];
 
   if (defIds.length > 0) {
     const { data: rpcAwards, error: rpcErr } = await (supabase.rpc as any)(
       'get_pickem_prize_awards',
       { p_event_id: eventId },
     );
+    console.info('[pickem:participant-awards-read]', {
+      eventId,
+      count: Array.isArray(rpcAwards) ? rpcAwards.length : 0,
+      error: rpcErr
+        ? { code: rpcErr.code, message: rpcErr.message }
+        : null,
+    });
     if (rpcErr) {
       console.error('[pickem:participant-awards] RPC error', { eventId, code: rpcErr.code, message: rpcErr.message });
     }
@@ -1146,6 +1170,59 @@ export async function getParticipantResultSummary(
     };
   });
 
+  // Build prizeAwards (PrizeAwardEntry[]) mirroring getCompletedSummary logic
+  const awardByDefId = new Map(rawAllAwards.map((a) => [a.prize_definition_id, a]));
+  const isEffectivelyCompleted = eventStatus === 'completed';
+  const isTiebreakerPendingState = eventStatus === 'tiebreaker_pending';
+  const prizeAwards: PrizeAwardEntry[] = (prizeDefs ?? []).map((d: any) => {
+    const award = awardByDefId.get(d.id);
+    const isGeneral = d.category === 'general_rank';
+    if (!award || award.assignment_status === 'pending') {
+      return {
+        prize_id: d.id,
+        prize_label: d.title ?? 'Premio',
+        prize_amount: d.amount ?? null,
+        prize_currency: d.currency ?? null,
+        prize_category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
+        prize_quantity: 1,
+        eligibility_type: isGeneral ? 'all' : 'subscribers',
+        profile_id: null,
+        display_name: null,
+        rank_achieved: null,
+        award_status: (isTiebreakerPendingState ? 'blocked_by_tiebreaker' : 'unassigned') as 'blocked_by_tiebreaker' | 'unassigned',
+      } satisfies PrizeAwardEntry;
+    }
+    if (award.assignment_status === 'revoked' || award.assignment_status === 'unassigned_no_eligible_winner') {
+      return {
+        prize_id: d.id,
+        prize_label: d.title ?? 'Premio',
+        prize_amount: d.amount ?? null,
+        prize_currency: d.currency ?? null,
+        prize_category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
+        prize_quantity: 1,
+        eligibility_type: isGeneral ? 'all' : 'subscribers',
+        profile_id: null,
+        display_name: null,
+        rank_achieved: null,
+        award_status: 'unassigned_no_eligible_winner' as const,
+      } satisfies PrizeAwardEntry;
+    }
+    const winnerName = award.profile_id ? (winnerNameMap.get(award.profile_id) ?? null) : null;
+    return {
+      prize_id: d.id,
+      prize_label: d.title ?? 'Premio',
+      prize_amount: d.amount ?? null,
+      prize_currency: d.currency ?? null,
+      prize_category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
+      prize_quantity: 1,
+      eligibility_type: isGeneral ? 'all' : 'subscribers',
+      profile_id: award.profile_id,
+      display_name: winnerName,
+      rank_achieved: award.awarded_rank ?? award.subscriber_rank ?? null,
+      award_status: (isTiebreakerPendingState ? 'blocked_by_tiebreaker' : 'assigned') as 'blocked_by_tiebreaker' | 'assigned',
+    } satisfies PrizeAwardEntry;
+  });
+
   // Build full award list for ranking tab (all participants' assigned prizes)
   const defInfoMap = new Map<string, { title: string; amount: number | null; currency: string | null }>(
     (prizeDefs ?? []).map((d: any) => [d.id, { title: d.title ?? 'Premio', amount: d.amount ?? null, currency: d.currency ?? null }])
@@ -1162,5 +1239,5 @@ export async function getParticipantResultSummary(
       };
     });
 
-  return { result, prizes, allAwards };
+  return { result, prizes, allAwards, prizeAwards };
 }

@@ -23,6 +23,17 @@ interface ParticipantSummaryTabProps {
   prizeStatuses?: Array<{ definitionId: string; status: string; label: string; amount: number | null; currency: string | null; category: string; winnerName?: string | null }>;
   resultStatus?: string | null;
   sharedRank?: number | null;
+  prizeAwards?: Array<{
+    prize_id: string;
+    prize_label: string;
+    prize_amount: number | null;
+    prize_currency: string | null;
+    prize_category: string | null;
+    profile_id: string | null;
+    display_name: string | null;
+    award_status: string;
+    rank_achieved: number | null;
+  }>;
 }
 
 function PrizeCard({
@@ -87,21 +98,24 @@ function PrizeCard({
   );
 }
 
-function getPrizeStatusMeta(status: string, winnerName: string | null): { label: string | null; style: string } {
-  switch (status) {
-    case 'won':
-      return { label: 'Ganado por ti', style: 'won' };
-    case 'assigned_to_other':
-      return { label: winnerName ? `Ganado por ${winnerName}` : 'Asignado', style: 'not_won' };
-    case 'pending_assignment':
-    case 'on_hold_tiebreaker':
-      return { label: 'En espera de desempate', style: 'hold' };
+function getAwardStatusMeta(
+  award_status: string,
+  profile_id: string | null,
+  display_name: string | null,
+  currentProfileId: string | undefined,
+): { label: string | null; style: string } {
+  switch (award_status) {
+    case 'assigned':
+      if (profile_id === currentProfileId) return { label: 'Ganado por ti', style: 'won' };
+      return { label: display_name ? `Ganado por ${display_name}` : 'Ganado', style: 'not_won' };
     case 'unassigned_no_eligible_winner':
       return { label: 'Sin ganador elegible', style: 'unassigned' };
-    case 'available':
-      return { label: null, style: 'available' };
-    case 'not_won':
-      return { label: null, style: 'not_won' };
+    case 'blocked_by_tiebreaker':
+      return { label: 'En espera de desempate', style: 'hold' };
+    case 'unassigned':
+      return { label: null, style: 'default' };
+    case 'review_required':
+      return { label: null, style: 'default' };
     default:
       return { label: null, style: 'default' };
   }
@@ -119,12 +133,28 @@ export function ParticipantSummaryTab({
   prizeStatuses,
   resultStatus,
   sharedRank,
+  myProfileId,
+  prizeAwards,
 }: ParticipantSummaryTabProps) {
   const generalPrizes = prizes.filter((p) => p.prize_category !== 'subscriber_bonus');
   const subscriberPrizes = prizes.filter((p) => p.prize_category === 'subscriber_bonus');
   const isFinalized = resultStatus === 'finalized';
-
   const inPendingTie = isTiebreakerPending && sharedRank !== null;
+
+  // Compute current user's assigned awards from prizeAwards
+  const currentUserAwards = (prizeAwards ?? []).filter(
+    (a) => a.award_status === 'assigned' && a.profile_id === myProfileId,
+  );
+  const hasWonPrize = currentUserAwards.length > 0;
+
+  console.info('[pickem:participant-prizes]', {
+    currentProfileId: myProfileId,
+    prizeAwards,
+    currentUserAwards,
+  });
+
+  // Build lookup by prize_id
+  const awardByDefId = new Map((prizeAwards ?? []).map((a) => [a.prize_id, a]));
 
   return (
     <div className="flex flex-col gap-5">
@@ -205,21 +235,21 @@ export function ParticipantSummaryTab({
         </section>
       )}
 
-      {isFinalized && wonPrizeIds.size > 0 && (
+      {isFinalized && hasWonPrize && (
         <section className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider">
-            {wonPrizeIds.size === 1 ? 'Premio ganado' : 'Premios ganados'}
+            {currentUserAwards.length === 1 ? 'Premio ganado' : 'Premios ganados'}
           </h3>
           <div className="grid gap-2 sm:grid-cols-2">
-            {prizes.filter((p) => wonPrizeIds.has(p.id)).map((p) => (
+            {currentUserAwards.map((a) => (
               <PrizeCard
-                key={p.id}
-                label={p.label}
-                amount={p.amount}
-                currency={p.currency}
-                category={p.prize_category}
-                rankPosition={p.rankPosition}
-                subscriberOrder={p.subscriberOrder}
+                key={a.prize_id}
+                label={a.prize_label}
+                amount={a.prize_amount}
+                currency={a.prize_currency}
+                category={a.prize_category}
+                rankPosition={a.rank_achieved}
+                subscriberOrder={null}
                 statusLabel="Ganaste"
                 statusStyle="won"
               />
@@ -228,7 +258,7 @@ export function ParticipantSummaryTab({
         </section>
       )}
 
-      {isFinalized && !isTiebreakerPending && wonPrizeIds.size === 0 && myEntry && prizes.length > 0 && (
+      {isFinalized && !isTiebreakerPending && !hasWonPrize && myEntry && prizes.length > 0 && (
         <p className="text-sm text-text-muted">No obtuviste premio en este Pick&apos;em.</p>
       )}
 
@@ -249,8 +279,10 @@ export function ParticipantSummaryTab({
               <h4 className="text-xs font-medium text-text-muted">Premios de clasificación</h4>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {generalPrizes.map((p) => {
-                    const ps = prizeStatuses?.find((ps) => ps.definitionId === p.id);
-                    const statusMeta = getPrizeStatusMeta(ps?.status ?? 'available', ps?.winnerName ?? null);
+                    const award = awardByDefId.get(p.id);
+                    const statusMeta = award
+                      ? getAwardStatusMeta(award.award_status, award.profile_id, award.display_name, myProfileId)
+                      : { label: null, style: 'default' as const };
                     return (
                       <PrizeCard
                         key={p.id}
@@ -274,8 +306,10 @@ export function ParticipantSummaryTab({
               <h4 className="text-xs font-medium text-text-muted">Beneficios exclusivos para subs</h4>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {subscriberPrizes.map((p) => {
-                  const ps = prizeStatuses?.find((ps) => ps.definitionId === p.id);
-                  const statusMeta = getPrizeStatusMeta(ps?.status ?? 'available', ps?.winnerName ?? null);
+                  const award = awardByDefId.get(p.id);
+                  const statusMeta = award
+                    ? getAwardStatusMeta(award.award_status, award.profile_id, award.display_name, myProfileId)
+                    : { label: null, style: 'default' as const };
                   return (
                     <PrizeCard
                       key={p.id}

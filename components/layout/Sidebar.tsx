@@ -151,6 +151,7 @@ function useGroups(profile: ProfileData | null, pathname: string) {
       label: 'Admin',
       items: [
         { label: 'Panel admin', href: '/admin', exact: true },
+        { label: 'Usuarios', href: '/admin/users' },
         { label: 'Actividades', href: '/admin/activities' },
       ],
     });

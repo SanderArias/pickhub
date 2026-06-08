@@ -14,6 +14,17 @@ interface ParticipantRankingTabProps {
   prizes: Prize[];
   isTiebreakerPending?: boolean;
   allAwards?: Array<{ profileId: string; prizeLabel: string; amount: number | null; currency: string | null }>;
+  prizeAwards?: Array<{
+    prize_id: string;
+    prize_label: string;
+    prize_amount: number | null;
+    prize_currency: string | null;
+    prize_category: string | null;
+    profile_id: string | null;
+    display_name: string | null;
+    award_status: string;
+    rank_achieved: number | null;
+  }>;
 }
 
 export function ParticipantRankingTab({
@@ -24,21 +35,24 @@ export function ParticipantRankingTab({
   prizes,
   isTiebreakerPending,
   allAwards,
+  prizeAwards,
 }: ParticipantRankingTabProps) {
   const tiebreakerSet = useMemo(() => new Set(tiebreakerWinners), [tiebreakerWinners]);
-  const prizeLabelById = useMemo(() => new Map(prizes.map((p) => [p.id, p.label])), [prizes]);
   const prizesByProfile = useMemo(() => {
     const map = new Map<string, string[]>();
-    if (allAwards) {
-      for (const a of allAwards) {
-        const list = map.get(a.profileId) ?? [];
-        const label = a.amount != null ? `${a.prizeLabel} · ${a.amount.toLocaleString('es-ES')} ${a.currency ?? 'USD'}` : a.prizeLabel;
+    if (prizeAwards) {
+      for (const a of prizeAwards) {
+        if (a.award_status !== 'assigned' || !a.profile_id) continue;
+        const list = map.get(a.profile_id) ?? [];
+        const label = a.prize_amount != null
+          ? `${a.prize_label} · ${a.prize_amount.toLocaleString('es-ES')} ${a.prize_currency ?? 'USD'}`
+          : a.prize_label;
         list.push(label);
-        map.set(a.profileId, list);
+        map.set(a.profile_id, list);
       }
     }
     return map;
-  }, [allAwards]);
+  }, [prizeAwards]);
 
   const entries: RankingEntry[] = useMemo(() => {
     return leaderboard.map((e) => {

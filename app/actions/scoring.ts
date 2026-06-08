@@ -357,6 +357,15 @@ export async function publishResultsAndCalculateScores(
 
   revalidatePickemPaths(eventId);
 
+  // Event is completed — send prize winner notifications (fire-and-forget, never blocks return)
+  try {
+    const { sendPrizeNotifications } = await import('@/services/prize-notifications');
+    await sendPrizeNotifications(eventId);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[pickem:prize-email:pipeline-error]', { eventId, error: msg });
+  }
+
   const redirectTo = `${pickemRoutes.creator.detail(eventId)}?tab=summary`;
   console.info('[publish-results:return]', { eventId, status: 'completed', redirectTo, assigned: prizeResult.assigned, pending: pendingCount });
 
@@ -498,6 +507,16 @@ export async function finalizeEventAfterTiebreakers(
       draws,
     };
   }
+
+  // Event is completed — send prize winner notifications (fire-and-forget, never blocks return)
+  try {
+    const { sendPrizeNotifications } = await import('@/services/prize-notifications');
+    await sendPrizeNotifications(eventId);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[pickem:prize-email:pipeline-error]', { eventId, error: msg });
+  }
+
   return {
     success: true,
     status: 'completed' as const,

@@ -404,6 +404,55 @@ export async function toggleTemplate(templateId: string, isActive: boolean) {
   revalidatePath('/admin/templates');
 }
 
+export type AdminUserRow = {
+  id: string;
+  displayName: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+  twitchUsername: string | null;
+  role: string;
+  isActive: boolean;
+  createdAt: string;
+  provider: string | null;
+  emailConfirmedAt: string | null;
+  lastSignInAt: string | null;
+};
+
+export type GetAdminUsersResult = {
+  users: AdminUserRow[];
+  totalCount: number;
+};
+
+export async function getAdminUsers(
+  page: number,
+  pageSize: number,
+  search: string,
+): Promise<{ data?: GetAdminUsersResult; error?: string }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { error: 'Acceso denegado.' };
+  }
+
+  const supabase = await createServerClient();
+  const { data, error } = await (supabase.rpc as any)(
+    'get_admin_users',
+    { p_page: page, p_page_size: pageSize, p_search: search },
+  );
+
+  console.info('[admin:users-load]', {
+    page,
+    pageSize,
+    search,
+    data,
+    error: error ? { message: error.message, details: error.details, hint: error.hint } : null,
+  });
+
+  if (error) return { error: `Error al cargar usuarios: ${error.message}` };
+
+  return { data: data as GetAdminUsersResult };
+}
+
 export async function toggleActivity(activityId: string, enabled: boolean) {
   await requireAdmin();
 

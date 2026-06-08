@@ -36,6 +36,17 @@ interface ParticipantResultsViewProps {
   showRanking?: boolean;
   showOfficialResults?: boolean;
   allAwards?: Array<{ profileId: string; prizeLabel: string; amount: number | null; currency: string | null }>;
+  prizeAwards?: Array<{
+    prize_id: string;
+    prize_label: string;
+    prize_amount: number | null;
+    prize_currency: string | null;
+    prize_category: string | null;
+    profile_id: string | null;
+    display_name: string | null;
+    award_status: string;
+    rank_achieved: number | null;
+  }>;
 }
 
 export function ParticipantResultsView({
@@ -58,6 +69,7 @@ export function ParticipantResultsView({
   showRanking = false,
   showOfficialResults = false,
   allAwards,
+  prizeAwards,
 }: ParticipantResultsViewProps) {
   const wonSet = new Set(wonPrizeIds);
 
@@ -129,6 +141,7 @@ export function ParticipantResultsView({
           prizeStatuses={prizeStatuses}
           resultStatus={resultStatus}
           sharedRank={sharedRank}
+          prizeAwards={prizeAwards}
         />
       </section>
 
@@ -146,6 +159,7 @@ export function ParticipantResultsView({
             prizes={prizes}
             isTiebreakerPending={isTiebreakerPending}
             allAwards={allAwards}
+            prizeAwards={prizeAwards}
           />
         </section>
       )}
