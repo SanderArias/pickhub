@@ -7,6 +7,9 @@ import { getPrizeConfiguration } from '@/activities/pickem/prizes/actions/get-pr
 
 import { requirePickemCapability } from '@/activities/pickem/lib/capability-guards.server';
 
+import { analyzeTieGroups } from '@/activities/pickem/prizes/domain/assign-prizes.helpers';
+import type { FinalRankingEntry, TieGroupAnalysis } from '@/activities/pickem/prizes/domain/assign-prizes.helpers';
+
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
@@ -60,6 +63,12 @@ export interface CompletedSummary {
     participants: Array<{ profile_id: string; display_name: string | null }>;
     draws: Array<{ profile_id: string; draw_order: number }>;
   }>;
+  pendingManualTiebreakers: Array<{
+    score: number;
+    participants: Array<{ profile_id: string; display_name: string | null }>;
+    draws: Array<{ profile_id: string; draw_order: number }>;
+  }>;
+  pendingTiebreakerCount: number;
   maxScore: number | null;
   avgScore: number | null;
   prizesAssignedCount: number;
@@ -217,13 +226,13 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     }
   }
 
-  const { data: podiumParticipants } = await supabase
+  const { data: allParticipants } = await supabase
     .from('event_participants')
     .select('profile_id, subscriber_verification_status')
     .eq('event_id', eventId)
-    .in('profile_id', podiumProfileIds);
-  const podiumSubMap = new Map(
-    (podiumParticipants ?? []).map((p) => [p.profile_id, p.subscriber_verification_status]),
+    .in('profile_id', leaderboard.map((e) => e.profile_id));
+  const participantSubMap = new Map(
+    (allParticipants ?? []).map((p) => [p.profile_id, p.subscriber_verification_status]),
   );
 
   // Map awards to podium participants
@@ -268,7 +277,7 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     ...e,
     avatar_url: podiumAvatarMap.get(e.profile_id) ?? null,
     tiebreaker_winner: drawMap.has(e.profile_id) && drawMap.get(e.profile_id) === 1,
-    is_verified_subscriber: podiumSubMap.get(e.profile_id) === 'verified_sub',
+    is_verified_subscriber: participantSubMap.get(e.profile_id) === 'verified_sub',
     tiedScore: tiedScoreSet.has(e.total_score),
     awards: awardsByProfile.get(e.profile_id) ?? [],
   }));
@@ -368,6 +377,24 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     })
     .filter((g) => g.participants.length > 1);
 
+  // Classify tie groups into manual (affects prizes) vs automatic (no prizes affected)
+  const finalRanking: FinalRankingEntry[] = leaderboard.map((e) => ({
+    rank: e.rank,
+    profileId: e.profile_id,
+    displayName: e.display_name,
+    avatarUrl: null,
+    totalScore: e.total_score,
+    isVerifiedSubscriber: participantSubMap.get(e.profile_id) === 'verified_sub',
+  }));
+  const tieAnalysis = await analyzeTieGroups(eventId, finalRanking, prizeDefs as any, { stackingPolicy: event?.prize_stacking_policy as any ?? 'allow_both' });
+  const manualScoreSet = new Set(
+    tieAnalysis.filter((g) => g.requiresManualTiebreaker).map((g) => g.score),
+  );
+  const pendingManualTiebreakers = tiebreakerGroups.filter((g) => manualScoreSet.has(g.score));
+  const pendingTiebreakerCount = pendingManualTiebreakers.filter(
+    (g) => g.participants.length !== g.draws.length,
+  ).length;
+
   const prizeAwards: PrizeAwardEntry[] = (prizeDefs ?? []).map((d: any) => {
     const award = awardByDefId.get(d.id);
     const isGeneral = d.category === 'general_rank';
@@ -430,6 +457,8 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     hasTiebreakers: tiebreakerGroups.length > 0,
     totalPrizeDefinitions: (prizeDefs ?? []).length,
     tiebreakerGroups,
+    pendingManualTiebreakers,
+    pendingTiebreakerCount,
     maxScore,
     avgScore,
     prizesAssignedCount,

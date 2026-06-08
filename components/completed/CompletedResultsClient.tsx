@@ -2,9 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { CompletedSummary, OfficialResultEntry } from '@/activities/pickem/actions/results-data';
-import type { TieGroup } from '@/app/actions/tiebreaker';
 import { getCompletedSummary, getOfficialResults } from '@/activities/pickem/actions/results-data';
-import { getTieGroups, getTiebreakerDraws } from '@/app/actions/tiebreaker';
 import { CompletedResultsTabs } from './CompletedResultsTabs';
 import type { TabId } from './CompletedResultsTabs';
 import { EventSummaryTab } from './EventSummaryTab';
@@ -18,8 +16,6 @@ function isTabId(v: string | null): v is TabId {
 interface CompletedResultsClientProps {
   eventId: string;
   initialTab?: string;
-  tieGroups: TieGroup[];
-  drawsMap: Record<string, number>;
   hasPrizes?: boolean;
   onTiebreakerStatusChange?: (pendingCount: number) => void;
 }
@@ -27,8 +23,6 @@ interface CompletedResultsClientProps {
 export function CompletedResultsClient({
   eventId,
   initialTab = 'summary',
-  tieGroups: initialTieGroups,
-  drawsMap: initialDrawsMap,
   hasPrizes: hasEventPrizes,
   onTiebreakerStatusChange,
 }: CompletedResultsClientProps) {
@@ -40,8 +34,6 @@ export function CompletedResultsClient({
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [officialResults, setOfficialResults] = useState<OfficialResultEntry[] | null>(null);
   const [officialResultsLoading, setOfficialResultsLoading] = useState(false);
-  const [tieGroups, setTieGroups] = useState<TieGroup[]>(initialTieGroups);
-  const [drawsMap, setDrawsMap] = useState<Record<string, number>>(initialDrawsMap);
   const loadedTabs = useRef(new Set<TabId>());
 
   const loadSummary = useCallback(async (force = false) => {
@@ -58,19 +50,10 @@ export function CompletedResultsClient({
 
   const refreshSummary = useCallback(async () => {
     loadedTabs.current.delete('summary');
-    const [data, tg, draws] = await Promise.all([
-      getCompletedSummary(eventId),
-      getTieGroups(eventId),
-      getTiebreakerDraws(eventId),
-    ]);
+    const data = await getCompletedSummary(eventId);
     setSummary(data);
-    setTieGroups(tg);
-    setDrawsMap(draws as Record<string, number>);
     loadedTabs.current.add('summary');
-    const newPendingCount = tg.filter(
-      (g) => !g.participants.every((p) => p.profile_id in draws),
-    ).length;
-    onTiebreakerStatusChange?.(newPendingCount);
+    onTiebreakerStatusChange?.(data.pendingTiebreakerCount);
   }, [eventId, onTiebreakerStatusChange]);
 
   const loadOfficialResults = useCallback(async () => {
@@ -116,9 +99,8 @@ export function CompletedResultsClient({
     updateTabInUrl(tabId);
   }
 
-  const pendingTiebreakerCount = tieGroups.filter(
-    (g) => !g.participants.every((p) => p.profile_id in drawsMap),
-  ).length;
+  const pendingTiebreakerCount = summary?.pendingTiebreakerCount ?? 0;
+  const hasPending = summary?.pendingTiebreakerCount !== undefined ? summary.pendingTiebreakerCount > 0 : false;
 
   return (
     <div className="flex flex-col gap-6">
@@ -143,8 +125,6 @@ export function CompletedResultsClient({
             <EventSummaryTab
               summary={summary}
               eventId={eventId}
-              tieGroups={tieGroups}
-              drawsMap={drawsMap}
               onRefresh={refreshSummary}
             />
           )}
@@ -158,7 +138,7 @@ export function CompletedResultsClient({
         >
           <FinalRankingTab
             eventId={eventId}
-            hasPendingTiebreakers={pendingTiebreakerCount > 0}
+            hasPendingTiebreakers={hasPending}
             hasPrizes={hasEventPrizes}
           />
         </section>

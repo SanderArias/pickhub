@@ -203,7 +203,7 @@ export function PublicPickemView({
 
   /* ===== SUBMITTED VIEW ===== */
   if (hasSubmitted) {
-    const isCompleted = event.status === 'completed';
+    const isCompleted = event.status === 'completed' || event.status === 'tiebreaker_pending';
     const effectiveStatus = isTiebreakerPending ? 'tiebreaker_pending' : event.status;
     const statusCopy = SUBMITTED_PREDICTION_STATUS_CONFIG[effectiveStatus] ?? SUBMITTED_PREDICTION_STATUS_CONFIG.open;
 

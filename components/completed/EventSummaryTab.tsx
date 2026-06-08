@@ -3,7 +3,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { CompletedSummary } from '@/activities/pickem/actions/results-data';
 import { diagnosePrizeAssignment } from '@/activities/pickem/actions/results-data';
-import type { TieGroup } from '@/app/actions/tiebreaker';
 import { Podium } from './Podium';
 import { PrizeAwardsSummary } from './PrizeAwardsSummary';
 import { TiebreakerSummary } from './TiebreakerSummary';
@@ -13,25 +12,19 @@ import { TiebreakerModal } from '@/components/pickem/TiebreakerModal';
 interface EventSummaryTabProps {
   summary: CompletedSummary;
   eventId: string;
-  tieGroups: TieGroup[];
-  drawsMap: Record<string, number>;
   onRefresh: () => Promise<void>;
 }
 
 export function EventSummaryTab({
   summary,
   eventId,
-  tieGroups,
-  drawsMap,
   onRefresh,
 }: EventSummaryTabProps) {
-  const [modalGroup, setModalGroup] = useState<TieGroup | null>(null);
+  const [modalGroup, setModalGroup] = useState<(typeof summary.pendingManualTiebreakers)[number] | null>(null);
 
-  const pendingGroups = tieGroups.filter(
-    (g) => !g.participants.every((p) => p.profile_id in drawsMap),
-  );
+  const pendingGroups = summary.pendingManualTiebreakers;
   const hasPending = pendingGroups.length > 0;
-  const hasResolvedTies = tieGroups.length > 0 && !hasPending;
+  const hasResolvedTies = summary.tiebreakerGroups.length > 0 && !hasPending;
 
   const remainingAfterThis = modalGroup
     ? pendingGroups.filter((g) => g !== modalGroup).length

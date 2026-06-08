@@ -1,19 +1,16 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import type { TieGroup } from '@/app/actions/tiebreaker';
 import { PickemStatusCard } from './PickemStatusCard';
 import { CompletedResultsClient } from '@/components/completed/CompletedResultsClient';
 
 interface CreatorPickemClientSectionProps {
   eventId: string;
-  status: 'open' | 'predictions_closed' | 'completed';
+  status: 'open' | 'predictions_closed' | 'tiebreaker_pending' | 'completed';
   submissionCount: number;
   endsAt: string | null;
   initialPendingTiebreakerCount: number;
   initialTab: string;
-  tieGroups: TieGroup[];
-  drawsMap: Record<string, number>;
   hasPrizes: boolean;
   canManage?: boolean;
 }
@@ -25,8 +22,6 @@ export function CreatorPickemClientSection({
   endsAt,
   initialPendingTiebreakerCount,
   initialTab,
-  tieGroups,
-  drawsMap,
   hasPrizes,
   canManage = true,
 }: CreatorPickemClientSectionProps) {
@@ -36,7 +31,7 @@ export function CreatorPickemClientSection({
     setPendingTiebreakerCount(count);
   }, []);
 
-  const isCompleted = status === 'completed';
+  const resultsReady = status === 'completed' || status === 'tiebreaker_pending';
   const hasPending = pendingTiebreakerCount > 0;
 
   return (
@@ -47,17 +42,15 @@ export function CreatorPickemClientSection({
         submissionCount={submissionCount}
         closeDate={endsAt}
         pendingTiebreakerCount={pendingTiebreakerCount}
-        compact={isCompleted && !hasPending}
+        compact={resultsReady && !hasPending}
         hasPrizes={hasPrizes}
         canManage={canManage}
       />
 
-      {isCompleted && (
+      {resultsReady && (
         <CompletedResultsClient
           eventId={eventId}
           initialTab={initialTab}
-          tieGroups={tieGroups}
-          drawsMap={drawsMap}
           hasPrizes={hasPrizes}
           onTiebreakerStatusChange={handleTiebreakerChange}
         />

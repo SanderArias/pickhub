@@ -5,28 +5,6 @@ import { requireCreator } from '@/lib/auth';
 import { revalidatePickemPaths } from '@/activities/pickem/lib/revalidation.server';
 import { checkPickemCapability, requirePickemCapability } from '@/activities/pickem/lib/capability-guards.server';
 
-async function detectTies(eventId: string): Promise<boolean> {
-  const supabase = await createServerClient();
-  const { data: submissions } = await supabase
-    .from('submissions')
-    .select('total_score')
-    .eq('event_id', eventId)
-    .eq('status', 'scored');
-
-  if (!submissions || submissions.length < 2) return false;
-
-  const scoreCount = new Map<number, number>();
-  for (const s of submissions) {
-    if (s.total_score === null || s.total_score === undefined) continue;
-    scoreCount.set(s.total_score, (scoreCount.get(s.total_score) ?? 0) + 1);
-  }
-
-  for (const count of scoreCount.values()) {
-    if (count > 1) return true;
-  }
-  return false;
-}
-
 export async function getEventResults(eventId: string) {
   requirePickemCapability('readHistoricalData');
 
@@ -333,52 +311,46 @@ export async function publishResultsAndCalculateScores(
     if (upErr) return { error: `Error al actualizar participación: ${upErr.message}` };
   }
 
-  // 11. Detect ties before completing
-  const hasTies = await detectTies(eventId);
+  // 11. Prize assignment via unified engine
+  const { assignPickemPrizes } = await import('@/activities/pickem/prizes/domain/assign-prizes');
+  const prizeResult = await assignPickemPrizes(eventId);
 
-  // 12. Mark event as completed
+  if (prizeResult.errors.length > 0) {
+    console.error('[publishResults] prize assignment errors:', prizeResult.errors);
+    revalidatePickemPaths(eventId);
+    return { error: `Error al asignar premios: ${prizeResult.errors.slice(0, 3).join(', ')}` };
+  }
+
+  // 12. Validate finalization invariants
+  const { validatePickemFinalization } = await import('@/activities/pickem/lib/validate-finalization');
+  const validation = await validatePickemFinalization(eventId);
+
+  if (validation.errors.length > 0) {
+    console.error('[publishResults] validation errors:', validation.errors);
+    revalidatePickemPaths(eventId);
+    return { error: 'No pudimos finalizar el Pick\'em. Todavía existen premios o desempates pendientes.' };
+  }
+
+  // 13. Set status based on validation
+  let finalStatus: string;
+  if (validation.pendingManualTiebreakerCount > 0) {
+    finalStatus = 'tiebreaker_pending';
+  } else {
+    finalStatus = 'completed';
+  }
+
   const { error: statusErr } = await supabase
     .from('events')
-    .update({ status: 'completed' })
+    .update({ status: finalStatus })
     .eq('id', eventId);
 
   if (statusErr) return { error: `Error al actualizar estado del Pick\'em: ${statusErr.message}` };
 
-  // 13. Prize handling
-  if (hasTies) {
-    // Ties exist: create pending awards for all active definitions (no profile_id).
-    // Assignment happens after tiebreaker resolution in finalizeEventAfterTiebreakers.
-    try {
-      const db = supabase as any;
-      const { data: defs } = await db
-        .from('pickem_prize_definitions')
-        .select('id')
-        .eq('event_id', eventId)
-        .eq('is_active', true);
-
-      if (defs && (defs as any[]).length > 0) {
-        const pendingRows = (defs as any[]).map((d: any) => ({
-          event_id: eventId,
-          prize_definition_id: d.id,
-          assignment_source: 'automatic_ranking',
-          assignment_status: 'pending',
-        }));
-        await db.from('pickem_prize_awards').upsert(pendingRows, {
-          onConflict: 'prize_definition_id',
-          ignoreDuplicates: true,
-        });
-      }
-    } catch (prizeErr) {
-      console.error('[publishResults] pending award creation error:', prizeErr);
-    }
-  } else {
-    // No ties: auto-assign via RPC
-    try {
-      await (supabase.rpc as any)('assign_pickem_prizes', { p_event_id: eventId });
-    } catch (prizeErr) {
-      console.error('[publishResults] prize assignment error:', prizeErr);
-    }
-  }
+  console.info('[publishResults] final status:', finalStatus, '| validation:', {
+    canFinalize: validation.canFinalize,
+    pendingAwardCount: validation.pendingAwardCount,
+    pendingManualTiebreakerCount: validation.pendingManualTiebreakerCount,
+  });
 
   // 14. Revalidate paths
   revalidatePickemPaths(eventId);
@@ -411,117 +383,46 @@ export async function finalizeEventAfterTiebreakers(
 
   if (!event) return { error: 'Evento no encontrado.' };
 
-  // Verify no pending tiebreakers remain
-  const hasTies = await detectTies(eventId);
-  if (hasTies) {
-    const { data: draws } = await supabase
-      .from('tiebreaker_draws')
-      .select('profile_id')
-      .eq('event_id', eventId);
+  // Use the unified assign engine (handles draw reordering, tie classification,
+  // pending vs assigned, subscriber benefits, etc.)
+  const { assignPickemPrizes } = await import('@/activities/pickem/prizes/domain/assign-prizes');
+  const prizeResult = await assignPickemPrizes(eventId);
 
-    const { data: submissions } = await supabase
-      .from('submissions')
-      .select('total_score, participant_id')
-      .eq('event_id', eventId)
-      .eq('status', 'scored');
-
-    const scoreMap = new Map<number, string[]>();
-    for (const s of submissions ?? []) {
-      if (s.total_score === null) continue;
-      const list = scoreMap.get(s.total_score) ?? [];
-      list.push(s.participant_id);
-      scoreMap.set(s.total_score, list);
-    }
-
-    const { data: participants } = await supabase
-      .from('event_participants')
-      .select('id, profile_id')
-      .in('id', [...scoreMap.values()].flat());
-
-    const pidByPartic = new Map(participants?.map((p) => [p.id, p.profile_id]));
-
-    for (const [, pids] of scoreMap) {
-      if (pids.length < 2) continue;
-      const profileIds = pids.map((pid) => pidByPartic.get(pid) ?? '').filter(Boolean);
-      const resolved = profileIds.every((pid) => draws?.some((d) => d.profile_id === pid));
-      if (!resolved) {
-        return { error: 'Aún hay desempates pendientes. Resuelve todos antes de finalizar.' };
-      }
-    }
+  if (prizeResult.errors.length > 0) {
+    const errMsg = `Error al asignar premios: ${prizeResult.errors.slice(0, 3).join(', ')}`;
+    console.error('[finalizeEventAfterTiebreakers]', errMsg);
+    revalidatePickemPaths(eventId);
+    return { error: errMsg };
   }
 
-  // Fetch leaderboard with draws applied
-  const { data: lbRaw } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
-  let leaderboard = (lbRaw ?? []) as Array<{ rank: number; profile_id: string; total_score: number }>;
+  // Validate finalization invariants before changing status
+  const { validatePickemFinalization } = await import('@/activities/pickem/lib/validate-finalization');
+  const validation = await validatePickemFinalization(eventId);
 
-  if (leaderboard.length === 0) {
-    return { error: 'No hay clasificación para asignar premios.' };
+  if (validation.errors.length > 0) {
+    console.error('[finalizeEventAfterTiebreakers] validation errors:', validation.errors);
+    revalidatePickemPaths(eventId);
+    return { error: 'No pudimos finalizar el Pick\'em. Todavía existen premios o desempates pendientes.' };
   }
 
-  // Reorder by draws within score groups (same logic as getRawLeaderboard in results-data.ts)
-  const { data: draws } = await supabase
-    .from('tiebreaker_draws')
-    .select('profile_id, draw_order')
-    .eq('event_id', eventId);
-
-  if (draws && draws.length > 0) {
-    const drawMap = new Map(draws.map((d) => [d.profile_id, d.draw_order]));
-    const byScore = new Map<number, typeof leaderboard>();
-    for (const e of leaderboard) {
-      const g = byScore.get(e.total_score) ?? [];
-      g.push(e);
-      byScore.set(e.total_score, g);
-    }
-    const reordered: typeof leaderboard = [];
-    for (const score of [...byScore.keys()].sort((a, b) => b - a)) {
-      const group = byScore.get(score)!;
-      const hasDraws = group.some((e) => drawMap.has(e.profile_id));
-      if (hasDraws) {
-        group.sort((a, b) => (drawMap.get(a.profile_id) ?? 999) - (drawMap.get(b.profile_id) ?? 999));
-      }
-      reordered.push(...group);
-    }
-    reordered.forEach((e, i) => { e.rank = i + 1; });
-    leaderboard = reordered;
+  let finalStatus: string;
+  if (validation.pendingManualTiebreakerCount > 0) {
+    finalStatus = 'tiebreaker_pending';
+    console.warn('[finalizeEventAfterTiebreakers] pending manual tiebreakers remain:', validation.pendingManualTiebreakerCount);
+  } else {
+    finalStatus = 'completed';
+    console.info('[finalizeEventAfterTiebreakers] all prizes assigned and validated, status=completed');
   }
 
-  // Assign prizes: update pending awards with correct profile_id
-  const db = supabase as any;
-  const { data: defs } = await db
-    .from('pickem_prize_definitions')
-    .select('id, category, rank_position, subscriber_order')
-    .eq('event_id', eventId)
-    .eq('is_active', true);
-
-  if (defs) {
-    for (const d of (defs as any[])) {
-      if (d.category === 'general_rank' && d.rank_position != null) {
-        const winner = leaderboard.find((e) => e.rank === d.rank_position);
-        if (winner) {
-          await db
-            .from('pickem_prize_awards')
-            .upsert({
-              event_id: eventId,
-              prize_definition_id: d.id,
-              profile_id: winner.profile_id,
-              awarded_rank: d.rank_position,
-              assignment_source: 'automatic_ranking',
-              assignment_status: 'assigned',
-              awarded_at: new Date().toISOString(),
-            }, { onConflict: 'prize_definition_id' });
-        }
-      }
-    }
-  }
-
-  // Mark event as completed (safe even if already completed)
-  const { error: completeErr } = await supabase
+  const { error: statusErr } = await supabase
     .from('events')
-    .update({ status: 'completed' })
+    .update({ status: finalStatus })
     .eq('id', eventId);
 
-  if (completeErr) {
-    console.error('[finalizeEventAfterTiebreakers] error marking event completed:', completeErr);
+  if (statusErr) {
+    console.error('[finalizeEventAfterTiebreakers] error updating status:', statusErr);
+    revalidatePickemPaths(eventId);
+    return { error: 'Error al actualizar el estado del evento.' };
   }
 
   revalidatePickemPaths(eventId);

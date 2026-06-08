@@ -19,6 +19,7 @@ export type PickemPhase =
   | 'draft'
   | 'open'
   | 'predictions_closed'
+  | 'tiebreaker_pending'
   | 'completed'
   | 'archived';
 

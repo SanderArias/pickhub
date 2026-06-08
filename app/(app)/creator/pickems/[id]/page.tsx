@@ -63,7 +63,6 @@ export default async function PickemDashboardPage({
   const pendingTiebreakerCount = tieGroups.filter(
     (g) => !g.participants.every((p) => p.profile_id in drawsMap),
   ).length;
-  const hasPendingTiebreakers = pendingTiebreakerCount > 0;
 
   const canPublish =
     isDraft &&
@@ -88,13 +87,11 @@ export default async function PickemDashboardPage({
       {!isDraft && (
         <CreatorPickemClientSection
           eventId={id}
-          status={event.status as 'open' | 'predictions_closed' | 'completed'}
+          status={event.status as 'open' | 'predictions_closed' | 'tiebreaker_pending' | 'completed'}
           submissionCount={event.submissionCount}
           endsAt={event.ends_at}
           initialPendingTiebreakerCount={pendingTiebreakerCount}
           initialTab={initialTab}
-          tieGroups={tieGroups}
-          drawsMap={drawsMap}
           hasPrizes={hasPrizes}
           canManage={caps.manageExisting}
         />
@@ -170,7 +167,7 @@ export default async function PickemDashboardPage({
           <SectionCard title="Publicación" accent="success">
             <PublishSection
               eventId={id}
-          status={event.status as 'open' | 'predictions_closed' | 'completed'}
+          status={event.status as 'open' | 'predictions_closed' | 'tiebreaker_pending' | 'completed'}
               canPublish={canPublish}
               hasMinActivePlayers={hasMinActivePlayers}
               activePlayerCount={activePlayerCount}

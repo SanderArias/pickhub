@@ -12,13 +12,13 @@ export default async function ParticipacionesPage() {
   const now = new Date();
 
   const open = participations.filter((p) => {
-    if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return false;
+    if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'tiebreaker_pending' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return false;
     if (p.eventEndsAt && new Date(p.eventEndsAt) <= now) return false;
     return true;
   });
 
   const closed = participations.filter((p) => {
-    if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return true;
+    if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'tiebreaker_pending' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return true;
     if (p.eventEndsAt && new Date(p.eventEndsAt) <= now) return true;
     return false;
   });

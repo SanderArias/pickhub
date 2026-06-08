@@ -31,7 +31,7 @@ export function PickemParticipationHero({
           <span className={`text-xs font-medium ${
             event.status === 'completed'
               ? 'text-success'
-              : event.status === 'predictions_closed'
+              : event.status === 'predictions_closed' || event.status === 'tiebreaker_pending'
                 ? 'text-warning'
                 : 'text-purple-primary'
           }`}>

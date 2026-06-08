@@ -4,25 +4,29 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { closePredictions } from '@/activities/pickem/actions';
 
-const STATUS_ORDER = ['open', 'predictions_closed', 'completed'] as const;
+const STATUS_ORDER = ['open', 'predictions_closed', 'tiebreaker_pending', 'completed'] as const;
 const LABELS: Record<string, string> = {
   open: 'Abierto',
   predictions_closed: 'Cerrado',
+  tiebreaker_pending: 'Definiendo',
   completed: 'Completado',
 };
 const DOT_COLORS: Record<string, string> = {
   open: 'bg-purple-primary',
   predictions_closed: 'bg-warning',
+  tiebreaker_pending: 'bg-warning',
   completed: 'bg-success',
 };
 const LINE_COLORS: Record<string, string> = {
   open: 'bg-purple-primary',
   predictions_closed: 'bg-warning',
+  tiebreaker_pending: 'bg-warning',
   completed: 'bg-success',
 };
 const TEXT_COLORS: Record<string, string> = {
   open: 'text-purple-primary',
   predictions_closed: 'text-warning',
+  tiebreaker_pending: 'text-warning',
   completed: 'text-success',
 };
 

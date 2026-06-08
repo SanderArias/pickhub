@@ -142,8 +142,14 @@ export async function performTiebreaker(
     .in('profile_id', profileIds);
 
   if (existingDraws && existingDraws.length > 0) {
-    // All participants already have draws — return existing result
     if (existingDraws.length === profileIds.length) {
+      // Draws already exist (idempotent retry) — still run finalization in case
+      // the previous call saved draws but prize assignment failed.
+      const { finalizeEventAfterTiebreakers } = await import('./scoring');
+      const finalResult = await finalizeEventAfterTiebreakers(eventId);
+      if (finalResult.error) {
+        return { error: finalResult.error, draws: null };
+      }
       return { error: null, draws: existingDraws };
     }
     // Inconsistent state: only some participants have draws — admin must resolve
@@ -170,15 +176,12 @@ export async function performTiebreaker(
 
   if (insErr) return { error: `Error al guardar sorteo: ${insErr.message}`, draws: null };
 
-  // After successful draw, check if all tiebreakers are resolved and auto-finalize
-  try {
-    const { finalizeEventAfterTiebreakers } = await import('./scoring');
-    const result = await finalizeEventAfterTiebreakers(eventId);
-    if (result.error) {
-      console.error('[performTiebreaker] auto-finalization warning:', result.error);
-    }
-  } catch (e) {
-    console.error('[performTiebreaker] auto-finalization error:', e);
+  // After successful draw, run prize assignment and finalization
+  const { finalizeEventAfterTiebreakers } = await import('./scoring');
+  const finalResult = await finalizeEventAfterTiebreakers(eventId);
+  if (finalResult.error) {
+    // Draw was saved but finalization failed — user must retry
+    return { error: finalResult.error, draws: null };
   }
 
   return {

@@ -1,4 +1,4 @@
-export type EventStatus = 'draft' | 'open' | 'predictions_closed' | 'completed';
+export type EventStatus = 'draft' | 'open' | 'predictions_closed' | 'tiebreaker_pending' | 'completed';
 
 export type StatusTone = 'purple' | 'warning' | 'success';
 
@@ -59,6 +59,11 @@ export const EVENT_STATUS_CONFIG: Record<EventStatus, StatusConfig> = {
     dot: 'bg-warning',
     title: 'Predicciones cerradas',
     description: 'Ya no se aceptan nuevas participaciones.',
+  },
+  tiebreaker_pending: {
+    dot: 'bg-yellow-400',
+    title: 'Desempate pendiente',
+    description: 'La clasificación está calculada. Resuelve los empates para definir las posiciones y asignar los premios.',
   },
   completed: {
     dot: 'bg-success',

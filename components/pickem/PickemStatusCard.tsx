@@ -9,7 +9,7 @@ import { EVENT_STATUS_CONFIG } from '@/lib/status-config';
 
 interface PickemStatusCardProps {
   eventId: string;
-  status: 'open' | 'predictions_closed' | 'completed';
+  status: 'open' | 'predictions_closed' | 'tiebreaker_pending' | 'completed';
   submissionCount: number;
   closeDate?: string | null;
   pendingTiebreakerCount?: number;
@@ -18,7 +18,7 @@ interface PickemStatusCardProps {
   canManage?: boolean;
 }
 
-type VisualState = 'open' | 'predictions_closed' | 'tiebreakers_pending' | 'completed';
+type VisualState = 'open' | 'predictions_closed' | 'tiebreaker_pending' | 'completed';
 
 const VISUAL_CONFIG: Record<Exclude<VisualState, 'completed'>, {
   dot: string;
@@ -38,7 +38,7 @@ const VISUAL_CONFIG: Record<Exclude<VisualState, 'completed'>, {
     description: 'Ya no se aceptan nuevas participaciones.',
     nextStep: 'Publicar los resultados oficiales.',
   },
-  tiebreakers_pending: {
+  tiebreaker_pending: {
     dot: 'bg-yellow-400',
     title: 'Desempate pendiente',
     description: 'La clasificación está calculada. Resuelve los empates para definir las posiciones y asignar los premios.',
@@ -71,12 +71,13 @@ export function PickemStatusCard({
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
 
-  const config = EVENT_STATUS_CONFIG[status];
+  const config = EVENT_STATUS_CONFIG[status] ?? EVENT_STATUS_CONFIG.completed;
   const isCompleted = status === 'completed';
+  const isTiebreakerPending = status === 'tiebreaker_pending' || (isCompleted && pendingTiebreakerCount > 0);
 
   const visualState: VisualState =
-    isCompleted && pendingTiebreakerCount > 0
-      ? 'tiebreakers_pending'
+    isTiebreakerPending
+      ? 'tiebreaker_pending'
       : status;
 
   const nonCompletedConfig = VISUAL_CONFIG[visualState as keyof typeof VISUAL_CONFIG];
@@ -100,13 +101,13 @@ export function PickemStatusCard({
     <>
       <div className={`rounded-xl border border-border bg-surface ${compact ? 'p-4' : 'p-5 sm:p-6'}`}>
         <div className="flex items-start gap-3">
-          <span className={`mt-0.5 flex size-3 shrink-0 rounded-full ${visualState === 'tiebreakers_pending' ? nonCompletedConfig?.dot : config.dot}`} />
+          <span className={`mt-0.5 flex size-3 shrink-0 rounded-full ${visualState === 'tiebreaker_pending' ? nonCompletedConfig?.dot : config.dot}`} />
           <div className="flex-1 min-w-0">
             <h2 className={`font-bold text-text-primary ${compact ? 'text-sm' : 'text-base'}`}>
-              {visualState === 'tiebreakers_pending' ? nonCompletedConfig?.title : isCompleted ? config.title : nonCompletedConfig?.title ?? config.title}
+              {visualState === 'tiebreaker_pending' ? nonCompletedConfig?.title : isCompleted ? config.title : nonCompletedConfig?.title ?? config.title}
             </h2>
             <p className={`text-text-secondary ${compact ? 'mt-0.5 text-xs' : 'mt-1 text-sm'}`}>
-              {visualState === 'tiebreakers_pending'
+              {visualState === 'tiebreaker_pending'
                 ? nonCompletedConfig?.description
                 : isCompleted
                   ? (hasPrizes ? config.description : 'La clasificación final ya está disponible.')
@@ -117,7 +118,7 @@ export function PickemStatusCard({
               {submissionCount} participaci&oacute;n{submissionCount !== 1 ? 'es' : ''}
             </p>
 
-            {visualState === 'tiebreakers_pending' && pendingTiebreakerCount > 1 && (
+            {visualState === 'tiebreaker_pending' && pendingTiebreakerCount > 1 && (
               <p className="mt-1 text-xs text-text-muted">
                 {pendingTiebreakerCount} desempates pendientes
               </p>

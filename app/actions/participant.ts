@@ -120,7 +120,7 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
     .from('events')
     .select(PUBLIC_EVENT_COLUMNS)
     .eq('slug', slug)
-    .in('status', ['open', 'predictions_closed', 'completed', 'archived'])
+    .in('status', ['open', 'predictions_closed', 'tiebreaker_pending', 'completed', 'archived'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -627,13 +627,13 @@ export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 
 
   if (filter === 'open') {
     participations = participations.filter((p) => {
-      if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return false;
+      if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'tiebreaker_pending' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return false;
       if (p.eventEndsAt && p.eventEndsAt <= now) return false;
       return true;
     });
   } else if (filter === 'closed') {
     participations = participations.filter((p) => {
-      if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return true;
+      if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'tiebreaker_pending' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return true;
       if (p.eventEndsAt && p.eventEndsAt <= now) return true;
       return false;
     });
@@ -663,7 +663,7 @@ export async function getSubmissionReceipt(
     .from('events')
     .select(PUBLIC_EVENT_COLUMNS)
     .eq('slug', eventSlug)
-    .in('status', ['open', 'predictions_closed', 'completed', 'archived'])
+    .in('status', ['open', 'predictions_closed', 'tiebreaker_pending', 'completed', 'archived'])
     .maybeSingle();
 
   if (!event) return { event: null, submission: null, predictions: [], players: [], prizes: [], error: 'Pick\'em no encontrado.' };
@@ -968,7 +968,7 @@ export async function getParticipantResultSummary(
     .single();
 
   const eventStatus = event?.status ?? 'unknown';
-  const isCompleted = eventStatus === 'completed';
+  const isCompleted = eventStatus === 'completed' || eventStatus === 'tiebreaker_pending';
 
   // 7. Determine result status
   let resultStatus: ParticipantResultStatus;

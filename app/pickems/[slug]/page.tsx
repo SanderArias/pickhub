@@ -26,8 +26,8 @@ export default async function PickemPublicPage({
   }
 
   const event = result.event;
-  const isClosed = event.status === 'predictions_closed' || event.status === 'completed';
-  const isCompleted = event.status === 'completed';
+  const isClosed = event.status === 'predictions_closed' || event.status === 'tiebreaker_pending' || event.status === 'completed';
+  const isCompleted = event.status === 'completed' || event.status === 'tiebreaker_pending';
 
   // Map prize configuration to Prize[] for display
   function defToPrizeDisplay(d: { id: string; title: string; description: string | null; category: string; rankPosition: number | null; subscriberOrder: number | null; sortOrder: number; amount: number | null; currency: string | null }): Prize {

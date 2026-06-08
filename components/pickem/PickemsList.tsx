@@ -145,7 +145,7 @@ function PickemsListInner({
     const draft = pickems.filter((p) => p.status === 'draft').length;
     const open = pickems.filter((p) => p.status === 'open').length;
     const closed = pickems.filter((p) => p.status === 'predictions_closed').length;
-    const completed = pickems.filter((p) => p.status === 'completed').length;
+    const completed = pickems.filter((p) => p.status === 'completed' || p.status === 'tiebreaker_pending').length;
     return { total, draft, open, closed, completed };
   }, [pickems]);
 
@@ -163,7 +163,11 @@ function PickemsListInner({
   const filtered = useMemo(() => {
     let items = pickems;
     if (activeFilter !== 'all') {
-      items = items.filter((p) => p.status === activeFilter);
+      items = items.filter((p) =>
+        activeFilter === 'completed'
+          ? p.status === 'completed' || p.status === 'tiebreaker_pending'
+          : p.status === activeFilter,
+      );
     }
     if (search.trim()) {
       const q = search.toLowerCase();
