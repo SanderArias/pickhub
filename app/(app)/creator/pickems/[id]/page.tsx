@@ -1,9 +1,10 @@
 import { notFound } from 'next/navigation';
 import { getCreatorPickemById } from '@/activities/pickem/actions';
+import { getPrizeConfiguration } from '@/activities/pickem/prizes/actions/get-prize-configuration';
 import { getCreatorTwitchVerificationStatus } from '@/app/actions/twitch-status';
 import { getActivityCapabilities } from '@/activities/registry.server';
 import { getTiebreakerDraws, getTieGroups } from '@/app/actions/tiebreaker';
-import { getPredictionConfigurationSummary, getPrizeConfigurationSummary } from '@/lib/summary';
+import { getPredictionConfigurationSummary } from '@/lib/summary';
 import {
   PageHeader,
   SectionCard,
@@ -51,7 +52,8 @@ export default async function PickemDashboardPage({
   const hasValidClosure =
     !event.ends_at || new Date(event.ends_at) > new Date();
 
-  const hasPrizes = event.prizes.length > 0;
+  const prizeConfig = await getPrizeConfiguration(id);
+  const hasPrizes = prizeConfig.generalPrizes.length > 0 || prizeConfig.subscriberBenefits.length > 0;
 
   const { status: twitchStatus } = await getCreatorTwitchVerificationStatus();
 
@@ -127,7 +129,7 @@ export default async function PickemDashboardPage({
               title="Premios"
               state={hasPrizes ? 'configured' : 'optional'}
               description="Incentivos para los ganadores."
-              current={hasPrizes ? getPrizeConfigurationSummary(event.prizes as any).primary : 'Sin premios configurados'}
+              current={hasPrizes ? `${prizeConfig.generalPrizes.length} general${prizeConfig.generalPrizes.length !== 1 ? 'es' : ''}` + (prizeConfig.subscriberBenefits.length > 0 ? ` · ${prizeConfig.subscriberBenefits.length} sub` : '') : 'Sin premios configurados'}
               href="#premios"
             />
           </div>
@@ -156,23 +158,16 @@ export default async function PickemDashboardPage({
             <PredictionsSection eventId={id} predictions={event.predictions} readOnly={!caps.manageExisting} />
           </SectionCard>
 
-          <SectionCard
-            id="premios"
-            title="Premios"
-            subtitle="Configura los premios para los ganadores"
-            action={<span className="text-xs text-text-muted">{hasPrizes ? `${event.prizes.length} configurado${event.prizes.length !== 1 ? 's' : ''}` : 'Opcional'}</span>}
-            accent={hasPrizes ? 'success' : 'warning'}
-          >
+          <div id="premios">
             <PrizeSection
               eventId={id}
-              initialPrizes={event.prizes as any}
-              initialStackingPolicy={(event.prize_stacking_policy ?? 'single_prize_per_participant') as 'single_prize_per_participant' | 'allow_multiple_prizes'}
+              initialConfiguration={prizeConfig}
               twitchStatus={twitchStatus}
               readOnly={!caps.manageExisting}
             />
-          </SectionCard>
+          </div>
 
-          <SectionCard title="Publicación">
+          <SectionCard title="Publicación" accent="success">
             <PublishSection
               eventId={id}
           status={event.status as 'open' | 'predictions_closed' | 'completed'}

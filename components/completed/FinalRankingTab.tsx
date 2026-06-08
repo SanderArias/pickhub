@@ -69,7 +69,7 @@ export function FinalRankingTab({
       {/* Header */}
       <div>
         <h2 className="text-sm font-semibold text-text-primary">
-          {isProvisional ? 'Clasificación provisional' : 'Clasificación final'}
+          Clasificación
         </h2>
         {data && (
           <p className="mt-0.5 text-xs text-text-muted">

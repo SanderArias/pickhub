@@ -46,13 +46,14 @@ export function EventSummaryTab({
     setModalGroup(null);
   }, []);
 
+  // Diagnostic log: only when all prizes are unassigned with no pending ties
   useEffect(() => {
-    if (summary.prizeAwards.length > 0 && !summary.prizeAwards.some((a) => a.award_status === 'assigned')) {
+    if (!hasPending && summary.prizeAwards.length > 0 && !summary.prizeAwards.some((a) => a.award_status === 'assigned')) {
       diagnosePrizeAssignment(eventId).then((data) => {
         console.log('[diag/assignment]', JSON.parse(JSON.stringify(data)));
       });
     }
-  }, [eventId, summary.prizeAwards]);
+  }, [eventId, summary.prizeAwards, hasPending]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,7 +71,7 @@ export function EventSummaryTab({
 
       <Podium entries={summary.podium} />
 
-      <PrizeAwardsSummary awards={summary.prizeAwards} />
+      <PrizeAwardsSummary awards={summary.prizeAwards} totalPrizeDefinitions={summary.totalPrizeDefinitions} />
 
       {hasResolvedTies && (
         <TiebreakerSummary summary={summary} />

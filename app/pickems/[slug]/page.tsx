@@ -1,14 +1,15 @@
 import { notFound } from 'next/navigation';
 import { getUser } from '@/app/actions/auth';
-import { getPublicPickem, getParticipantOfficialResults } from '@/app/actions/participant';
+import { getPublicPickem, getParticipantOfficialResults, getParticipantResultSummary } from '@/app/actions/participant';
+import { getPrizeConfiguration } from '@/activities/pickem/prizes/actions/get-prize-configuration';
 import { getActivityCapabilities } from '@/activities/registry.server';
-import type { Prize } from '@/app/actions/participant';
 import { getLeaderboard, getMyScore } from '@/app/actions/leaderboard';
 import { getTiebreakerDraws } from '@/app/actions/tiebreaker';
 import { PublicPickemView } from '@/components/pickem/PublicPickemView';
 import { createServerClient } from '@/services/supabase';
 import { getTwitchAccountInfo } from '@/lib/getTwitchAccountInfo';
 import type { OfficialResultEntry } from '@/activities/pickem/actions/results-data';
+import type { Prize } from '@/app/actions/participant';
 
 export default async function PickemPublicPage({
   params,
@@ -27,6 +28,30 @@ export default async function PickemPublicPage({
   const event = result.event;
   const isClosed = event.status === 'predictions_closed' || event.status === 'completed';
   const isCompleted = event.status === 'completed';
+
+  // Map prize configuration to Prize[] for display
+  function defToPrizeDisplay(d: { id: string; title: string; description: string | null; category: string; rankPosition: number | null; subscriberOrder: number | null; sortOrder: number; amount: number | null; currency: string | null }): Prize {
+    const isGeneral = d.category === 'general_rank';
+    return {
+      id: d.id,
+      event_id: event.id,
+      label: d.title,
+      description: d.description,
+      amount: d.amount,
+      currency: d.currency,
+      quantity: 1,
+      eligibility_type: isGeneral ? 'all' : 'subscribers',
+      assignment_method: 'ranking',
+      eligible_rank_start: d.rankPosition ?? d.subscriberOrder ?? 1,
+      sort_order: d.sortOrder,
+      prize_category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
+    };
+  }
+
+  const mappedPrizes: Prize[] = [
+    ...result.prizeConfiguration.generalPrizes.map(defToPrizeDisplay),
+    ...result.prizeConfiguration.subscriberBenefits.map(defToPrizeDisplay),
+  ];
 
   let participantName: string | undefined;
   let participantTwitchStatus: 'connected' | 'not_connected' = 'not_connected';
@@ -50,19 +75,6 @@ export default async function PickemPublicPage({
       undefined;
     const twitchInfo = getTwitchAccountInfo(profile, user);
     participantTwitchStatus = twitchInfo.isConnected ? 'connected' : 'not_connected';
-
-    if (isCompleted) {
-      // Fetch prize_winners for this participant
-      const prizeIds = result.prizes.map((p: Prize) => p.id);
-      if (prizeIds.length > 0) {
-        const { data: myWins } = await supabase
-          .from('prize_winners')
-          .select('event_prize_id')
-          .in('event_prize_id', prizeIds)
-          .eq('profile_id', user.id);
-        wonPrizeIds = (myWins ?? []).map((w: { event_prize_id: string }) => w.event_prize_id);
-      }
-    }
   }
 
   if (isCompleted) {
@@ -76,10 +88,15 @@ export default async function PickemPublicPage({
     }));
   }
 
-  const [leaderboard, myScore] = await Promise.all([
+  const [leaderboard, myScore, participantSummary] = await Promise.all([
     getLeaderboard(event.id),
     getMyScore(event.id),
+    user ? getParticipantResultSummary(event.id, user.id) : Promise.resolve(null),
   ]);
+
+  // Derive won prize IDs and prize statuses from participantSummary
+  const prizeStatuses = participantSummary?.prizes ?? [];
+  wonPrizeIds = prizeStatuses.filter((p) => p.status === 'won').map((p) => p.definitionId);
 
   const drawsMap = isCompleted ? await getTiebreakerDraws(event.id) : {};
   const tiebreakerWinners = Object.entries(drawsMap)
@@ -89,6 +106,9 @@ export default async function PickemPublicPage({
   const myEntry = leaderboard.find((e) => e.profile_id === user?.id) ?? null;
   const isTiebreakerWinner = myEntry ? tiebreakerWinners.includes(myEntry.profile_id) : false;
   const hasResolvedTies = Object.keys(drawsMap).length > 0;
+  const isTiebreakerPending = participantSummary?.result.resultStatus === 'tiebreaker_pending';
+  const resultStatus = participantSummary?.result.resultStatus;
+  const sharedRank = participantSummary?.result.sharedRank ?? null;
 
   let enrichedPicks: Array<{
     position: number;
@@ -158,7 +178,8 @@ export default async function PickemPublicPage({
         event={result.event}
         players={result.players}
         predictions={result.predictions}
-        prizes={result.prizes}
+        prizes={mappedPrizes}
+        prizeConfiguration={result.prizeConfiguration}
         mySubmission={result.mySubmission}
         myScore={myScore}
         isAuthenticated={!!user}
@@ -176,6 +197,10 @@ export default async function PickemPublicPage({
         isTiebreakerWinner={isTiebreakerWinner}
         isTiebreakerLoser={isTiebreakerLoser}
         hasResolvedTies={hasResolvedTies}
+        isTiebreakerPending={isTiebreakerPending}
+        prizeStatuses={prizeStatuses}
+        resultStatus={resultStatus}
+        sharedRank={sharedRank}
       />
     </div>
   );

@@ -13,7 +13,7 @@ import type { OfficialResultEntry } from '@/activities/pickem/actions/results-da
 const TABS = [
   { id: 'summary', label: 'Resumen' },
   { id: 'my-picks', label: 'Mi selección' },
-  { id: 'ranking', label: 'Clasificación final' },
+  { id: 'ranking', label: 'Clasificación' },
   { id: 'official-results', label: 'Resultados oficiales' },
 ] as const;
 
@@ -32,6 +32,10 @@ interface ParticipantResultsViewProps {
   tiebreakerWinners: string[];
   enrichedPicks: EnrichedPick[];
   officialResults: OfficialResultEntry[];
+  isTiebreakerPending?: boolean;
+  prizeStatuses?: Array<{ definitionId: string; status: string; label: string; amount: number | null; currency: string | null; category: string }>;
+  resultStatus?: string | null;
+  sharedRank?: number | null;
 }
 
 export function ParticipantResultsView({
@@ -47,6 +51,10 @@ export function ParticipantResultsView({
   tiebreakerWinners,
   enrichedPicks,
   officialResults,
+  isTiebreakerPending,
+  prizeStatuses,
+  resultStatus,
+  sharedRank,
 }: ParticipantResultsViewProps) {
   const wonSet = new Set(wonPrizeIds);
 
@@ -81,6 +89,10 @@ export function ParticipantResultsView({
           prizes={prizes}
           leaderboard={leaderboard}
           myProfileId={myProfileId}
+          isTiebreakerPending={isTiebreakerPending}
+          prizeStatuses={prizeStatuses}
+          resultStatus={resultStatus}
+          sharedRank={sharedRank}
         />
       </section>
 
@@ -95,6 +107,7 @@ export function ParticipantResultsView({
           tiebreakerWinners={tiebreakerWinners}
           wonPrizeIds={wonSet}
           prizes={prizes}
+          isTiebreakerPending={isTiebreakerPending}
         />
       </section>
 

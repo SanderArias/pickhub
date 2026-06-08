@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { signInWithTwitch } from '@/app/actions/auth';
 import { submitPredictions } from '@/app/actions/participant';
 import type { PublicEventData, EventPlayer, PredictionQuestion, Prize, Submission } from '@/app/actions/participant';
+import type { PrizeConfiguration } from '@/activities/pickem/prizes/types';
 import type { ReceiptTemplate } from '@/lib/receipt-templates';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
 import type { OfficialResultEntry } from '@/activities/pickem/actions/results-data';
@@ -28,11 +29,30 @@ function formatDate(dateStr: string): string {
   });
 }
 
+function defToPrizeDisplay(d: { id: string; title: string; description: string | null; category: string; rankPosition: number | null; subscriberOrder: number | null; sortOrder: number; amount: number | null; currency: string | null }): Prize {
+  const isGeneral = d.category === 'general_rank';
+  return {
+    id: d.id,
+    event_id: '',
+    label: d.title,
+    description: d.description,
+    amount: d.amount,
+    currency: d.currency,
+    quantity: 1,
+    eligibility_type: isGeneral ? 'all' : 'subscribers',
+    assignment_method: 'ranking',
+    eligible_rank_start: d.rankPosition ?? d.subscriberOrder ?? 1,
+    sort_order: d.sortOrder,
+    prize_category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
+  };
+}
+
 export function PublicPickemView({
   event,
   players,
   predictions,
-  prizes,
+  prizes: legacyPrizes,
+  prizeConfiguration,
   mySubmission,
   myScore,
   isAuthenticated,
@@ -49,12 +69,17 @@ export function PublicPickemView({
   isTiebreakerWinner,
   isTiebreakerLoser,
   hasResolvedTies,
+  isTiebreakerPending = false,
+  prizeStatuses = [],
+  resultStatus,
+  sharedRank = null,
   canParticipate = true,
 }: {
   event: PublicEventData;
   players: EventPlayer[];
   predictions: PredictionQuestion[];
   prizes: Prize[];
+  prizeConfiguration: PrizeConfiguration;
   mySubmission: Submission | null;
   myScore: { total_score: number | null; correct_answers: number; total_questions: number } | null;
   isAuthenticated: boolean;
@@ -72,7 +97,15 @@ export function PublicPickemView({
   isTiebreakerWinner: boolean;
   isTiebreakerLoser: boolean;
   hasResolvedTies: boolean;
+  isTiebreakerPending?: boolean;
+  prizeStatuses?: Array<{ definitionId: string; status: string; label: string; amount: number | null; currency: string | null; category: string }>;
+  resultStatus?: string | null;
+  sharedRank?: number | null;
 }) {
+  const prizes = legacyPrizes ?? [];
+  const generalDisplay = prizeConfiguration.generalPrizes.map(defToPrizeDisplay);
+  const subDisplay = prizeConfiguration.subscriberBenefits.map(defToPrizeDisplay);
+  const stackingPolicy = prizeConfiguration.settings.stackingPolicy === 'pass_subscriber_benefit' ? 'single_prize_per_participant' : 'allow_multiple_prizes';
   const [state, formAction, pending] = useActionState(
     submitPredictions.bind(null, event.id),
     { error: null as string | null, success: false, submissionId: null as string | null },
@@ -129,21 +162,19 @@ export function PublicPickemView({
     });
   }, [predictions, mySubmission, activePlayers]);
 
-  const hasPrizes = prizes.length > 0;
+  const hasPrizes = generalDisplay.length > 0 || subDisplay.length > 0;
   const hasTop8 = predictions.some((q) => q.template_type === 'top8_ordered');
 
   const generalPrizes = useMemo(
-    () => [...prizes]
-      .filter((p) => p.eligibility_type !== 'subscribers')
+    () => [...generalDisplay]
       .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
-    [prizes],
+    [generalDisplay],
   );
 
   const subPrizes = useMemo(
-    () => [...prizes]
-      .filter((p) => p.eligibility_type === 'subscribers')
+    () => [...subDisplay]
       .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
-    [prizes],
+    [subDisplay],
   );
 
   const hasSubscriberBenefits = subPrizes.length > 0;
@@ -173,7 +204,8 @@ export function PublicPickemView({
   /* ===== SUBMITTED VIEW ===== */
   if (hasSubmitted) {
     const isCompleted = event.status === 'completed';
-    const statusCopy = SUBMITTED_PREDICTION_STATUS_CONFIG[event.status] ?? SUBMITTED_PREDICTION_STATUS_CONFIG.open;
+    const effectiveStatus = isTiebreakerPending ? 'tiebreaker_pending' : event.status;
+    const statusCopy = SUBMITTED_PREDICTION_STATUS_CONFIG[effectiveStatus] ?? SUBMITTED_PREDICTION_STATUS_CONFIG.open;
 
     return (
       <div className="flex flex-col gap-6">
@@ -219,9 +251,11 @@ export function PublicPickemView({
                 {statusCopy.description}
               </p>
               <p className="text-xs text-text-muted">
-                {event.status === 'open' && event.ends_at
-                  ? `El Pick'em continúa abierto hasta el ${formatDate(event.ends_at)}.`
-                  : statusCopy.contextualMessage}
+                {isTiebreakerPending
+                  ? statusCopy.contextualMessage
+                  : event.status === 'open' && event.ends_at
+                    ? `El Pick'em continúa abierto hasta el ${formatDate(event.ends_at)}.`
+                    : statusCopy.contextualMessage}
               </p>
 
               <div className="flex items-center gap-3 mt-3">
@@ -250,10 +284,9 @@ export function PublicPickemView({
         {/* Subscriber eligibility notice */}
         {shouldShowTwitchNotice && <SubscriberTwitchEligibilityNotice />}
 
-        {/* Tabbed results */}
-        {isCompleted && (
-          <div ref={resultsRef}>
-            <ParticipantResultsView
+        {/* Tabbed results — shown whenever participant has submitted */}
+        <div ref={resultsRef}>
+          <ParticipantResultsView
             myEntry={myEntry}
             myScore={myScore}
             isTiebreakerWinner={isTiebreakerWinner}
@@ -266,11 +299,14 @@ export function PublicPickemView({
             tiebreakerWinners={tiebreakerWinners}
             enrichedPicks={enrichedPicks}
             officialResults={officialResults}
+            isTiebreakerPending={isTiebreakerPending}
+            prizeStatuses={prizeStatuses}
+            resultStatus={resultStatus}
+            sharedRank={sharedRank}
           />
-          </div>
-        )}
+        </div>
 
-        {!isCompleted && (
+        {hasSubmitted && !isCompleted && (
           <div className="flex flex-col gap-6">
             {/* Scoring rules */}
             {hasTop8 && (
@@ -355,7 +391,7 @@ export function PublicPickemView({
         <PrizeCarousel
           generalPrizes={generalPrizes}
           subPrizes={subPrizes}
-          stackingPolicy={event.prize_stacking_policy}
+          stackingPolicy={stackingPolicy}
         />
       )}
 
@@ -399,7 +435,7 @@ export function PublicPickemView({
           <PredictionIntro
             hasTop8={hasTop8}
             questionCount={predictions.length}
-            playerCount={activePlayers.length}
+            selectionLimit={topN}
           />
 
           {predictions.map((q) => {

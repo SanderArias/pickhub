@@ -19,11 +19,7 @@ export {
   deletePredictionQuestion,
 } from './predictions';
 
-export {
-  updateEventPrizes,
-  updatePrizeStackingPolicy,
-} from './prizes';
-export type { UpdateEventPrizesResult } from '../types';
+export { savePrizeConfiguration } from '../prizes/actions/save-prize-configuration';
 
 export {
   publishPickem,

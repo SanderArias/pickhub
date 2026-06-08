@@ -12,7 +12,6 @@ import type { EventInsert, EventUpdate } from '@/types/database-helpers';
 import { ALLOWED_RECEIPT_TEMPLATES } from '@/lib/receipt-templates';
 import {
   CREATOR_EVENT_DETAIL_COLUMNS,
-  EVENT_PRIZE_COLUMNS,
 } from '../data/selects';
 
 export async function getCreatorPickems() {
@@ -34,10 +33,11 @@ export async function getCreatorPickems() {
   const eventIds = events.map((e) => e.id);
 
   const prizeCounts = new Map<string, number>();
-  const { data: prizeData } = await supabase
-    .from('event_prizes')
+  const { data: prizeData } = await (supabase as any)
+    .from('pickem_prize_definitions')
     .select('event_id')
-    .in('event_id', eventIds);
+    .in('event_id', eventIds)
+    .eq('is_active', true);
   for (const p of prizeData ?? []) {
     prizeCounts.set(p.event_id, (prizeCounts.get(p.event_id) ?? 0) + 1);
   }
@@ -79,12 +79,6 @@ export async function getCreatorPickemById(id: string) {
   }
 
   if (!event) return null;
-
-  const { data: prizes } = await supabase
-    .from('event_prizes')
-    .select(EVENT_PRIZE_COLUMNS)
-    .eq('event_id', id)
-    .order('sort_order', { ascending: true });
 
   const { data: creatorProfile } = await supabase
     .from('creator_profiles')
@@ -140,7 +134,7 @@ export async function getCreatorPickemById(id: string) {
     .select('*', { count: 'exact', head: true })
     .eq('event_id', id);
 
-  return { ...event, creator: creatorProfile ?? null, prizes: prizes ?? [], players: players ?? [], predictions, submissionCount: submissionCount ?? 0 };
+  return { ...event, creator: creatorProfile ?? null, players: players ?? [], predictions, submissionCount: submissionCount ?? 0 };
 }
 
 import { isActivityCapabilityEnabled } from '@/activities/registry.server';

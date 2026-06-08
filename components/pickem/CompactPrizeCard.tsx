@@ -1,4 +1,5 @@
 import type { Prize } from '@/app/actions/participant';
+import { formatPrizeAmount } from '@/activities/pickem/prizes/format';
 
 const POSITION_LABELS: Record<number, string> = {
   1: 'Top 1',
@@ -28,6 +29,7 @@ export function CompactPrizeCard({
   const label = isSub
     ? (SUB_LABELS[position] ?? `${prize.label} #${position}`)
     : (POSITION_LABELS[position] ?? `Top ${position}`);
+  const formattedAmount = formatPrizeAmount(prize.amount, prize.currency);
 
   return (
     <div
@@ -54,10 +56,8 @@ export function CompactPrizeCard({
         {label}
       </span>
       <p className="text-xs font-medium text-text-primary">{prize.label}</p>
-      {prize.amount !== null && (
-        <p className="text-xs font-semibold text-text-primary">
-          {prize.currency ?? 'USD'} {prize.amount.toLocaleString('es-ES')}
-        </p>
+      {formattedAmount && (
+        <p className="text-xs font-semibold text-text-primary">{formattedAmount}</p>
       )}
     </div>
   );

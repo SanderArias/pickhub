@@ -36,14 +36,11 @@ export function PrizeAwardCard({ award }: { award: PrizeAwardEntry }) {
       {award.award_status === 'unassigned' && (
         <span className="shrink-0 text-xs text-text-muted">Sin asignar</span>
       )}
-      {award.award_status === 'pending_migration' && (
-        <span className="shrink-0 text-xs text-warning">Pendiente de migraci&oacute;n</span>
+      {award.award_status === 'blocked_by_tiebreaker' && (
+        <span className="shrink-0 text-xs text-warning italic">Pendiente de desempate</span>
       )}
       {award.award_status === 'review_required' && (
         <span className="shrink-0 text-xs text-danger">Requiere revisi&oacute;n</span>
-      )}
-      {award.award_status === 'partial' && (
-        <span className="shrink-0 text-xs text-warning">Asignaci&oacute;n parcial</span>
       )}
     </div>
   );

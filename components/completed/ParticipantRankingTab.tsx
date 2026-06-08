@@ -12,6 +12,7 @@ interface ParticipantRankingTabProps {
   tiebreakerWinners: string[];
   wonPrizeIds: Set<string>;
   prizes: Prize[];
+  isTiebreakerPending?: boolean;
 }
 
 export function ParticipantRankingTab({
@@ -20,6 +21,7 @@ export function ParticipantRankingTab({
   tiebreakerWinners,
   wonPrizeIds,
   prizes,
+  isTiebreakerPending,
 }: ParticipantRankingTabProps) {
   const tiebreakerSet = useMemo(() => new Set(tiebreakerWinners), [tiebreakerWinners]);
   const prizeLabelById = useMemo(() => new Map(prizes.map((p) => [p.id, p.label])), [prizes]);
@@ -52,13 +54,18 @@ export function ParticipantRankingTab({
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-sm font-semibold text-text-primary">Clasificaci&oacute;n final</h2>
-        <p className="mt-0.5 text-xs text-text-muted">
-          Posiciones definitivas despu&eacute;s de desempates y asignaci&oacute;n de premios.
-        </p>
+        <h2 className="text-sm font-semibold text-text-primary">
+          {isTiebreakerPending ? 'Clasificaci&oacute;n' : 'Clasificaci&oacute;n final'}
+        </h2>
+        {!isTiebreakerPending && (
+          <p className="mt-0.5 text-xs text-text-muted">
+            Posiciones definitivas despu&eacute;s de desempates y asignaci&oacute;n de premios.
+          </p>
+        )}
       </div>
       <RankingTable
         entries={entries}
+        isProvisional={!!isTiebreakerPending}
         hasPrizes={prizes.length > 0}
         currentProfileId={myProfileId}
       />

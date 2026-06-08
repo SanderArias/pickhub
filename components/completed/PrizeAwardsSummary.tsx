@@ -1,14 +1,9 @@
 import type { PrizeAwardEntry } from '@/activities/pickem/actions/results-data';
-
-function formatAmount(award: PrizeAwardEntry): string {
-  if (award.prize_amount !== null) {
-    return `${award.prize_amount.toLocaleString('es-ES')} ${award.prize_currency ?? 'USD'}`;
-  }
-  return '';
-}
+import { formatPrizeAmount } from '@/activities/pickem/prizes/format';
 
 function PrizeMiniCard({ award }: { award: PrizeAwardEntry }) {
   const isSubBonus = award.prize_category === 'subscriber_bonus';
+  const formattedAmount = formatPrizeAmount(award.prize_amount, award.prize_currency);
   return (
     <div className={`rounded-lg border px-3.5 py-2.5 ${
       isSubBonus
@@ -20,14 +15,14 @@ function PrizeMiniCard({ award }: { award: PrizeAwardEntry }) {
           <p className={`text-xs font-semibold ${isSubBonus ? 'text-purple-primary' : 'text-text-primary'}`}>
             {isSubBonus && '★ '}{award.prize_label}
           </p>
-          {award.prize_amount !== null && (
-            <p className="mt-0.5 text-xs text-text-muted">
-              {formatAmount(award)}
-            </p>
+          {formattedAmount && (
+            <p className="mt-0.5 text-xs text-text-muted">{formattedAmount}</p>
           )}
         </div>
         <div className="shrink-0 text-right">
-          {award.display_name ? (
+          {award.award_status === 'blocked_by_tiebreaker' ? (
+            <p className="text-xs font-medium text-warning italic">En espera de desempate</p>
+          ) : award.display_name ? (
             <p className="text-xs font-medium text-text-primary truncate max-w-[140px]">
               {award.display_name}
             </p>
@@ -42,10 +37,13 @@ function PrizeMiniCard({ award }: { award: PrizeAwardEntry }) {
 
 export function PrizeAwardsSummary({
   awards,
+  totalPrizeDefinitions,
 }: {
   awards: PrizeAwardEntry[];
+  totalPrizeDefinitions?: number;
 }) {
-  if (awards.length === 0) {
+  const hasConfigurations = (totalPrizeDefinitions ?? awards.length) > 0;
+  if (!hasConfigurations) {
     return (
       <section className="flex flex-col gap-4">
         <h3 className="text-sm font-semibold text-text-primary">Premios</h3>

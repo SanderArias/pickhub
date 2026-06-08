@@ -23,7 +23,6 @@ export function mapEventRowToPickemSettings(row: EventRow): PickemSettings {
   return {
     twitchChannel: row.twitch_channel,
     predictionsCloseTimezone: row.predictions_close_timezone,
-    prizeStackingPolicy: row.prize_stacking_policy,
     scoringConfig: row.scoring_config as Record<string, unknown>,
   };
 }

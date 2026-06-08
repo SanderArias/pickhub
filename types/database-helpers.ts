@@ -38,14 +38,6 @@ export type PredictionScoreRow = Schema['prediction_scores']['Row'];
 export type PredictionScoreInsert = Schema['prediction_scores']['Insert'];
 export type PredictionScoreUpdate = Schema['prediction_scores']['Update'];
 
-export type EventPrizeRow = Schema['event_prizes']['Row'];
-export type EventPrizeInsert = Schema['event_prizes']['Insert'];
-export type EventPrizeUpdate = Schema['event_prizes']['Update'];
-
-export type PrizeWinnerRow = Schema['prize_winners']['Row'];
-export type PrizeWinnerInsert = Schema['prize_winners']['Insert'];
-export type PrizeWinnerUpdate = Schema['prize_winners']['Update'];
-
 export type TiebreakerDrawRow = Schema['tiebreaker_draws']['Row'];
 export type TiebreakerDrawInsert = Schema['tiebreaker_draws']['Insert'];
 export type TiebreakerDrawUpdate = Schema['tiebreaker_draws']['Update'];

@@ -36,6 +36,12 @@ export const SUBMITTED_PREDICTION_STATUS_CONFIG: Record<string, SubmittedStatusC
     contextualMessage: 'Consulta tus puntos, tu posición y la clasificación final.',
     tone: 'success',
   },
+  tiebreaker_pending: {
+    label: 'Resultados calculados',
+    description: 'Tu puntuación está disponible.',
+    contextualMessage: 'La clasificación final depende del desempate.',
+    tone: 'warning',
+  },
 };
 
 export const EVENT_STATUS_CONFIG: Record<EventStatus, StatusConfig> = {

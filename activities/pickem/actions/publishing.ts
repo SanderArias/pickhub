@@ -67,7 +67,6 @@ export async function publishPickem(eventId: string): Promise<{ error: string | 
 
   if (updateErr) return { error: `Error al publicar: ${updateErr.message}` };
 
-  revalidatePath(pickemRoutes.creator.detail(eventId));
   return { error: null };
 }
 

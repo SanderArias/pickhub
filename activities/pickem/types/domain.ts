@@ -1,43 +1,6 @@
 import type { ActivitySummary } from '@/types/activities';
 import type { ActivityType } from '@/activities/registry';
 
-export type UpdateEventPrizesResult =
-  | {
-      success: true;
-      savedCount: number;
-      saved: Array<{ clientId: string; id: string }>;
-      errorMessage: null;
-      errorCode: null;
-      errorDetails: null;
-      errorHint: null;
-      errorOperation: null;
-    }
-  | {
-      success: false;
-      savedCount: 0;
-      saved: [];
-      errorMessage: string;
-      errorCode: string | null;
-      errorDetails: string | null;
-      errorHint: string | null;
-      errorOperation: string | null;
-    };
-
-export interface PrizeInputPayload {
-  clientId?: string;
-  id?: string;
-  label: string;
-  description: string | null;
-  amount: number | null;
-  currency: string;
-  quantity: number;
-  eligibility_type: string;
-  prize_category?: string;
-  eligible_rank_start: number;
-  sort_order: number;
-  assignment_method?: string;
-}
-
 export interface CreatorEvent {
   id: string;
   title: string;
@@ -62,7 +25,6 @@ export type PickemPhase =
 export interface PickemSettings {
   twitchChannel: string | null;
   predictionsCloseTimezone: string;
-  prizeStackingPolicy: string | null;
   scoringConfig: Record<string, unknown>;
 }
 

@@ -9,7 +9,6 @@ export const PUBLIC_EVENT_COLUMNS = `
   created_at,
   logo_url,
   twitch_channel,
-  prize_stacking_policy,
   receipt_template
 ` as const;
 
@@ -42,27 +41,10 @@ export const CREATOR_EVENT_DETAIL_COLUMNS = `
   is_public,
   logo_url,
   twitch_channel,
-  prize_stacking_policy,
   predictions_close_timezone,
   receipt_template,
   created_at,
   updated_at
-` as const;
-
-export const EVENT_PRIZE_COLUMNS = `
-  id,
-  event_id,
-  label,
-  description,
-  amount,
-  currency,
-  quantity,
-  eligibility_type,
-  assignment_method,
-  eligible_rank_start,
-  sort_order,
-  prize_category,
-  created_at
 ` as const;
 
 export const PREDICTION_QUESTION_COLUMNS = `

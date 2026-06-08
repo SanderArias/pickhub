@@ -3,9 +3,6 @@
 import { createServerClient } from '@/services/supabase';
 import { requireCreator } from '@/lib/auth';
 import { revalidatePickemPaths } from '@/activities/pickem/lib/revalidation.server';
-import { assignPrizes } from '@/lib/prize-assignment';
-import type { PrizeEligibilityType, PrizeStackingPolicy } from '@/lib/prize-types';
-import { assignEventPrizes } from '@/activities/pickem/actions/results-data';
 import { checkPickemCapability, requirePickemCapability } from '@/activities/pickem/lib/capability-guards.server';
 
 async function detectTies(eventId: string): Promise<boolean> {
@@ -347,72 +344,37 @@ export async function publishResultsAndCalculateScores(
 
   if (statusErr) return { error: `Error al actualizar estado del Pick\'em: ${statusErr.message}` };
 
-  // 13. Auto-assign prizes ONLY when no ties exist.
-  //     When ties exist, prizes are assigned after manual tiebreaker resolution via finalizeEventAfterTiebreakers().
-  if (!hasTies) {
+  // 13. Prize handling
+  if (hasTies) {
+    // Ties exist: create pending awards for all active definitions (no profile_id).
+    // Assignment happens after tiebreaker resolution in finalizeEventAfterTiebreakers.
     try {
-      const { data: newPrizes } = await supabase
-        .from('event_prizes')
-        .select('id, prize_category, eligibility_type, eligible_rank_start, quantity, sort_order')
+      const db = supabase as any;
+      const { data: defs } = await db
+        .from('pickem_prize_definitions')
+        .select('id')
         .eq('event_id', eventId)
-        .order('sort_order', { ascending: true });
+        .eq('is_active', true);
 
-      if (newPrizes && newPrizes.length > 0) {
-        const { data: lb } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
-        const leaderboardEntries = (lb ?? []) as Array<{ rank: number; profile_id: string; total_score: number }>;
-
-        if (leaderboardEntries.length > 0) {
-          // Fetch real subscriber status for all participants
-          const lbProfileIds = leaderboardEntries.map((e) => e.profile_id);
-          const { data: scoringParticipants } = await supabase
-            .from('event_participants')
-            .select('profile_id, subscriber_verification_status')
-            .eq('event_id', eventId)
-            .in('profile_id', lbProfileIds);
-
-          const scoringSubMap = new Map(
-            (scoringParticipants ?? []).map((p) => [p.profile_id, p.subscriber_verification_status]),
-          );
-
-          const participants = leaderboardEntries.map((e) => {
-            const subStatus = scoringSubMap.get(e.profile_id);
-            return {
-              profile_id: e.profile_id,
-              rank: e.rank,
-              is_verified_subscriber: subStatus === 'verified_sub',
-              is_verified_non_subscriber: subStatus === 'verified_non_sub',
-            };
-          });
-
-          const prizeDefs = newPrizes.map((p) => ({
-            id: p.id,
-            sort_order: p.sort_order,
-            eligibility_type: p.eligibility_type as PrizeEligibilityType,
-            eligible_rank_start: p.eligible_rank_start,
-            winner_count: p.quantity,
-          }));
-
-          const { data: eventData } = await supabase
-            .from('events')
-            .select('prize_stacking_policy')
-            .eq('id', eventId)
-            .single();
-
-          const policy: PrizeStackingPolicy =
-            (eventData?.prize_stacking_policy as PrizeStackingPolicy) ?? 'single_prize_per_participant';
-
-          const result = assignPrizes(participants, prizeDefs, policy);
-
-          if (result.winners.length > 0) {
-            const rows = result.winners.map((w) => ({
-              event_prize_id: w.prize_id,
-              profile_id: w.profile_id,
-              rank_achieved: w.rank,
-            }));
-            await assignEventPrizes(eventId, rows);
-          }
-        }
+      if (defs && (defs as any[]).length > 0) {
+        const pendingRows = (defs as any[]).map((d: any) => ({
+          event_id: eventId,
+          prize_definition_id: d.id,
+          assignment_source: 'automatic_ranking',
+          assignment_status: 'pending',
+        }));
+        await db.from('pickem_prize_awards').upsert(pendingRows, {
+          onConflict: 'prize_definition_id',
+          ignoreDuplicates: true,
+        });
       }
+    } catch (prizeErr) {
+      console.error('[publishResults] pending award creation error:', prizeErr);
+    }
+  } else {
+    // No ties: auto-assign via RPC
+    try {
+      await (supabase.rpc as any)('assign_pickem_prizes', { p_event_id: eventId });
     } catch (prizeErr) {
       console.error('[publishResults] prize assignment error:', prizeErr);
     }
@@ -448,11 +410,6 @@ export async function finalizeEventAfterTiebreakers(
     .single();
 
   if (!event) return { error: 'Evento no encontrado.' };
-
-  // Diagnostic log
-  if (process.env.NODE_ENV === 'development') {
-    console.info('[prizes/finalize]', { eventId, eventStatus: event.status });
-  }
 
   // Verify no pending tiebreakers remain
   const hasTies = await detectTies(eventId);
@@ -493,118 +450,71 @@ export async function finalizeEventAfterTiebreakers(
     }
   }
 
-  // Fetch leaderboard
-  const { data: lb } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
-  const leaderboardEntries = (lb ?? []) as Array<{ rank: number; profile_id: string; total_score: number }>;
+  // Fetch leaderboard with draws applied
+  const { data: lbRaw } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
+  let leaderboard = (lbRaw ?? []) as Array<{ rank: number; profile_id: string; total_score: number }>;
 
-  if (leaderboardEntries.length === 0) {
+  if (leaderboard.length === 0) {
     return { error: 'No hay clasificación para asignar premios.' };
   }
 
-  // Fetch subscriber verification status for all participants
-  const lbProfileIds = leaderboardEntries.map((e) => e.profile_id);
-  const { data: eventParticipants } = await supabase
-    .from('event_participants')
-    .select('profile_id, subscriber_verification_status')
+  // Reorder by draws within score groups (same logic as getRawLeaderboard in results-data.ts)
+  const { data: draws } = await supabase
+    .from('tiebreaker_draws')
+    .select('profile_id, draw_order')
+    .eq('event_id', eventId);
+
+  if (draws && draws.length > 0) {
+    const drawMap = new Map(draws.map((d) => [d.profile_id, d.draw_order]));
+    const byScore = new Map<number, typeof leaderboard>();
+    for (const e of leaderboard) {
+      const g = byScore.get(e.total_score) ?? [];
+      g.push(e);
+      byScore.set(e.total_score, g);
+    }
+    const reordered: typeof leaderboard = [];
+    for (const score of [...byScore.keys()].sort((a, b) => b - a)) {
+      const group = byScore.get(score)!;
+      const hasDraws = group.some((e) => drawMap.has(e.profile_id));
+      if (hasDraws) {
+        group.sort((a, b) => (drawMap.get(a.profile_id) ?? 999) - (drawMap.get(b.profile_id) ?? 999));
+      }
+      reordered.push(...group);
+    }
+    reordered.forEach((e, i) => { e.rank = i + 1; });
+    leaderboard = reordered;
+  }
+
+  // Assign prizes: update pending awards with correct profile_id
+  const db = supabase as any;
+  const { data: defs } = await db
+    .from('pickem_prize_definitions')
+    .select('id, category, rank_position, subscriber_order')
     .eq('event_id', eventId)
-    .in('profile_id', lbProfileIds);
+    .eq('is_active', true);
 
-  const subStatusMap = new Map(
-    (eventParticipants ?? []).map((p) => [p.profile_id, p.subscriber_verification_status]),
-  );
-
-  // Fetch prizes
-  const { data: newPrizes } = await supabase
-    .from('event_prizes')
-    .select('id, prize_category, eligibility_type, eligible_rank_start, quantity, sort_order')
-    .eq('event_id', eventId)
-    .order('sort_order', { ascending: true });
-
-  if (!newPrizes || newPrizes.length === 0) {
-    await supabase.from('events').update({ status: 'completed' }).eq('id', eventId);
-    revalidatePickemPaths(eventId);
-    return { error: null };
-  }
-
-  // Check if prizes are already assigned (idempotent)
-  const prizeIds = newPrizes.map((p) => p.id);
-  const { data: existingAwards } = await supabase
-    .from('prize_winners')
-    .select('event_prize_id')
-    .in('event_prize_id', prizeIds);
-
-  if (existingAwards && existingAwards.length >= prizeIds.length) {
-    return { error: null };
-  }
-
-  // Build participants with real subscriber status
-  const participants = leaderboardEntries.map((e) => {
-    const subStatus = subStatusMap.get(e.profile_id);
-    return {
-      profile_id: e.profile_id,
-      rank: e.rank,
-      is_verified_subscriber: subStatus === 'verified_sub',
-      is_verified_non_subscriber: subStatus === 'verified_non_sub',
-    };
-  });
-
-  const { data: eventData } = await supabase
-    .from('events')
-    .select('prize_stacking_policy')
-    .eq('id', eventId)
-    .single();
-
-  const prizeDefs = newPrizes.map((p) => ({
-    id: p.id,
-    sort_order: p.sort_order,
-    eligibility_type: p.eligibility_type as PrizeEligibilityType,
-    eligible_rank_start: p.eligible_rank_start,
-    winner_count: p.quantity,
-  }));
-
-  const policy: PrizeStackingPolicy =
-    (eventData?.prize_stacking_policy as PrizeStackingPolicy) ?? 'single_prize_per_participant';
-
-  const result = assignPrizes(participants, prizeDefs, policy);
-
-  if (process.env.NODE_ENV === 'development') {
-    for (const w of result.winners) {
-      console.info('[prizes/assignment]', {
-        prizeId: w.prize_id,
-        profileId: w.profile_id,
-        rank: w.rank,
-        assignmentStatus: 'assigned',
-      });
-    }
-    for (const warn of result.warnings) {
-      console.info('[prizes/assignment] warning:', warn);
+  if (defs) {
+    for (const d of (defs as any[])) {
+      if (d.category === 'general_rank' && d.rank_position != null) {
+        const winner = leaderboard.find((e) => e.rank === d.rank_position);
+        if (winner) {
+          await db
+            .from('pickem_prize_awards')
+            .upsert({
+              event_id: eventId,
+              prize_definition_id: d.id,
+              profile_id: winner.profile_id,
+              awarded_rank: d.rank_position,
+              assignment_source: 'automatic_ranking',
+              assignment_status: 'assigned',
+              awarded_at: new Date().toISOString(),
+            }, { onConflict: 'prize_definition_id' });
+        }
+      }
     }
   }
 
-  if (result.winners.length > 0) {
-    const rows = result.winners.map((w) => ({
-      event_prize_id: w.prize_id,
-      profile_id: w.profile_id,
-      rank_achieved: w.rank,
-    }));
-
-    const { error: assignErr } = await supabase.from('prize_winners').upsert(rows, {
-      onConflict: 'event_prize_id,profile_id',
-    });
-
-    if (assignErr) {
-      console.error('[finalizeEventAfterTiebreakers] upsert error:', {
-        message: assignErr.message,
-        code: assignErr.code,
-        details: assignErr.details,
-        hint: assignErr.hint,
-        operation: 'prize_winners_upsert',
-      });
-      return { error: `Error al asignar premios: ${assignErr.message}` };
-    }
-  }
-
-  // Mark event as completed (safe to call even if already completed)
+  // Mark event as completed (safe even if already completed)
   const { error: completeErr } = await supabase
     .from('events')
     .update({ status: 'completed' })

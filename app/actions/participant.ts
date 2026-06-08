@@ -7,10 +7,10 @@ import { revalidatePath } from 'next/cache';
 import { checkPickemCapability, requirePickemCapability } from '@/activities/pickem/lib/capability-guards.server';
 import {
   PUBLIC_EVENT_COLUMNS,
-  EVENT_PRIZE_COLUMNS,
   PREDICTION_QUESTION_COLUMNS,
   PREDICTION_OPTION_COLUMNS,
 } from '@/activities/pickem/data/selects';
+import { getPrizeConfiguration } from '@/activities/pickem/prizes/actions/get-prize-configuration';
 
 export interface PublicEventData {
   id: string;
@@ -22,9 +22,23 @@ export interface PublicEventData {
   created_at: string;
   logo_url: string | null;
   twitch_channel: string | null;
-  prize_stacking_policy: string | null;
   receipt_template: string | null;
   creator: { display_name: string | null; handle: string | null; avatar_url: string | null } | null;
+}
+
+export interface PrizeDisplay {
+  id: string;
+  event_id: string;
+  label: string;
+  description: string | null;
+  amount: number | null;
+  currency: string | null;
+  quantity: number;
+  eligibility_type: string;
+  assignment_method: string;
+  eligible_rank_start: number;
+  sort_order: number;
+  prize_category: string | null;
 }
 
 export interface EventPlayer {
@@ -91,6 +105,7 @@ export interface PublicPickemResult {
   players: EventPlayer[];
   predictions: PredictionQuestion[];
   prizes: Prize[];
+  prizeConfiguration: import('@/activities/pickem/prizes/types').PrizeConfiguration;
   mySubmission: Submission | null;
   error: string | null;
 }
@@ -112,15 +127,15 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
 
   if (eventError) {
     console.error('[pickem:public] query error', { slug, code: eventError.code, message: eventError.message });
-    return { event: null, players: [], predictions: [], prizes: [], mySubmission: null, error: 'Error al cargar el Pick\'em.' };
+    return { event: null, players: [], predictions: [], prizes: [], prizeConfiguration: { settings: { stackingPolicy: 'allow_both' }, generalPrizes: [], subscriberBenefits: [] }, mySubmission: null, error: 'Error al cargar el Pick\'em.' };
   }
 
   if (!event) {
-    return { event: null, players: [], predictions: [], prizes: [], mySubmission: null, error: 'Pick\'em no encontrado.' };
+    return { event: null, players: [], predictions: [], prizes: [], prizeConfiguration: { settings: { stackingPolicy: 'allow_both' }, generalPrizes: [], subscriberBenefits: [] }, mySubmission: null, error: 'Pick\'em no encontrado.' };
   }
 
   if (event.status === 'draft') {
-    return { event: null, players: [], predictions: [], prizes: [], mySubmission: null, error: 'Este Pick\'em todavía no está disponible.' };
+    return { event: null, players: [], predictions: [], prizes: [], prizeConfiguration: { settings: { stackingPolicy: 'allow_both' }, generalPrizes: [], subscriberBenefits: [] }, mySubmission: null, error: 'Este Pick\'em todavía no está disponible.' };
   }
 
   if (event.status === 'open' && event.ends_at && new Date(event.ends_at) <= new Date()) {
@@ -141,14 +156,9 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
   let prizes: Prize[] = [];
   let mySubmission: Submission | null = null;
 
-  // Load prizes for everyone (including unauthenticated users).
-  // RLS on event_prizes now allows reading prizes for visible events.
-  const { data: prizesData } = await supabase
-    .from('event_prizes')
-    .select(EVENT_PRIZE_COLUMNS)
-    .eq('event_id', event.id)
-    .order('sort_order', { ascending: true });
-  prizes = (prizesData ?? []) as Prize[];
+  // Load prize configuration from new architecture
+  const prizeConfig = await getPrizeConfiguration(event.id);
+  prizes = [] as Prize[];
 
   if (user) {
     const [cpRes, playersRes, questionsRes] = await Promise.all([
@@ -229,6 +239,7 @@ export async function getPublicPickem(slug: string): Promise<PublicPickemResult>
     players,
     predictions,
     prizes,
+    prizeConfiguration: prizeConfig,
     mySubmission,
     error: null,
   };
@@ -639,7 +650,7 @@ export async function getSubmissionReceipt(
   submission: (Submission & { answers: (Answer & { option_label?: string; player_id?: string | null })[] }) | null;
   predictions: PredictionQuestion[];
   players: EventPlayer[];
-  prizes: Prize[];
+  prizes: PrizeDisplay[];
   error: string | null;
 }> {
   requirePickemCapability('readHistoricalData');
@@ -658,15 +669,44 @@ export async function getSubmissionReceipt(
   if (!event) return { event: null, submission: null, predictions: [], players: [], prizes: [], error: 'Pick\'em no encontrado.' };
 
   // Fetch all needed data
-  const [cpRes, playersRes, questionsRes, prizesRes] = await Promise.all([
+  const prizeConfig = await getPrizeConfiguration(event.id);
+  const [cpRes, playersRes, questionsRes] = await Promise.all([
     supabase.from('creator_profiles').select('id, profile_id, handle').eq('id', event.creator_id).maybeSingle(),
     supabase.from('event_players').select('id, name, is_active, country_code').eq('event_id', event.id).order('sort_order', { ascending: true }),
     supabase.from('prediction_questions').select(PREDICTION_QUESTION_COLUMNS).eq('event_id', event.id).eq('is_active', true).order('sort_order', { ascending: true }).order('created_at', { ascending: true }),
-    supabase.from('event_prizes').select(EVENT_PRIZE_COLUMNS).eq('event_id', event.id).order('sort_order', { ascending: true }),
   ]);
 
   const players = (playersRes.data ?? []) as EventPlayer[];
-  const prizes = (prizesRes.data ?? []) as Prize[];
+  const prizes: PrizeDisplay[] = [
+    ...prizeConfig.generalPrizes.map((d) => ({
+      id: d.id,
+      event_id: event.id,
+      label: d.title,
+      description: d.description,
+      amount: null as number | null,
+      currency: null as string | null,
+      quantity: 1,
+      eligibility_type: 'all' as const,
+      assignment_method: 'ranking' as const,
+      eligible_rank_start: d.rankPosition ?? 1,
+      sort_order: d.sortOrder,
+      prize_category: 'general_ranking' as const,
+    })),
+    ...prizeConfig.subscriberBenefits.map((d) => ({
+      id: d.id,
+      event_id: event.id,
+      label: d.title,
+      description: d.description,
+      amount: null as number | null,
+      currency: null as string | null,
+      quantity: 1,
+      eligibility_type: 'subscribers' as const,
+      assignment_method: 'ranking' as const,
+      eligible_rank_start: d.subscriberOrder ?? 1,
+      sort_order: d.sortOrder,
+      prize_category: 'subscriber_bonus' as const,
+    })),
+  ];
 
   let creatorInfo: { display_name: string | null; handle: string | null; avatar_url: string | null } | null = null;
   if (cpRes.data) {
@@ -788,4 +828,213 @@ export async function getParticipantOfficialResults(eventId: string): Promise<Of
     seed: p.seed,
     image_url: p.image_url,
   }));
+}
+
+/* ------------------------------------------------------------------ */
+/*  Participant result view model                                      */
+/* ------------------------------------------------------------------ */
+
+export type ParticipantResultStatus = 'pending' | 'provisional' | 'tiebreaker_pending' | 'finalized';
+
+export type ParticipantPrizeStatus = 'available' | 'pending_assignment' | 'won' | 'not_won' | 'on_hold_tiebreaker';
+
+export interface ParticipantPrizeViewModel {
+  definitionId: string;
+  category: string;
+  label: string;
+  description: string | null;
+  amount: number | null;
+  currency: string | null;
+  status: ParticipantPrizeStatus;
+  winnerName: string | null;
+}
+
+export interface ParticipantResultViewModel {
+  result: {
+    rank: number | null;
+    sharedRank: number | null;
+    total_score: number | null;
+    correct_answers: number;
+    total_questions: number;
+    resultStatus: ParticipantResultStatus;
+    isFinalWinner: boolean;
+  };
+  prizes: ParticipantPrizeViewModel[];
+}
+
+/**
+ * Loads the participant's result summary for the given event and profile.
+ * Combines prize definitions + awards + leaderboard data into a single view model.
+ */
+export async function getParticipantResultSummary(
+  eventId: string,
+  profileId: string,
+): Promise<ParticipantResultViewModel> {
+  requirePickemCapability('readHistoricalData');
+
+  const supabase = await createServerClient();
+  const db = supabase as any;
+
+  // 1. Prize definitions — always loaded (source of truth for what prizes exist)
+  const { data: prizeDefs } = await db
+    .from('pickem_prize_definitions')
+    .select('id, category, title, description, amount, currency, rank_position, subscriber_order')
+    .eq('event_id', eventId)
+    .eq('is_active', true)
+    .order('sort_order', { ascending: true });
+
+  // 2. Prize awards for this participant
+  const defIds: string[] = (prizeDefs ?? []).map((p: any) => p.id);
+  let myAwardDefIds = new Set<string>();
+  let awardWinnerMap = new Map<string, string | null>();
+
+  if (defIds.length > 0) {
+    const { data: allAwards } = await db
+      .from('pickem_prize_awards')
+      .select('prize_definition_id, profile_id, assignment_status')
+      .in('prize_definition_id', defIds);
+
+    for (const a of (allAwards ?? []) as Array<{ prize_definition_id: string; profile_id: string | null; assignment_status: string }>) {
+      if (a.profile_id === profileId && a.assignment_status === 'assigned') {
+        myAwardDefIds.add(a.prize_definition_id);
+      }
+      if (a.assignment_status === 'assigned' && a.profile_id) {
+        if (!awardWinnerMap.has(a.prize_definition_id)) {
+          awardWinnerMap.set(a.prize_definition_id, a.profile_id);
+        }
+      }
+    }
+  }
+
+  // 3. Leaderboard + score
+  const { data: lb } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
+  const leaderboard = (lb ?? []) as Array<{
+    rank: number;
+    profile_id: string;
+    display_name: string | null;
+    total_score: number;
+    correct_answers: number;
+    total_questions: number;
+  }>;
+
+  const myEntry = leaderboard.find((e) => e.profile_id === profileId) ?? null;
+
+  // 4. Detect ties
+  const { data: submissions } = await supabase
+    .from('submissions')
+    .select('total_score')
+    .eq('event_id', eventId)
+    .eq('status', 'scored');
+
+  const scoreCounts = new Map<number, number>();
+  for (const s of submissions ?? []) {
+    if (s.total_score === null) continue;
+    scoreCounts.set(s.total_score, (scoreCounts.get(s.total_score) ?? 0) + 1);
+  }
+
+  // Compute shared rank: within the same score group, use the lowest rank
+  let sharedRank: number | null = null;
+  if (myEntry && scoreCounts.get(myEntry.total_score ?? -1)! > 1) {
+    const minRank = Math.min(
+      ...leaderboard
+        .filter((e) => e.total_score === myEntry.total_score)
+        .map((e) => e.rank),
+    );
+    sharedRank = minRank;
+  }
+
+  // 5. Tiebreaker draws
+  const { data: draws } = await supabase
+    .from('tiebreaker_draws')
+    .select('profile_id, draw_order')
+    .eq('event_id', eventId);
+
+  // Determine if the participant's OWN score group has draws (not global)
+  const sameScorePids = leaderboard
+    .filter((e) => e.total_score === myEntry?.total_score)
+    .map((e) => e.profile_id);
+  const drawsForMyGroup = (draws ?? []).filter((d) => sameScorePids.includes(d.profile_id));
+  const myGroupHasDraws = drawsForMyGroup.length > 0;
+
+  const participantScore = myEntry?.total_score ?? null;
+  const isInTiedScoreGroup = participantScore !== null && (scoreCounts.get(participantScore) ?? 1) > 1;
+  const isInPendingTiebreaker = isInTiedScoreGroup && !myGroupHasDraws;
+
+  // 6. Event status
+  const { data: event } = await supabase
+    .from('events')
+    .select('status')
+    .eq('id', eventId)
+    .single();
+
+  const eventStatus = event?.status ?? 'unknown';
+  const isCompleted = eventStatus === 'completed';
+
+  // 7. Determine result status
+  let resultStatus: ParticipantResultStatus;
+  let isFinalWinner = false;
+
+  if (isInPendingTiebreaker) {
+    resultStatus = 'tiebreaker_pending';
+  } else if (isCompleted) {
+    resultStatus = 'finalized';
+    if (myEntry && myEntry.rank === 1 && !isInTiedScoreGroup) {
+      isFinalWinner = true;
+    }
+  } else if (myEntry) {
+    resultStatus = 'provisional';
+  } else {
+    resultStatus = 'pending';
+  }
+
+  // 8. Build prize view models
+  interface ParticipantResultViewModelResult {
+    rank: number | null;
+    sharedRank: number | null;
+    total_score: number | null;
+    correct_answers: number;
+    total_questions: number;
+    resultStatus: ParticipantResultStatus;
+    isFinalWinner: boolean;
+  }
+  interface ParticipantPrizeViewModelPrize extends ParticipantPrizeViewModel {} // eslint-disable-line
+
+  const result: ParticipantResultViewModelResult = {
+    rank: myEntry?.rank ?? null,
+    sharedRank,
+    total_score: myEntry?.total_score ?? null,
+    correct_answers: myEntry?.correct_answers ?? 0,
+    total_questions: myEntry?.total_questions ?? 0,
+    resultStatus,
+    isFinalWinner,
+  };
+
+  const prizes: ParticipantPrizeViewModel[] = (prizeDefs ?? []).map((d: any) => {
+    const isGeneral = d.category === 'general_rank';
+    let status: ParticipantPrizeStatus = 'available';
+
+    if (isInPendingTiebreaker) {
+      status = 'on_hold_tiebreaker' as ParticipantPrizeStatus;
+    } else if (myAwardDefIds.has(d.id)) {
+      status = 'won';
+    } else if (isCompleted) {
+      status = 'not_won';
+    }
+
+    const winnerId = awardWinnerMap.get(d.id) ?? null;
+    const winnerName = winnerId && winnerId !== profileId ? winnerId : null;
+
+    return {
+      definitionId: d.id,
+      category: isGeneral ? 'general_ranking' : 'subscriber_bonus',
+      label: d.title,
+      description: d.description,
+      amount: d.amount,
+      currency: d.currency,
+      status,
+      winnerName,
+    };
+  });
+
+  return { result, prizes };
 }

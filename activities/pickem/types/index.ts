@@ -1,6 +1,4 @@
 export type {
-  UpdateEventPrizesResult,
-  PrizeInputPayload,
   CreatorEvent,
   PickemPhase,
   PickemSettings,

@@ -1,13 +1,19 @@
 'use client';
 
-import { useState, useCallback, useRef, useMemo, type ReactNode } from 'react';
-import { updateEventPrizes } from '@/activities/pickem/actions';
-import {
-  type Prize,
-  type PrizeStackingPolicy,
-  CURRENCIES,
-} from '@/lib/prize-types';
+import { useState, useCallback, useRef, useMemo, useEffect, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
+import { savePrizeConfiguration } from '@/activities/pickem/prizes/actions/save-prize-configuration';
 import { type TwitchVerificationStatus } from '@/lib/twitch';
+import { Card } from '@/components/ui/Card';
+
+const CURRENCIES = ['USD', 'DOP', 'EUR'] as const;
+import {
+  mapPrizeConfigurationToSectionModel,
+  mapSectionStateToSavePayload,
+  type PrizeSectionDraft,
+  type PrizeSectionSaveState,
+} from '@/activities/pickem/prizes/adapters';
+import type { PrizeConfiguration } from '@/activities/pickem/prizes/types';
 
 type PrizeCategory = 'general_ranking' | 'subscriber_bonus';
 
@@ -21,6 +27,8 @@ type PrizeDraft = {
   amount: string;
   currency: string;
 };
+
+type PrizeStackingPolicy = 'allow_multiple_prizes' | 'single_prize_per_participant';
 
 const CATEGORY_LABELS: Record<PrizeCategory, string> = {
   general_ranking: 'Premios de la clasificación general',
@@ -87,40 +95,6 @@ function nextAvailableRank(drafts: PrizeDraft[]): number {
   let r = 1;
   while (taken.has(r)) r++;
   return r;
-}
-
-function toDrafts(p: Prize): PrizeDraft[] {
-  const category: PrizeCategory = p.eligibility_type === 'subscribers' ? 'subscriber_bonus' : 'general_ranking';
-  const quantity = p.quantity;
-  const start = p.eligible_rank_start;
-
-  if (quantity === 1) {
-    return [{
-      localId: `migrated_${p.id}`,
-      persistedId: p.id,
-      category,
-      rank: start,
-      label: p.label,
-      description: p.description ?? '',
-      amount: p.amount != null ? String(p.amount) : '',
-      currency: p.currency ?? 'USD',
-    }];
-  }
-
-  const drafts: PrizeDraft[] = [];
-  for (let i = 0; i < quantity; i++) {
-    drafts.push({
-      localId: i === 0 ? `migrated_${p.id}` : genLocalId(),
-      persistedId: i === 0 ? p.id : null,
-      category,
-      rank: start + i,
-      label: i === 0 ? p.label : `${p.label} (Top ${start + i})`,
-      description: p.description ?? '',
-      amount: p.amount != null ? String(p.amount) : '',
-      currency: p.currency ?? 'USD',
-    });
-  }
-  return drafts;
 }
 
 type FlatPrizeError = {
@@ -548,44 +522,49 @@ function PrizeBlock({
 
 function PrizeSectionInner({
   eventId,
-  initialPrizes,
-  initialStackingPolicy,
+  initialConfiguration,
   twitchStatus = 'loading',
   readOnly = false,
 }: {
   eventId: string;
-  initialPrizes: Prize[];
-  initialStackingPolicy: PrizeStackingPolicy;
+  initialConfiguration: PrizeConfiguration;
   twitchStatus?: TwitchVerificationStatus;
   readOnly?: boolean;
 }) {
+  const sectionModel = useMemo(() => mapPrizeConfigurationToSectionModel(initialConfiguration), [initialConfiguration]);
+
   const initGeneral = useMemo(() => {
-    const result: PrizeDraft[] = [];
-    for (const p of initialPrizes) {
-      const draftList = toDrafts(p);
-      for (const d of draftList) {
-        if (d.category === 'general_ranking') result.push(d);
-      }
-    }
-    result.sort((a, b) => a.rank - b.rank);
-    return result;
-  }, [initialPrizes]);
+    return sectionModel.generalPrizes.map((p: PrizeSectionDraft) => ({
+      localId: p.localId,
+      persistedId: p.persistedId,
+      category: p.category,
+      rank: p.rank,
+      label: p.label,
+      description: p.description,
+      amount: p.amount,
+      currency: p.currency,
+    }));
+  }, [sectionModel.generalPrizes]);
 
   const initSub = useMemo(() => {
-    const result: PrizeDraft[] = [];
-    for (const p of initialPrizes) {
-      const draftList = toDrafts(p);
-      for (const d of draftList) {
-        if (d.category === 'subscriber_bonus') result.push(d);
-      }
-    }
-    result.sort((a, b) => a.rank - b.rank);
-    return result;
-  }, [initialPrizes]);
+    return sectionModel.subPrizes.map((p: PrizeSectionDraft) => ({
+      localId: p.localId,
+      persistedId: p.persistedId,
+      category: p.category,
+      rank: p.rank,
+      label: p.label,
+      description: p.description,
+      amount: p.amount,
+      currency: p.currency,
+    }));
+  }, [sectionModel.subPrizes]);
 
   const [generalPrizes, setGeneralPrizes] = useState<PrizeDraft[]>(initGeneral);
   const [subPrizes, setSubPrizes] = useState<PrizeDraft[]>(initSub);
-  const [stackingPolicy, setStackingPolicy] = useState<PrizeStackingPolicy>(initialStackingPolicy);
+  const [stackingPolicy, setStackingPolicy] = useState<PrizeStackingPolicy>(
+    sectionModel.stackingPolicy as PrizeStackingPolicy,
+  );
+  const router = useRouter();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -594,6 +573,33 @@ function PrizeSectionInner({
   const [errors, setErrors] = useState<Record<string, Record<string, string>>>({});
   const [expandedLocalId, setExpandedLocalId] = useState<string | null>(null);
   const originalsRef = useRef<Map<string, PrizeDraft>>(new Map());
+
+  const storageKey = `pickhub:event:${eventId}:prizes-open`;
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = sessionStorage.getItem(storageKey);
+      if (stored !== null) {
+        setIsOpen(stored === 'true');
+      } else {
+        setIsOpen(totalCount > 0);
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    try { sessionStorage.setItem(storageKey, String(isOpen)); } catch {}
+  }, [isOpen, storageKey]);
+
+  useEffect(() => {
+    if (formError) setIsOpen(true);
+  }, [formError]);
+
+  function toggleOpen() {
+    setIsOpen((prev) => !prev);
+  }
 
   const totalCount = generalPrizes.length + subPrizes.length;
   const isTwitchActive = twitchStatus === 'active';
@@ -770,58 +776,30 @@ function PrizeSectionInner({
     setSaving(true);
     setFormError(null);
     try {
-      const sortedGeneral = [...generalPrizes].sort((a, b) => a.rank - b.rank);
-      const sortedSub = [...subPrizes].sort((a, b) => a.rank - b.rank);
-
-      const payload: Array<{
-        clientId: string;
-        id?: string;
-        label: string;
-        description: string | null;
-        amount: number | null;
-        currency: string;
-        quantity: number;
-        eligibility_type: string;
-        prize_category: string;
-        eligible_rank_start: number;
-        sort_order: number;
-        assignment_method: string;
-      }> = [];
-
-      for (const d of sortedGeneral) {
-        payload.push({
-          clientId: d.localId,
-          id: d.persistedId ?? undefined,
-          label: d.label.trim(),
-          description: d.description || null,
-          amount: d.amount ? Number(d.amount) : null,
+      const saveState: PrizeSectionSaveState = {
+        generalPrizes: generalPrizes.map((d) => ({
+          localId: d.localId,
+          persistedId: d.persistedId,
+          rank: d.rank,
+          label: d.label,
+          description: d.description,
+          amount: d.amount,
           currency: d.currency,
-          quantity: 1,
-          eligibility_type: 'all',
-          prize_category: 'general_ranking',
-          eligible_rank_start: d.rank,
-          sort_order: d.rank,
-          assignment_method: 'ranking',
-        });
-      }
-      for (const d of sortedSub) {
-        payload.push({
-          clientId: d.localId,
-          id: d.persistedId ?? undefined,
-          label: d.label.trim(),
-          description: d.description || null,
-          amount: d.amount ? Number(d.amount) : null,
+        })),
+        subPrizes: subPrizes.map((d) => ({
+          localId: d.localId,
+          persistedId: d.persistedId,
+          rank: d.rank,
+          label: d.label,
+          description: d.description,
+          amount: d.amount,
           currency: d.currency,
-          quantity: 1,
-          eligibility_type: 'subscribers',
-          prize_category: 'subscriber_bonus',
-          eligible_rank_start: d.rank,
-          sort_order: 1000 + d.rank,
-          assignment_method: 'ranking',
-        });
-      }
+        })),
+        stackingPolicy,
+      };
 
-      const rawResult = await updateEventPrizes(eventId, payload, stackingPolicy);
+      const payload = mapSectionStateToSavePayload(eventId, saveState);
+      const rawResult = await savePrizeConfiguration(payload);
 
       if (!rawResult || typeof rawResult !== 'object' || typeof rawResult.success !== 'boolean') {
         console.error('[prizes/save:client] Invalid server response', { rawResult, eventId });
@@ -846,7 +824,7 @@ function PrizeSectionInner({
           details: errorInfo.details,
           hint: errorInfo.hint,
           eventId,
-          prizeCount: payload.length,
+          definitionsCount: payload.definitions.length,
         });
         setLastServerError(errorInfo as unknown as Record<string, unknown>);
         setFormError(getSaveErrorUserMessage(errorInfo));
@@ -867,6 +845,7 @@ function PrizeSectionInner({
       }
       setDirty(false);
       setSaved(true);
+      router.refresh();
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
       const serialized = { message: err instanceof Error ? err.message : 'Error desconocido', code: 'UNEXPECTED' as const, details: null, hint: null, operation: null };
@@ -912,200 +891,246 @@ function PrizeSectionInner({
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      {!readOnly && (
-        <p className="text-xs text-text-secondary">
-          Configura las recompensas de la clasificación y los beneficios exclusivos para tus suscriptores.
-        </p>
-      )}
-
-      {/* General ranking block */}
-      <PrizeBlock
-        category="general_ranking"
-        drafts={generalPrizes}
-        expandedLocalId={expandedLocalId}
-        errors={errors}
-        readOnly={readOnly}
-        onToggle={handleToggle}
-        onChange={handleChange}
-        onDone={handleDone}
-        onCancel={handleCancel}
-        onDelete={handleDelete}
-        onAdd={handleAddGeneral}
-      />
-
-      <hr className="border-border" />
-
-      {/* Subscriber bonus block */}
-      <div className="flex flex-col gap-3">
-        {!readOnly && isTwitchBlocked && subPrizes.length > 0 && (
-          <div className="flex items-start gap-3 rounded-xl border border-warning-border bg-warning-bg px-4 py-3">
-            <svg className="mt-0.5 size-4 shrink-0 text-warning" viewBox="0 0 16 16" fill="none">
-              <path d="M8 2V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <path d="M8 11.5C8.41421 11.5 8.75 11.1642 8.75 10.75C8.75 10.3358 8.41421 10 8 10C7.58579 10 7.25 10.3358 7.25 10.75C7.25 11.1642 7.58579 11.5 8 11.5Z" fill="currentColor" />
-              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm text-warning">Verificación de Twitch requerida</p>
-              <p className="mt-0.5 text-xs text-text-muted">
-                Los beneficios para suscriptores no estarán disponibles hasta que actives la verificación.
-              </p>
-            </div>
-            <a
-              href="/settings"
-              className="shrink-0 rounded-lg border border-warning-border px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/20"
+    <Card variant={totalCount > 0 ? 'success' : 'warning'}>
+      <button
+        type="button"
+        onClick={toggleOpen}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleOpen(); } }}
+        aria-expanded={isOpen}
+        aria-controls="pickem-prizes-content"
+        className="flex w-full cursor-pointer items-start justify-between gap-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-primary/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+      >
+        <div className="min-w-0">
+          <h3 className="font-semibold text-text-primary">Premios</h3>
+          {isOpen ? (
+            <p className="mt-0.5 text-xs text-text-secondary">Configura las recompensas de la clasificación y los beneficios exclusivos para tus suscriptores.</p>
+          ) : (
+            <p className="mt-0.5 text-xs text-text-muted">{totalCount === 0 ? 'Sin premios' : `${totalCount} premio${totalCount !== 1 ? 's' : ''}`}</p>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          {dirty && (
+            <span className="text-xs text-warning">Cambios sin guardar</span>
+          )}
+          <span className="text-xs text-text-muted whitespace-nowrap">
+            {totalCount} configurado{totalCount !== 1 ? 's' : ''}
+          </span>
+          <span
+            className="flex size-10 items-center justify-center"
+            title={isOpen ? 'Contraer sección de premios' : 'Expandir sección de premios'}
+          >
+            <svg
+              className={`size-4 text-text-muted transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
             >
-              Configurar Twitch
-            </a>
-          </div>
-        )}
+              <path d="M4 6L8 10L12 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+        </div>
+      </button>
 
-        <PrizeBlock
-          category="subscriber_bonus"
-          drafts={subPrizes}
-          expandedLocalId={expandedLocalId}
-          errors={errors}
-          readOnly={readOnly}
-          disableAdd={!readOnly && isTwitchBlocked}
-          emptyStateOverride={!readOnly && isTwitchBlocked && subPrizes.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface/50 py-6 text-center">
-              <div className="flex size-10 items-center justify-center rounded-full bg-surface-hover">
-                <svg className="size-5 text-text-muted" viewBox="0 0 16 16" fill="none">
-                  <rect x="3" y="1" width="10" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
-                  <path d="M6 6L10 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  <path d="M6 9L10 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <div
+        id="pickem-prizes-content"
+        className={`overflow-hidden transition-all duration-200 ease-in-out ${
+          isOpen ? 'mt-4 max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+        }`}
+        style={{
+          ...(typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            ? { transition: 'none' }
+            : {}),
+        }}
+      >
+        <div className="flex flex-col gap-6">
+          {/* General ranking block */}
+          <PrizeBlock
+            category="general_ranking"
+            drafts={generalPrizes}
+            expandedLocalId={expandedLocalId}
+            errors={errors}
+            readOnly={readOnly}
+            onToggle={handleToggle}
+            onChange={handleChange}
+            onDone={handleDone}
+            onCancel={handleCancel}
+            onDelete={handleDelete}
+            onAdd={handleAddGeneral}
+          />
+
+          <hr className="border-border" />
+
+          {/* Subscriber bonus block */}
+          <div className="flex flex-col gap-3">
+            {!readOnly && isTwitchBlocked && subPrizes.length > 0 && (
+              <div className="flex items-start gap-3 rounded-xl border border-warning-border bg-warning-bg px-4 py-3">
+                <svg className="mt-0.5 size-4 shrink-0 text-warning" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 2V8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M8 11.5C8.41421 11.5 8.75 11.1642 8.75 10.75C8.75 10.3358 8.41421 10 8 10C7.58579 10 7.25 10.3358 7.25 10.75C7.25 11.1642 7.58579 11.5 8 11.5Z" fill="currentColor" />
+                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
                 </svg>
-              </div>
-              <p className="mt-3 text-sm text-text-secondary">
-                Activa la verificación de suscriptores de Twitch para ofrecer beneficios exclusivos.
-              </p>
-              <a
-                href="/settings"
-                className="mt-3 rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
-              >
-                Configurar Twitch
-              </a>
-            </div>
-          ) : undefined}
-          onToggle={handleToggle}
-          onChange={handleChange}
-          onDone={handleDone}
-          onCancel={handleCancel}
-          onDelete={handleDelete}
-          onAdd={handleAddSub}
-        />
-      </div>
-
-      {/* Stacking policy — only shown when both categories have prizes */}
-      {!readOnly && generalPrizes.length > 0 && subPrizes.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-medium text-text-secondary">¿Un suscriptor puede ganar ambos tipos de premio?</p>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {([
-              { value: 'allow_multiple_prizes' as PrizeStackingPolicy, label: 'Sí, puede recibir ambos', desc: 'Un suscriptor puede ganar un premio general y además recibir su beneficio exclusivo.' },
-              { value: 'single_prize_per_participant' as PrizeStackingPolicy, label: 'No, pasar el beneficio al siguiente sub', desc: 'Si un suscriptor ya ganó un premio general, el beneficio exclusivo se asigna al siguiente suscriptor mejor clasificado.' },
-            ]).map((opt) => {
-              const selected = stackingPolicy === opt.value;
-              return (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => handleStackingChange(opt.value)}
-                  className={`rounded-xl border p-4 text-left transition-all ${
-                    selected
-                      ? 'border-purple-border bg-purple-surface'
-                      : 'border-border bg-surface hover:border-border-hover'
-                  }`}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-warning">Verificación de Twitch requerida</p>
+                  <p className="mt-0.5 text-xs text-text-muted">
+                    Los beneficios para suscriptores no estarán disponibles hasta que actives la verificación.
+                  </p>
+                </div>
+                <a
+                  href="/settings"
+                  className="shrink-0 rounded-lg border border-warning-border px-3 py-1.5 text-xs font-medium text-warning transition-colors hover:bg-warning/20"
                 >
-                  <div className="flex items-start gap-3">
-                    <span
-                      className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border ${
-                        selected ? 'border-purple-primary' : 'border-text-muted'
+                  Configurar Twitch
+                </a>
+              </div>
+            )}
+
+            <PrizeBlock
+              category="subscriber_bonus"
+              drafts={subPrizes}
+              expandedLocalId={expandedLocalId}
+              errors={errors}
+              readOnly={readOnly}
+              disableAdd={!readOnly && isTwitchBlocked}
+              emptyStateOverride={!readOnly && isTwitchBlocked && subPrizes.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border bg-surface/50 py-6 text-center">
+                  <div className="flex size-10 items-center justify-center rounded-full bg-surface-hover">
+                    <svg className="size-5 text-text-muted" viewBox="0 0 16 16" fill="none">
+                      <rect x="3" y="1" width="10" height="14" rx="2" stroke="currentColor" strokeWidth="1.5" />
+                      <path d="M6 6L10 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      <path d="M6 9L10 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                    </svg>
+                  </div>
+                  <p className="mt-3 text-sm text-text-secondary">
+                    Activa la verificación de suscriptores de Twitch para ofrecer beneficios exclusivos.
+                  </p>
+                  <a
+                    href="/settings"
+                    className="mt-3 rounded-lg border border-purple-primary px-4 py-2 text-sm font-medium text-purple-primary transition-colors hover:bg-purple-primary hover:text-white"
+                  >
+                    Configurar Twitch
+                  </a>
+                </div>
+              ) : undefined}
+              onToggle={handleToggle}
+              onChange={handleChange}
+              onDone={handleDone}
+              onCancel={handleCancel}
+              onDelete={handleDelete}
+              onAdd={handleAddSub}
+            />
+          </div>
+
+          {/* Stacking policy — only shown when both categories have prizes */}
+          {!readOnly && generalPrizes.length > 0 && subPrizes.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-medium text-text-secondary">¿Un suscriptor puede ganar ambos tipos de premio?</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {([
+                  { value: 'allow_multiple_prizes' as PrizeStackingPolicy, label: 'Sí, puede recibir ambos', desc: 'Un suscriptor puede ganar un premio general y además recibir su beneficio exclusivo.' },
+                  { value: 'single_prize_per_participant' as PrizeStackingPolicy, label: 'No, pasar el beneficio al siguiente sub', desc: 'Si un suscriptor ya ganó un premio general, el beneficio exclusivo se asigna al siguiente suscriptor mejor clasificado.' },
+                ]).map((opt) => {
+                  const selected = stackingPolicy === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => handleStackingChange(opt.value)}
+                      className={`rounded-xl border p-4 text-left transition-all ${
+                        selected
+                          ? 'border-purple-border bg-purple-surface'
+                          : 'border-border bg-surface hover:border-border-hover'
                       }`}
                     >
-                      {selected && <span className="size-2 rounded-full bg-purple-primary" />}
-                    </span>
-                    <div>
-                      <p className={`text-sm font-medium ${selected ? 'text-purple-primary' : 'text-text-primary'}`}>
-                        {opt.label}
-                      </p>
-                      <p className="mt-1 text-xs text-text-muted">{opt.desc}</p>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Summary bar */}
-      {totalCount > 0 && (
-        <div className="flex items-center justify-between border-t border-border pt-4">
-          <p className="text-xs text-text-muted">{summaryText}</p>
-        </div>
-      )}
-
-      {/* Form-level error */}
-      {formError && (
-        <div className="flex items-start gap-3 rounded-xl border border-danger-border bg-danger/5 px-4 py-3" role="alert">
-          <svg className="mt-0.5 size-4 shrink-0 text-danger" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M8 5V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M8 11.5C8.41421 11.5 8.75 11.1642 8.75 10.75C8.75 10.3358 8.41421 10 8 10C7.58579 10 7.25 10.3358 7.25 10.75C7.25 11.1642 7.58579 11.5 8 11.5Z" fill="currentColor" />
-          </svg>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-danger">No pudimos guardar los premios.</p>
-            <p className="mt-0.5 text-xs text-text-muted">{formError}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => { setFormError(null); setLastServerError(null); }}
-            className="shrink-0 rounded-lg border border-danger-border px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
-          >
-            Reintentar
-          </button>
-        </div>
-      )}
-
-      {process.env.NODE_ENV === 'development' && lastServerError && (
-        <pre className="overflow-auto rounded-lg border border-danger-border bg-danger/5 p-3 text-[11px] leading-relaxed text-text-muted">
-          {JSON.stringify(lastServerError, null, 2)}
-        </pre>
-      )}
-
-      {/* Save */}
-      {!readOnly && totalCount > 0 && (
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !dirty}
-            className="self-start rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
-          >
-            {saving ? 'Guardando...' : 'Guardar premios'}
-          </button>
-          {saved && (
-            <span className="flex items-center gap-1.5 text-xs text-success">
-              <svg className="size-3.5" viewBox="0 0 16 16" fill="none">
-                <path d="M4 8L7 11L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-              Premios guardados correctamente.
-            </span>
+                      <div className="flex items-start gap-3">
+                        <span
+                          className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border ${
+                            selected ? 'border-purple-primary' : 'border-text-muted'
+                          }`}
+                        >
+                          {selected && <span className="size-2 rounded-full bg-purple-primary" />}
+                        </span>
+                        <div>
+                          <p className={`text-sm font-medium ${selected ? 'text-purple-primary' : 'text-text-primary'}`}>
+                            {opt.label}
+                          </p>
+                          <p className="mt-1 text-xs text-text-muted">{opt.desc}</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           )}
-          {dirty && <span className="text-xs text-warning">Cambios sin guardar</span>}
+
+          {/* Summary bar */}
+          {totalCount > 0 && (
+            <div className="flex items-center justify-between border-t border-border pt-4">
+              <p className="text-xs text-text-muted">{summaryText}</p>
+            </div>
+          )}
+
+          {/* Form-level error */}
+          {formError && (
+            <div className="flex items-start gap-3 rounded-xl border border-danger-border bg-danger/5 px-4 py-3" role="alert">
+              <svg className="mt-0.5 size-4 shrink-0 text-danger" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+                <path d="M8 5V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M8 11.5C8.41421 11.5 8.75 11.1642 8.75 10.75C8.75 10.3358 8.41421 10 8 10C7.58579 10 7.25 10.3358 7.25 10.75C7.25 11.1642 7.58579 11.5 8 11.5Z" fill="currentColor" />
+              </svg>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-danger">No pudimos guardar los premios.</p>
+                <p className="mt-0.5 text-xs text-text-muted">{formError}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setFormError(null); setLastServerError(null); }}
+                className="shrink-0 rounded-lg border border-danger-border px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/10"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
+          {process.env.NODE_ENV === 'development' && lastServerError && (
+            <pre className="overflow-auto rounded-lg border border-danger-border bg-danger/5 p-3 text-[11px] leading-relaxed text-text-muted">
+              {JSON.stringify(lastServerError, null, 2)}
+            </pre>
+          )}
+
+          {/* Save */}
+          {!readOnly && totalCount > 0 && (
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={saving || !dirty}
+                className="self-start rounded-lg bg-purple-primary px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
+              >
+                {saving ? 'Guardando...' : 'Guardar premios'}
+              </button>
+              {saved && (
+                <span className="flex items-center gap-1.5 text-xs text-success">
+                  <svg className="size-3.5" viewBox="0 0 16 16" fill="none">
+                    <path d="M4 8L7 11L12 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Premios guardados correctamente.
+                </span>
+              )}
+              {dirty && <span className="text-xs text-warning">Cambios sin guardar</span>}
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </div>
+    </Card>
   );
 }
 
 export function PrizeSection(props: {
   eventId: string;
-  initialPrizes: Prize[];
-  initialStackingPolicy: PrizeStackingPolicy;
+  initialConfiguration: PrizeConfiguration;
   twitchStatus?: TwitchVerificationStatus;
   readOnly?: boolean;
 }) {
-  return <PrizeSectionInner {...props} />;
+  return <PrizeSectionInner {...props} initialConfiguration={props.initialConfiguration} />;
 }
