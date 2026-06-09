@@ -7,8 +7,11 @@ import { getDisplayUser } from '@/lib/getDisplayUser';
 import { getUserParticipations } from '@/app/actions/participant';
 import { StatusBadge } from '@/components/ui';
 import { RequestCreatorAccessForm } from './RequestCreatorAccessForm';
+import { perf } from '@/lib/perf';
 
 export default async function InicioPage() {
+  perf.start('[performance:dashboard:total]');
+  perf.mark('[performance:dashboard:total]', 'start');
   const user = await getUser();
   if (!user) {
     console.log('[auth-redirect]', { source: 'inicio', pathname: '/inicio', hasUser: false, userId: null, redirectTarget: '/login', reason: 'no-user' });
@@ -16,7 +19,12 @@ export default async function InicioPage() {
     redirect('/login');
   }
 
-  let profile = await getCurrentProfile(user);
+  // Parallelize profile + participations (both depend on user, not on each other)
+  let [profile, participations] = await Promise.all([
+    getCurrentProfile(user),
+    getUserParticipations('all', user),
+  ]);
+
   if (!profile) {
     const result = await ensureUserProfile(user);
     if (result.error) {
@@ -42,8 +50,6 @@ export default async function InicioPage() {
   const isSuspended = creatorStatus === 'suspended';
   const isReopened = creatorStatus === 'reopened';
   const { hasLinkedTwitch } = await checkTwitchLinked(user, profile);
-
-  const participations = await getUserParticipations('all');
 
   return (
     <div className="flex flex-col gap-8">
@@ -214,6 +220,7 @@ export default async function InicioPage() {
       )}
     </div>
   );
+  perf.end('[performance:dashboard:total]');
 }
 
 function ProfileErrorScreen() {

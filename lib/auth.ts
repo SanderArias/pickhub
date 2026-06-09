@@ -1,7 +1,9 @@
+import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/services/supabase';
 import { getUser } from '@/app/actions/auth';
 import { getTwitchAccountInfo } from '@/lib/getTwitchAccountInfo';
+import { perf } from '@/lib/perf';
 
 export type CreatorProfile = {
   id: string;
@@ -28,11 +30,12 @@ export type Profile = {
   creator_profile: CreatorProfile | null;
 };
 
-export async function getCurrentProfile(
+export const getCurrentProfile = cache(async (
   existingUser?: Awaited<ReturnType<typeof getUser>> | null,
-): Promise<Profile | null> {
+): Promise<Profile | null> => {
+  perf.start('[performance:dashboard:profile]');
   const user = existingUser ?? (await getUser());
-  if (!user) return null;
+  if (!user) { perf.end('[performance:dashboard:profile]'); return null; }
 
   const supabase = await createServerClient();
 
@@ -56,6 +59,7 @@ export async function getCurrentProfile(
       profileErrorCode: (profileError as any)?.code ?? null,
       profileErrorMessage: (profileError as any)?.message ?? null,
     });
+    perf.end('[performance:dashboard:profile]');
     return null;
   }
 
@@ -65,6 +69,7 @@ export async function getCurrentProfile(
     .eq('profile_id', user.id)
     .maybeSingle();
 
+  perf.end('[performance:dashboard:profile]');
   return {
     id: profileData.id,
     display_name: profileData.display_name ?? null,
@@ -78,7 +83,7 @@ export async function getCurrentProfile(
     twitch_avatar_url: null,
     creator_profile: creatorProfile ?? null,
   } as Profile;
-}
+});
 
 /**
  * Determines if the user has Twitch linked by checking:

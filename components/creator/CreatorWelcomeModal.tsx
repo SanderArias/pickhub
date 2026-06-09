@@ -2,35 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { createClient as createBrowserClient } from '@/services/supabase/client';
-import { useUser } from '@/hooks/useUser';
+import type { Profile } from '@/lib/auth';
 
 const STORAGE_KEY = 'pickhub_creator_welcome_seen';
 
-export function CreatorWelcomeModal({ canCreatePickem = true }: { canCreatePickem?: boolean }) {
-  const { user } = useUser();
-  const [open, setOpen] = useState(false);
+export function CreatorWelcomeModal({ canCreatePickem = true, initialProfile }: { canCreatePickem?: boolean; initialProfile?: Profile }) {
+  const [open, setOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    if (localStorage.getItem(STORAGE_KEY) === 'true') return false;
+    if (!initialProfile) return false;
+    return initialProfile.role === 'creator' && initialProfile.creator_profile?.status === 'approved';
+  });
 
   useEffect(() => {
-    if (!user) return;
-    if (localStorage.getItem(STORAGE_KEY) === 'true') return;
-
-    const supabase = createBrowserClient();
-    supabase
-      .from('profiles')
-      .select('role, creator_profile:creator_profiles(status)')
-      .eq('id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data) return;
-        const cp = Array.isArray(data.creator_profile)
-          ? data.creator_profile[0]
-          : data.creator_profile;
-        if (data.role === 'creator' && cp?.status === 'approved') {
-          setOpen(true);
-        }
-      });
-  }, [user]);
+    if (!open) return;
+    if (localStorage.getItem(STORAGE_KEY) === 'true') {
+      setOpen(false);
+    }
+  }, [open]);
 
   const handleClose = () => {
     localStorage.setItem(STORAGE_KEY, 'true');

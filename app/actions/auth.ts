@@ -1,11 +1,13 @@
 'use server';
 
+import { cache } from 'react';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createServerClient } from '@/services/supabase';
 import { getAppUrl } from '@/lib/app-url';
 import { normalizeAuthError } from '@/lib/normalize-auth-error';
 import type { AuthErrorField } from '@/lib/normalize-auth-error';
+import { perf } from '@/lib/perf';
 
 export type AuthActionResult = {
   success: boolean;
@@ -230,8 +232,10 @@ export async function getSession() {
   return data.session;
 }
 
-export async function getUser() {
+export const getUser = cache(async () => {
+  perf.start('[performance:dashboard:auth]');
   const supabase = await createServerClient();
   const { data } = await supabase.auth.getUser();
+  perf.end('[performance:dashboard:auth]');
   return data.user;
-}
+});

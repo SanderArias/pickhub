@@ -12,6 +12,7 @@ import {
 } from '@/activities/pickem/data/selects';
 import { getPrizeConfiguration } from '@/activities/pickem/prizes/actions/get-prize-configuration';
 import type { PrizeAwardEntry } from '@/activities/pickem/actions/results-data';
+import { perf } from '@/lib/perf';
 
 export interface PublicEventData {
   id: string;
@@ -511,11 +512,15 @@ export interface Participation {
   answersCount: number;
 }
 
-export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 'all'): Promise<Participation[]> {
+export async function getUserParticipations(
+  filter: 'open' | 'closed' | 'all' = 'all',
+  existingUser?: Awaited<ReturnType<typeof getUser>> | null,
+): Promise<Participation[]> {
+  perf.start('[performance:dashboard:events]');
   requirePickemCapability('readHistoricalData');
 
-  const user = await getUser();
-  if (!user) return [];
+  const user = existingUser ?? (await getUser());
+  if (!user) { perf.end('[performance:dashboard:events]'); return []; }
 
   const supabase = await createServerClient();
 
@@ -525,7 +530,7 @@ export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 
     .select('id')
     .eq('profile_id', user.id);
 
-  if (!participants || participants.length === 0) return [];
+  if (!participants || participants.length === 0) { perf.end('[performance:dashboard:events]'); return []; }
 
   const participantIds = participants.map((p) => p.id);
 
@@ -535,7 +540,7 @@ export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 
     .in('participant_id', participantIds)
     .order('submitted_at', { ascending: false });
 
-  if (!submissions || submissions.length === 0) return [];
+  if (!submissions || submissions.length === 0) { perf.end('[performance:dashboard:events]'); return []; }
 
   const eventIds = [...new Set(submissions.map((s) => s.event_id))];
 
@@ -583,15 +588,15 @@ export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 
     ]),
   );
 
-  // Count answers per submission
+  // Count answers per submission using embedded aggregate (server-side)
   const submissionIds = submissions.map((s) => s.id);
   const answerCounts = new Map<string, number>();
 
   if (submissionIds.length > 0) {
     const { data: counts, error: cntErr } = await supabase
-      .from('prediction_answers')
-      .select('submission_id')
-      .in('submission_id', submissionIds);
+      .from('submissions')
+      .select('id, answer_count:prediction_answers(count)')
+      .in('id', submissionIds);
 
     if (cntErr) {
       console.error('[pickem:participations] error counting prediction_answers', {
@@ -599,8 +604,11 @@ export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 
         message: cntErr.message,
       });
     } else if (counts) {
-      for (const a of counts) {
-        answerCounts.set(a.submission_id, (answerCounts.get(a.submission_id) ?? 0) + 1);
+      for (const row of counts) {
+        const answers = (row as any).answer_count as Array<{ count: number }> | undefined;
+        if (answers && answers.length > 0) {
+          answerCounts.set(row.id, answers[0].count);
+        }
       }
     }
   }
@@ -642,6 +650,7 @@ export async function getUserParticipations(filter: 'open' | 'closed' | 'all' = 
     });
   }
 
+  perf.end('[performance:dashboard:events]');
   return participations;
 }
 

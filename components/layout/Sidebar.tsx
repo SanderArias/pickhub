@@ -8,6 +8,7 @@ import { createClient as createBrowserClient } from '@/services/supabase/client'
 import { signOut } from '@/app/actions/auth';
 import { Logo } from '@/components/ui/Logo';
 import { CreatorWelcomeModal } from '@/components/creator/CreatorWelcomeModal';
+import type { Profile } from '@/lib/auth';
 
 function formatBadgeCount(count: number): string | undefined {
   if (count <= 0) return undefined;
@@ -42,36 +43,6 @@ function isActive(pathname: string, href: string, exact = false): boolean {
   return pathname === href || pathname.startsWith(href + '/');
 }
 
-function useProfile(user: ReturnType<typeof useUser>['user']) {
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-
-  useEffect(() => {
-    if (!user) return;
-    const supabase = createBrowserClient();
-    supabase
-      .from('profiles')
-      .select('role, display_name, avatar_url, twitch_username, creator_profile:creator_profiles(id, status)')
-      .eq('id', user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data) return;
-        const cp = Array.isArray(data.creator_profile)
-          ? data.creator_profile[0]
-          : data.creator_profile;
-        setProfile({
-          role: data.role,
-          creator_status: cp?.status ?? null,
-          display_name: data.display_name,
-          avatar_url: data.avatar_url,
-          creator_profile_id: cp?.id ?? null,
-          twitch_username: data.twitch_username ?? null,
-        });
-      });
-  }, [user]);
-
-  return profile;
-}
-
 function useGroups(profile: ProfileData | null, pathname: string) {
   const [attentionCount, setAttentionCount] = useState(0);
 
@@ -79,27 +50,21 @@ function useGroups(profile: ProfileData | null, pathname: string) {
     if (!profile || !(profile.role === 'creator' && profile.creator_status === 'approved')) return;
     const supabase = createBrowserClient();
     (async () => {
-      // 1. Get creator's events
-      const { data: events } = await supabase
-        .from('events')
-        .select('id')
-        .eq('creator_id', profile.creator_profile_id ?? '');
+      // Parallelize: events + activity_reads
+      const [{ data: events }, { data: readMarker }] = await Promise.all([
+        supabase.from('events').select('id').eq('creator_id', profile.creator_profile_id ?? ''),
+        supabase.from('creator_activity_reads').select('last_seen_at').maybeSingle(),
+      ]);
       const eventIds = (events ?? []).map((e) => e.id);
       if (eventIds.length === 0) {
         setAttentionCount(0);
         return;
       }
 
-      // 2. Get user's last_seen_at (RLS restricts to own record)
-      const { data: readMarker } = await supabase
-        .from('creator_activity_reads')
-        .select('last_seen_at')
-        .maybeSingle();
-
-      // 3. Count unread submissions (after last_seen_at, or all if never visited)
+      // Count unread submissions (after last_seen_at, or all if never visited) — head=true avoids row transfer
       let query = supabase
         .from('submissions')
-        .select('*', { count: 'exact', head: true })
+        .select('id', { count: 'exact', head: true })
         .in('event_id', eventIds);
 
       if (readMarker?.last_seen_at) {
@@ -479,10 +444,22 @@ function MobileHeader({ onMenuClick }: { onMenuClick: () => void }) {
 // Main Sidebar export
 // ============================================================================
 
-export function Sidebar({ children, canCreatePickem }: { children: React.ReactNode; canCreatePickem?: boolean }) {
+export function Sidebar({ children, canCreatePickem, initialProfile }: { children: React.ReactNode; canCreatePickem?: boolean; initialProfile?: Profile | null }) {
   const pathname = usePathname();
   const { user, loading } = useUser();
-  const profile = useProfile(user);
+  // Use profile from server when available, fall back to client fetch
+  const [profile, setProfile] = useState<ProfileData | null>(() => {
+    if (!initialProfile) return null;
+    const cp = initialProfile.creator_profile;
+    return {
+      role: initialProfile.role,
+      creator_status: cp?.status ?? null,
+      display_name: initialProfile.display_name,
+      avatar_url: initialProfile.avatar_url,
+      creator_profile_id: cp?.id ?? null,
+      twitch_username: initialProfile.twitch_username ?? null,
+    };
+  });
   const groups = useGroups(profile, pathname);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
@@ -491,7 +468,6 @@ export function Sidebar({ children, canCreatePickem }: { children: React.ReactNo
     setDrawerOpen(false);
   }, [pathname]);
 
-  const isLoading = loading;
   const showUi = !loading && !!user;
 
   return (
@@ -524,7 +500,7 @@ export function Sidebar({ children, canCreatePickem }: { children: React.ReactNo
         </main>
       </div>
 
-      <CreatorWelcomeModal canCreatePickem={canCreatePickem} />
+      <CreatorWelcomeModal canCreatePickem={canCreatePickem} initialProfile={initialProfile ?? undefined} />
     </>
   );
 }
