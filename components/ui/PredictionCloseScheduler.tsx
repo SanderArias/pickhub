@@ -1,14 +1,18 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Popover } from '@/components/ui/Popover';
 import { Calendar } from '@/components/ui/Calendar';
 import { TimezoneCombobox } from '@/components/ui/TimezoneCombobox';
 import {
   detectTimezone,
   buildUtcTimestamp,
-  formatScheduleSummary,
+  formatLocalInTimezone,
   getCountdownText,
+  isDateDisabledInTimezone,
+  isTimeDisabledInTimezone,
+  isValidScheduledClose,
+  getMinDateInTimezone,
 } from '@/lib/timezones';
 import { UI_FEATURES } from '@/config/ui-features';
 
@@ -58,22 +62,81 @@ export function PredictionCloseScheduler({
 
   const p = (s: string) => (namePrefix ? `${namePrefix}_` : '') + s;
 
-  const now = useMemo(() => new Date(), []);
-  const minDate = now.toISOString().slice(0, 10);
-
   const { hour12, minute, period } = parseTime(time);
 
-  const targetDate = date && time ? new Date(`${date}T${time}:00`) : null;
+  const minDateStr = useMemo(() => {
+    if (mode !== 'auto' || !tz) return undefined;
+    return getMinDateInTimezone(tz);
+  }, [mode, tz]);
+
+  const isDayDisabled = useCallback(
+    (year: number, month: number, day: number) => {
+      if (mode !== 'auto' || !tz) return false;
+      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      return isDateDisabledInTimezone(dateStr, tz);
+    },
+    [mode, tz],
+  );
+
+  const isHourDisabled = useCallback(
+    (h12: number) => {
+      if (!date || !tz) return false;
+      // Check with a middle-of-the-interval minute to avoid edge cases
+      const testTime = buildTime(h12, '30', h12 === 12 ? (hour12 === 12 ? period : PERIODS[0]) : period);
+      return isTimeDisabledInTimezone(date, testTime, tz);
+    },
+    [date, tz, hour12, period],
+  );
+
+  const utcIso = useMemo(() => {
+    if (!date || !time || !tz || mode !== 'auto') return null;
+    return buildUtcTimestamp(date, time, tz);
+  }, [date, time, tz, mode]);
+
+  const targetDate = utcIso ? new Date(utcIso) : null;
   const countdown = targetDate ? getCountdownText(targetDate) : null;
+  const localInfo = utcIso ? formatLocalInTimezone(utcIso, tz) : null;
 
   useEffect(() => {
     if (mode === 'manual') { setError(null); return; }
     if (!date) { setError('Selecciona una fecha para programar el cierre.'); return; }
     if (!time) { setError('Selecciona una hora para programar el cierre.'); return; }
-    const sel = new Date(`${date}T${time}:00`);
-    if (sel <= now) { setError('La fecha y hora deben ser posteriores al momento actual.'); return; }
+    if (!utcIso) { setError('Selecciona una zona horaria.'); return; }
+    const targetMs = new Date(utcIso).getTime();
+    const nowMs = Date.now();
+    const twoHours = 2 * 60 * 60 * 1000;
+    if (targetMs <= nowMs) {
+      setError('La fecha y hora deben ser posteriores al momento actual.');
+      return;
+    }
+    if (targetMs - nowMs < twoHours) {
+      setError('El cierre automático debe programarse con al menos 2 horas de anticipación.');
+      return;
+    }
     setError(null);
-  }, [mode, date, time]);
+  }, [mode, date, time, tz, utcIso]);
+
+  function handleTimezoneChange(newTz: string) {
+    setTz(newTz);
+    setError(null);
+    if (date && time && !isValidScheduledClose(date, time, newTz)) {
+      setTime('');
+    }
+  }
+
+  function handleDateChange(newDate: string) {
+    setDate(newDate);
+    setError(null);
+    if (time && !isValidScheduledClose(newDate, time, tz)) {
+      setTime('');
+    }
+  }
+
+  function handleTimeChange(newTime: string) {
+    if (date && !isValidScheduledClose(date, newTime, tz)) return;
+    setTime(newTime);
+    setError(null);
+  }
 
   const showSchedule = mode === 'auto';
 
@@ -141,7 +204,7 @@ export function PredictionCloseScheduler({
                   </button>
                 }
               >
-                <Calendar value={date} onChange={(v) => { setDate(v); setError(null); }} min={minDate} />
+                <Calendar value={date} onChange={handleDateChange} isDayDisabled={isDayDisabled} />
               </Popover>
             </div>
 
@@ -172,60 +235,79 @@ export function PredictionCloseScheduler({
                   <div className="flex flex-col gap-0.5">
                     <span className="mb-1 px-2 text-[10px] font-medium text-text-muted">Hora</span>
                     <div className="pickhub-scrollbar flex max-h-[180px] flex-col gap-0.5 overflow-auto pr-1">
-                      {HOURS12.map((h) => (
-                        <button
-                          key={h}
-                          type="button"
-                          onClick={() => setTime(buildTime(h, minute, period))}
-                          className={`w-12 rounded-md px-2 py-1 text-center text-xs transition-colors ${
-                            hour12 === h
-                              ? 'bg-purple-primary text-white font-medium'
-                              : 'text-text-secondary hover:bg-purple-primary/20 hover:text-white'
-                          }`}
-                        >
-                          {h}
-                        </button>
-                      ))}
+                      {HOURS12.map((h) => {
+                        const disabled = isHourDisabled(h);
+                        return (
+                          <button
+                            key={h}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => handleTimeChange(buildTime(h, minute, period))}
+                            className={`w-12 rounded-md px-2 py-1 text-center text-xs transition-colors ${
+                              hour12 === h
+                                ? 'bg-purple-primary text-white font-medium'
+                                : disabled
+                                  ? 'text-text-muted/30 cursor-not-allowed'
+                                  : 'text-text-secondary hover:bg-purple-primary/20 hover:text-white'
+                            }`}
+                          >
+                            {h}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                   {/* Minutes */}
                   <div className="flex flex-col gap-0.5">
                     <span className="mb-1 px-2 text-[10px] font-medium text-text-muted">Min</span>
                     <div className="flex flex-col gap-0.5">
-                      {MINUTES.map((m) => (
-                        <button
-                          key={m}
-                          type="button"
-                          onClick={() => setTime(buildTime(hour12, m, period))}
-                          className={`w-14 rounded-md px-2 py-1 text-center text-xs transition-colors ${
-                            minute === m
-                              ? 'bg-purple-primary text-white font-medium'
-                              : 'text-text-secondary hover:bg-purple-primary/20 hover:text-white'
-                          }`}
-                        >
-                          {m}
-                        </button>
-                      ))}
+                      {MINUTES.map((m) => {
+                        const disabled = isTimeDisabledInTimezone(date, buildTime(hour12, m, period), tz);
+                        return (
+                          <button
+                            key={m}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => handleTimeChange(buildTime(hour12, m, period))}
+                            className={`w-14 rounded-md px-2 py-1 text-center text-xs transition-colors ${
+                              minute === m
+                                ? 'bg-purple-primary text-white font-medium'
+                                : disabled
+                                  ? 'text-text-muted/30 cursor-not-allowed'
+                                  : 'text-text-secondary hover:bg-purple-primary/20 hover:text-white'
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                   {/* Period */}
                   <div className="flex flex-col gap-0.5">
                     <span className="mb-1 px-2 text-[10px] font-medium text-text-muted">Per.</span>
                     <div className="flex flex-col gap-0.5">
-                      {PERIODS.map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setTime(buildTime(hour12, minute, p))}
-                          className={`w-12 rounded-md px-2 py-1 text-center text-xs transition-colors ${
-                            period === p
-                              ? 'bg-purple-primary text-white font-medium'
-                              : 'text-text-secondary hover:bg-purple-primary/20 hover:text-white'
-                          }`}
-                        >
-                          {p}
-                        </button>
-                      ))}
+                      {PERIODS.map((p) => {
+                        const testTime = buildTime(hour12, '30', p);
+                        const disabled = isTimeDisabledInTimezone(date, testTime, tz);
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => handleTimeChange(buildTime(hour12, minute, p))}
+                            className={`w-12 rounded-md px-2 py-1 text-center text-xs transition-colors ${
+                              period === p
+                                ? 'bg-purple-primary text-white font-medium'
+                                : disabled
+                                  ? 'text-text-muted/30 cursor-not-allowed'
+                                  : 'text-text-secondary hover:bg-purple-primary/20 hover:text-white'
+                            }`}
+                          >
+                            {p}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -237,7 +319,7 @@ export function PredictionCloseScheduler({
               <label className="mb-1.5 block text-xs font-medium text-text-muted">Zona horaria</label>
               <TimezoneCombobox
                 value={tz}
-                onChange={(v) => { setTz(v); setError(null); }}
+                onChange={handleTimezoneChange}
                 targetDate={targetDate ?? undefined}
               />
             </div>
@@ -245,15 +327,23 @@ export function PredictionCloseScheduler({
 
           {/* Summary */}
           <div className="mt-5 rounded-lg bg-bg px-4 py-3">
-            {date && time ? (
-              <>
-                <p className="text-xs text-text-primary leading-relaxed">
-                  {formatScheduleSummary(date, time, tz)}
+            {mode === 'auto' && localInfo ? (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs text-text-primary font-medium">Las predicciones cerrarán:</p>
+                <p className="text-xs text-text-primary">{localInfo.date}</p>
+                <p className="text-xs text-text-primary">{localInfo.time}</p>
+                <p className="text-xs text-text-muted">{localInfo.tzLabel}</p>
+                <p className="mt-1 text-[11px] text-text-muted">
+                  Equivale a: {localInfo.utcLabel} UTC
                 </p>
                 {countdown && (
-                  <p className="mt-1 text-xs text-purple-primary font-medium">{countdown}</p>
+                  <p className="mt-0.5 text-xs text-purple-primary font-medium">{countdown}</p>
                 )}
-              </>
+              </div>
+            ) : mode === 'auto' && date && time ? (
+              <p className="text-xs text-text-muted">
+                Selecciona una zona horaria para programar el cierre.
+              </p>
             ) : (
               <p className="text-xs text-text-muted">
                 Selecciona fecha, hora y zona horaria para programar el cierre.

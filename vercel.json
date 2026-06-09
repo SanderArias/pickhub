@@ -1,8 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/cron/pickems/close-expired",
-      "schedule": "0 8 * * *"
-    }
-  ]
-}
+{}

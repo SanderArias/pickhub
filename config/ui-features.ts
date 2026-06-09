@@ -1,4 +1,4 @@
 export const UI_FEATURES = {
-  automaticPredictionClose: false,
+  automaticPredictionClose: true,
   customPredictions: false,
 } as const;

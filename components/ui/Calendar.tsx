@@ -6,6 +6,7 @@ interface CalendarProps {
   value: string;
   onChange: (date: string) => void;
   min?: string;
+  isDayDisabled?: (year: number, month: number, day: number) => boolean;
 }
 
 const DAYS = ['Do', 'Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sa'];
@@ -34,7 +35,7 @@ function getMonthGrid(year: number, month: number): (number | null)[][] {
   return grid;
 }
 
-export function Calendar({ value, onChange, min }: CalendarProps) {
+export function Calendar({ value, onChange, min, isDayDisabled }: CalendarProps) {
   const today = new Date();
   const todayStr = today.toISOString().slice(0, 10);
   const minDate = min ? new Date(min) : null;
@@ -48,6 +49,7 @@ export function Calendar({ value, onChange, min }: CalendarProps) {
   const canGoPrev = viewYear > today.getFullYear() || (viewYear === today.getFullYear() && viewMonth > today.getMonth());
 
   function isDisabled(day: number): boolean {
+    if (isDayDisabled?.(viewYear, viewMonth, day)) return true;
     if (!minDate) return false;
     const d = new Date(viewYear, viewMonth, day);
     return d < minDate;

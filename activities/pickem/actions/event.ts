@@ -160,6 +160,14 @@ export async function createPickem(formData: FormData) {
     ? (formData.get('predictions_close_timezone') as string) || null
     : null;
 
+  if (endsAt) {
+    const target = new Date(endsAt).getTime();
+    const min = Date.now() + 2 * 60 * 60 * 1000;
+    if (target < min) {
+      throw new Error('El cierre automático debe programarse con al menos 2 horas de anticipación.');
+    }
+  }
+
   const slug = slugify(title);
   if (!slug) throw new Error('El título no puede generar un slug válido.');
 
@@ -237,6 +245,11 @@ export async function updatePickemGeneralInfo(eventId: string, _prev: unknown, f
     endsAt = formData.get('ends_at') as string;
     predictionsCloseTimezone = formData.get('predictions_close_timezone') as string || null;
     if (!endsAt) return { error: 'Debes seleccionar una fecha y hora para el cierre automático.' };
+    const target = new Date(endsAt).getTime();
+    const min = Date.now() + 2 * 60 * 60 * 1000;
+    if (target < min) {
+      return { error: 'El cierre automático debe programarse con al menos 2 horas de anticipación.' };
+    }
   }
 
   const twitchRaw = formData.get('twitch_channel') as string | null;

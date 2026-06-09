@@ -116,20 +116,45 @@ export function buildUtcTimestamp(dateStr: string, timeStr: string, timezone: st
   return new Date(local.getTime() - offsetMin * 60_000).toISOString();
 }
 
-export function formatScheduleSummary(dateStr: string, timeStr: string, timezone: string): string {
-  const date = new Date(`${dateStr}T${timeStr}:00`);
-  const dateFormatted = date.toLocaleDateString('es-ES', {
+export function formatLocalInTimezone(
+  utcIso: string,
+  timezone: string,
+): { date: string; time: string; tzLabel: string; utcLabel: string } {
+  const d = new Date(utcIso);
+  const dateFormatted = d.toLocaleDateString('es-ES', {
+    timeZone: timezone,
     year: 'numeric',
     month: 'long',
     day: 'numeric',
   });
-  const timeFormatted = date.toLocaleTimeString('es-ES', {
+  const timeFormatted = d.toLocaleTimeString('es-ES', {
+    timeZone: timezone,
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
   });
-  const tzInfo = getTimezoneInfo(timezone, date);
-  return `Las predicciones cerrarán el ${dateFormatted} a las ${timeFormatted} (${tzInfo.label} ${tzInfo.utcLabel}).`;
+  const tzInfo = getTimezoneInfo(timezone, d);
+  const utcFormatted = d.toLocaleString('es-ES', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+  return {
+    date: dateFormatted,
+    time: timeFormatted,
+    tzLabel: `${tzInfo.label} (${tzInfo.utcLabel})`,
+    utcLabel: utcFormatted,
+  };
+}
+
+export function formatScheduleSummary(dateStr: string, timeStr: string, timezone: string): string {
+  const utcIso = buildUtcTimestamp(dateStr, timeStr, timezone);
+  const local = formatLocalInTimezone(utcIso, timezone);
+  return `Las predicciones cerrarán el ${local.date} a las ${local.time} (${local.tzLabel}).`;
 }
 
 export function getCountdownText(targetDate: Date): string {
@@ -148,6 +173,36 @@ export function getCountdownText(targetDate: Date): string {
     return `⏳ Faltan ${hours} hora${hours !== 1 ? 's' : ''} y ${minutes} minuto${minutes !== 1 ? 's' : ''}`;
   }
   return `⏳ Faltan ${minutes} minuto${minutes !== 1 ? 's' : ''}`;
+}
+
+export const MINIMUM_ADVANCE_MS = 2 * 60 * 60 * 1000;
+
+export function getMinimumCloseAt(): Date {
+  return new Date(Date.now() + MINIMUM_ADVANCE_MS);
+}
+
+export function getMinDateInTimezone(timezone: string): string {
+  return getMinimumCloseAt().toLocaleString('sv-SE', { timeZone: timezone }).slice(0, 10);
+}
+
+export function isDateDisabledInTimezone(dateStr: string, timezone: string): boolean {
+  if (!dateStr || !timezone) return false;
+  return dateStr < getMinDateInTimezone(timezone);
+}
+
+export function isTimeDisabledInTimezone(dateStr: string, timeStr: string, timezone: string): boolean {
+  if (!dateStr || !timeStr || !timezone) return false;
+  const minDate = getMinDateInTimezone(timezone);
+  if (dateStr > minDate) return false;
+  if (dateStr < minDate) return true;
+  const minTime = getMinimumCloseAt().toLocaleString('sv-SE', { timeZone: timezone }).slice(11, 16);
+  return timeStr < minTime;
+}
+
+export function isValidScheduledClose(dateStr: string, timeStr: string, timezone: string): boolean {
+  if (!dateStr || !timeStr || !timezone) return false;
+  const utcIso = buildUtcTimestamp(dateStr, timeStr, timezone);
+  return new Date(utcIso).getTime() >= getMinimumCloseAt().getTime();
 }
 
 export function splitDatetimeForTimezone(datetimeStr: string | null, timezone: string | null): {

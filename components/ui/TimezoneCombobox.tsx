@@ -57,7 +57,7 @@ export function TimezoneCombobox({ value, onChange, targetDate }: TimezoneCombob
     updatePosition();
     window.addEventListener('resize', updatePosition);
     window.addEventListener('scroll', updatePosition, true);
-    inputRef.current?.focus();
+    inputRef.current?.focus({ preventScroll: true });
     return () => {
       window.removeEventListener('resize', updatePosition);
       window.removeEventListener('scroll', updatePosition, true);
