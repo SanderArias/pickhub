@@ -10,6 +10,7 @@ import {
   formatScheduleSummary,
   getCountdownText,
 } from '@/lib/timezones';
+import { UI_FEATURES } from '@/config/ui-features';
 
 const HOURS12 = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 const MINUTES = ['00', '15', '30', '45'];
@@ -47,7 +48,9 @@ export function PredictionCloseScheduler({
   initialTimezone?: string;
   namePrefix?: string;
 }) {
-  const [mode, setMode] = useState<'manual' | 'auto'>(initialMode ?? 'manual');
+  const [mode, setMode] = useState<'manual' | 'auto'>(
+    !UI_FEATURES.automaticPredictionClose ? 'manual' : (initialMode ?? 'manual'),
+  );
   const [date, setDate] = useState(initialDate ?? '');
   const [time, setTime] = useState(initialTime ?? '');
   const [tz, setTz] = useState(initialTimezone ?? detectTimezone());
@@ -92,20 +95,22 @@ export function PredictionCloseScheduler({
             <p className="mt-0.5 text-xs text-text-muted">El creador decidirá cuándo cerrar las predicciones.</p>
           </div>
         </label>
-        <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:border-purple-primary/50 has-[:checked]:border-purple-primary">
-          <input
-            type="radio"
-            name={p('closure_mode')}
-            value="auto"
-            checked={mode === 'auto'}
-            onChange={() => { setMode('auto'); setError(null); }}
-            className="mt-0.5 accent-purple-primary"
-          />
-          <div>
-            <span className="text-sm text-text-primary">Automático</span>
-            <p className="mt-0.5 text-xs text-text-muted">Las predicciones se cerrarán automáticamente en la fecha seleccionada.</p>
-          </div>
-        </label>
+        {UI_FEATURES.automaticPredictionClose && (
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 transition-colors hover:border-purple-primary/50 has-[:checked]:border-purple-primary">
+            <input
+              type="radio"
+              name={p('closure_mode')}
+              value="auto"
+              checked={mode === 'auto'}
+              onChange={() => { setMode('auto'); setError(null); }}
+              className="mt-0.5 accent-purple-primary"
+            />
+            <div>
+              <span className="text-sm text-text-primary">Automático</span>
+              <p className="mt-0.5 text-xs text-text-muted">Las predicciones se cerrarán automáticamente en la fecha seleccionada.</p>
+            </div>
+          </label>
+        )}
       </div>
 
       {showSchedule && (

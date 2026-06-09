@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useActionState, useCallback } from 'react';
 import { createPredictionQuestion, updatePredictionQuestion, deletePredictionQuestion } from '@/activities/pickem/actions/predictions';
+import { UI_FEATURES } from '@/config/ui-features';
 
 const MAX_PREDICTIONS = 5;
 
@@ -42,7 +43,9 @@ export function PredictionsSection({
   const [pickType, setPickType] = useState('player');
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [editing, setEditing] = useState<Prediction | null>(null);
-  const [templateMode, setTemplateMode] = useState<'template' | 'custom'>('template');
+  const [templateMode, setTemplateMode] = useState<'template' | 'custom'>(
+    UI_FEATURES.customPredictions ? 'template' : 'template',
+  );
 
   const [state, formAction, pending] = useActionState(
     async (prev: { error: string | null }, formData: FormData) => {
@@ -68,14 +71,14 @@ export function PredictionsSection({
   const handleEdit = useCallback((q: Prediction) => {
     setEditing(q);
     setPickType(q.pick_type);
-    setTemplateMode(q.template_type ? 'template' : 'custom');
+    setTemplateMode(UI_FEATURES.customPredictions ? (q.template_type ? 'template' : 'custom') : 'template');
     setShowForm(true);
   }, []);
 
   const handleCancelEdit = useCallback(() => {
     setEditing(null);
     setShowForm(false);
-    setTemplateMode('custom');
+    setTemplateMode(UI_FEATURES.customPredictions ? 'custom' : 'template');
   }, []);
 
   const handleDelete = useCallback(async (questionId: string) => {
@@ -198,8 +201,8 @@ export function PredictionsSection({
         >
           <input type="hidden" name="_editing_id" value={editing?.id ?? ''} />
 
-          {/* Template type selector (only for new predictions) */}
-          {!editing && (
+          {/* Template type selector (only for new predictions, hidden when feature is off) */}
+          {!editing && UI_FEATURES.customPredictions && (
             <div>
               <label className="mb-1.5 block text-sm font-medium text-text-secondary">
                 Tipo de predicción
