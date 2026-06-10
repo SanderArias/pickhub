@@ -15,6 +15,7 @@ import { PredictionsSection } from '@/components/predictions/PredictionsSection'
 import { GeneralInfoSection } from '@/components/pickem/GeneralInfoSection';
 import { PrizeSection } from '@/components/pickem/PrizeSection';
 import { CreatorPickemClientSection } from '@/components/pickem/CreatorPickemClientSection';
+import { ExpandableDescription } from '@/components/pickem/ExpandableDescription';
 import { PublishSection } from './PublishSection';
 import { SharePickemSection } from './SharePickemSection';
 
@@ -78,10 +79,17 @@ export default async function PickemDashboardPage({
     <div className="flex flex-col gap-6">
       <PageHeader
         title={event.title}
-        description={event.description ?? undefined}
         backHref="/creator/pickems"
         backLabel="Mis Pick'ems"
       />
+
+      {event.description && (
+        <ExpandableDescription
+          description={event.description}
+          collapsedLines={2}
+          className="-mt-5"
+        />
+      )}
 
       {/* Status card + completed results (shared pendingTiebreakerCount state) */}
       {!isDraft && (

@@ -33,56 +33,54 @@ export type Profile = {
 export const getCurrentProfile = cache(async (
   existingUser?: Awaited<ReturnType<typeof getUser>> | null,
 ): Promise<Profile | null> => {
-  perf.start('[performance:dashboard:profile]');
-  const user = existingUser ?? (await getUser());
-  if (!user) { perf.end('[performance:dashboard:profile]'); return null; }
+  return perf.measure('[performance:dashboard:profile]', async () => {
+    const user = existingUser ?? (await getUser());
+    if (!user) return null;
 
-  const supabase = await createServerClient();
+    const supabase = await createServerClient();
 
-  // Remote schema is missing twitch_id, twitch_avatar_url — select without them first
-  let profileData: Record<string, unknown> | null = null;
-  let profileError: unknown = null;
+    let profileData: Record<string, unknown> | null = null;
+    let profileError: unknown = null;
 
-  const result = await (supabase as any)
-    .from('profiles')
-    .select('id, display_name, avatar_url, role, is_active, created_at, updated_at, twitch_username')
-    .eq('id', user.id)
-    .maybeSingle();
+    const result = await (supabase as any)
+      .from('profiles')
+      .select('id, display_name, avatar_url, role, is_active, created_at, updated_at, twitch_username')
+      .eq('id', user.id)
+      .maybeSingle();
 
-  profileData = result.data ?? null;
-  profileError = result.error ?? null;
+    profileData = result.data ?? null;
+    profileError = result.error ?? null;
 
-  if (!profileData) {
-    console.log('[profile-debug]', {
-      userId: user.id,
-      hasProfile: false,
-      profileErrorCode: (profileError as any)?.code ?? null,
-      profileErrorMessage: (profileError as any)?.message ?? null,
-    });
-    perf.end('[performance:dashboard:profile]');
-    return null;
-  }
+    if (!profileData) {
+      console.log('[profile-debug]', {
+        userId: user.id,
+        hasProfile: false,
+        profileErrorCode: (profileError as any)?.code ?? null,
+        profileErrorMessage: (profileError as any)?.message ?? null,
+      });
+      return null;
+    }
 
-  const { data: creatorProfile } = await supabase
-    .from('creator_profiles')
-    .select('id, profile_id, handle, bio, status, reason, created_at, updated_at')
-    .eq('profile_id', user.id)
-    .maybeSingle();
+    const { data: creatorProfile } = await supabase
+      .from('creator_profiles')
+      .select('id, profile_id, handle, bio, status, reason, created_at, updated_at')
+      .eq('profile_id', user.id)
+      .maybeSingle();
 
-  perf.end('[performance:dashboard:profile]');
-  return {
-    id: profileData.id,
-    display_name: profileData.display_name ?? null,
-    avatar_url: profileData.avatar_url ?? null,
-    role: profileData.role ?? 'user',
-    is_active: profileData.is_active ?? true,
-    created_at: profileData.created_at,
-    updated_at: profileData.updated_at,
-    twitch_username: profileData.twitch_username ?? null,
-    twitch_id: null,
-    twitch_avatar_url: null,
-    creator_profile: creatorProfile ?? null,
-  } as Profile;
+    return {
+      id: profileData.id,
+      display_name: profileData.display_name ?? null,
+      avatar_url: profileData.avatar_url ?? null,
+      role: profileData.role ?? 'user',
+      is_active: profileData.is_active ?? true,
+      created_at: profileData.created_at,
+      updated_at: profileData.updated_at,
+      twitch_username: profileData.twitch_username ?? null,
+      twitch_id: null,
+      twitch_avatar_url: null,
+      creator_profile: creatorProfile ?? null,
+    } as Profile;
+  });
 });
 
 /**

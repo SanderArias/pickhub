@@ -443,6 +443,7 @@ export default async function Page() {
 - Evitar un spinner genérico como única respuesta de carga.
 - Usar `Suspense` para datos secundarios (badges, actividad, indicadores complementarios).
 - No fragmentar la página en decenas de Suspense boundaries pequeños.
+- Usar `useLinkStatus` de `next/link` en los nav links para mostrar estado `pending` inmediato (indicador lateral + pulso) con prioridad sobre `active`.
 
 **Clasificación de datos:**
 

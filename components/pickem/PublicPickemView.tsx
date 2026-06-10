@@ -9,6 +9,7 @@ import type { PrizeConfiguration } from '@/activities/pickem/prizes/types';
 import type { ReceiptTemplate } from '@/lib/receipt-templates';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
 import type { OfficialResultEntry } from '@/activities/pickem/actions/results-data';
+import { ExpandableDescription } from '@/components/pickem/ExpandableDescription';
 import { Top8DnD } from '@/components/pickem/Top8DnD';
 import { ReceiptModal } from '@/components/pickem/ReceiptModal';
 import { PickemParticipationHero } from '@/components/pickem/PickemParticipationHero';
@@ -261,6 +262,14 @@ export function PublicPickemView({
                     Organizado por {event.creator.display_name ?? event.creator.handle}
                   </span>
                 </div>
+              )}
+
+              {event.description && (
+                <ExpandableDescription
+                  description={event.description}
+                  collapsedLines={2}
+                  className="mt-1"
+                />
               )}
 
               <p className="text-sm text-text-secondary mt-1">

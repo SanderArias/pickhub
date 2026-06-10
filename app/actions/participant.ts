@@ -504,6 +504,7 @@ export interface Participation {
   submittedAt: string | null;
   eventId: string;
   eventTitle: string;
+  eventDescription: string | null;
   eventSlug: string;
   eventStatus: string;
   eventEndsAt: string | null;
@@ -516,142 +517,141 @@ export async function getUserParticipations(
   filter: 'open' | 'closed' | 'all' = 'all',
   existingUser?: Awaited<ReturnType<typeof getUser>> | null,
 ): Promise<Participation[]> {
-  perf.start('[performance:dashboard:events]');
-  requirePickemCapability('readHistoricalData');
+  return perf.measure('[performance:dashboard:events]', async () => {
+    requirePickemCapability('readHistoricalData');
 
-  const user = existingUser ?? (await getUser());
-  if (!user) { perf.end('[performance:dashboard:events]'); return []; }
+    const user = existingUser ?? (await getUser());
+    if (!user) return [];
 
-  const supabase = await createServerClient();
+    const supabase = await createServerClient();
 
-  // Find the user's participant entries to scope submissions
-  const { data: participants } = await supabase
-    .from('event_participants')
-    .select('id')
-    .eq('profile_id', user.id);
+    const { data: participants } = await supabase
+      .from('event_participants')
+      .select('id')
+      .eq('profile_id', user.id);
 
-  if (!participants || participants.length === 0) { perf.end('[performance:dashboard:events]'); return []; }
+    if (!participants || participants.length === 0) return [];
 
-  const participantIds = participants.map((p) => p.id);
+    const participantIds = participants.map((p) => p.id);
 
-  const { data: submissions } = await supabase
-    .from('submissions')
-    .select('id, status, submitted_at, event_id')
-    .in('participant_id', participantIds)
-    .order('submitted_at', { ascending: false });
-
-  if (!submissions || submissions.length === 0) { perf.end('[performance:dashboard:events]'); return []; }
-
-  const eventIds = [...new Set(submissions.map((s) => s.event_id))];
-
-  const { data: events } = await supabase
-    .from('events')
-    .select('id, title, slug, status, ends_at, creator_id')
-    .in('id', eventIds);
-
-  if (!events) return [];
-
-  const creatorIds = [...new Set(events.map((e) => e.creator_id).filter(Boolean))];
-  const creatorMap = new Map<string, { handle: string | null; display_name: string | null }>();
-
-  if (creatorIds.length > 0) {
-    const { data: cps } = await supabase
-      .from('creator_profiles')
-      .select('id, handle, profile_id')
-      .in('id', creatorIds);
-
-    if (cps) {
-      const profileIds = cps.map((cp) => cp.profile_id).filter(Boolean);
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, display_name')
-        .in('id', profileIds);
-
-      const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
-
-      for (const cp of cps) {
-        creatorMap.set(cp.id, {
-          handle: cp.handle,
-          display_name: profileMap.get(cp.profile_id) ?? null,
-        });
-      }
-    }
-  }
-
-  const eventMap = new Map(
-    events.map((e) => [
-      e.id,
-      {
-        ...e,
-        creator: creatorMap.get(e.creator_id) ?? { handle: null, display_name: null },
-      },
-    ]),
-  );
-
-  // Count answers per submission using embedded aggregate (server-side)
-  const submissionIds = submissions.map((s) => s.id);
-  const answerCounts = new Map<string, number>();
-
-  if (submissionIds.length > 0) {
-    const { data: counts, error: cntErr } = await supabase
+    const { data: submissions } = await supabase
       .from('submissions')
-      .select('id, answer_count:prediction_answers(count)')
-      .in('id', submissionIds);
+      .select('id, status, submitted_at, event_id')
+      .in('participant_id', participantIds)
+      .order('submitted_at', { ascending: false });
 
-    if (cntErr) {
-      console.error('[pickem:participations] error counting prediction_answers', {
-        code: cntErr.code,
-        message: cntErr.message,
-      });
-    } else if (counts) {
-      for (const row of counts) {
-        const answers = (row as any).answer_count as Array<{ count: number }> | undefined;
-        if (answers && answers.length > 0) {
-          answerCounts.set(row.id, answers[0].count);
+    if (!submissions || submissions.length === 0) return [];
+
+    const eventIds = [...new Set(submissions.map((s) => s.event_id))];
+
+    const { data: events } = await supabase
+      .from('events')
+      .select('id, title, slug, description, status, ends_at, creator_id')
+      .in('id', eventIds);
+
+    if (!events) return [];
+
+    const creatorIds = [...new Set(events.map((e) => e.creator_id).filter(Boolean))];
+    const creatorMap = new Map<string, { handle: string | null; display_name: string | null }>();
+
+    if (creatorIds.length > 0) {
+      const { data: cps } = await supabase
+        .from('creator_profiles')
+        .select('id, handle, profile_id')
+        .in('id', creatorIds);
+
+      if (cps) {
+        const profileIds = cps.map((cp) => cp.profile_id).filter(Boolean);
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('id, display_name')
+          .in('id', profileIds);
+
+        const profileMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
+
+        for (const cp of cps) {
+          creatorMap.set(cp.id, {
+            handle: cp.handle,
+            display_name: profileMap.get(cp.profile_id) ?? null,
+          });
         }
       }
     }
-  }
 
-  const now = new Date().toISOString();
+    const eventMap = new Map(
+      events.map((e) => [
+        e.id,
+        {
+          ...e,
+          creator: creatorMap.get(e.creator_id) ?? { handle: null, display_name: null },
+        },
+      ]),
+    );
 
-  let participations: Participation[] = [];
+    const submissionIds = submissions.map((s) => s.id);
+    const answerCounts = new Map<string, number>();
 
-  for (const s of submissions) {
-    const event = eventMap.get(s.event_id);
-    if (!event) continue;
+    if (submissionIds.length > 0) {
+      const { data: counts, error: cntErr } = await supabase
+        .from('submissions')
+        .select('id, answer_count:prediction_answers(count)')
+        .in('id', submissionIds);
 
-    participations.push({
-      submissionId: s.id,
-      submissionStatus: s.status,
-      submittedAt: s.submitted_at,
-      eventId: event.id,
-      eventTitle: event.title,
-      eventSlug: event.slug,
-      eventStatus: event.status,
-      eventEndsAt: event.ends_at,
-      creatorDisplayName: event.creator.display_name,
-      creatorHandle: event.creator.handle,
-      answersCount: answerCounts.get(s.id) ?? 0,
-    });
-  }
+      if (cntErr) {
+        console.error('[pickem:participations] error counting prediction_answers', {
+          code: cntErr.code,
+          message: cntErr.message,
+        });
+      } else if (counts) {
+        for (const row of counts) {
+          const answers = (row as any).answer_count as Array<{ count: number }> | undefined;
+          if (answers && answers.length > 0) {
+            answerCounts.set(row.id, answers[0].count);
+          }
+        }
+      }
+    }
 
-  if (filter === 'open') {
-    participations = participations.filter((p) => {
-      if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'tiebreaker_pending' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return false;
-      if (p.eventEndsAt && p.eventEndsAt <= now) return false;
-      return true;
-    });
-  } else if (filter === 'closed') {
-    participations = participations.filter((p) => {
-      if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'tiebreaker_pending' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return true;
-      if (p.eventEndsAt && p.eventEndsAt <= now) return true;
-      return false;
-    });
-  }
+    const now = new Date().toISOString();
 
-  perf.end('[performance:dashboard:events]');
-  return participations;
+    let participations: Participation[] = [];
+
+    for (const s of submissions) {
+      const event = eventMap.get(s.event_id);
+      if (!event) continue;
+
+      participations.push({
+        submissionId: s.id,
+        submissionStatus: s.status,
+        submittedAt: s.submitted_at,
+        eventId: event.id,
+        eventTitle: event.title,
+        eventDescription: (event as any).description ?? null,
+        eventSlug: event.slug,
+        eventStatus: event.status,
+        eventEndsAt: event.ends_at,
+        creatorDisplayName: event.creator.display_name,
+        creatorHandle: event.creator.handle,
+        answersCount: answerCounts.get(s.id) ?? 0,
+      });
+    }
+
+    if (filter === 'open') {
+      participations = participations.filter((p) => {
+        if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'tiebreaker_pending' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return false;
+        if (p.eventEndsAt && p.eventEndsAt <= now) return false;
+        return true;
+      });
+    } else if (filter === 'closed') {
+      participations = participations.filter((p) => {
+        if (p.eventStatus === 'predictions_closed' || p.eventStatus === 'tiebreaker_pending' || p.eventStatus === 'completed' || p.eventStatus === 'archived') return true;
+        if (p.eventEndsAt && p.eventEndsAt <= now) return true;
+        return false;
+      });
+    }
+
+    return participations;
+  });
 }
 
 export async function getSubmissionReceipt(

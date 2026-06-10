@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import Link from 'next/link';
+import Link, { useLinkStatus } from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@/hooks/useUser';
 import { createClient as createBrowserClient } from '@/services/supabase/client';
@@ -129,6 +129,40 @@ function useGroups(profile: ProfileData | null, pathname: string) {
 // Sub-components
 // ============================================================================
 
+function NavLinkContent({ item, active }: { item: NavItem; active: boolean }) {
+  const { pending } = useLinkStatus();
+  const state = pending ? 'pending' : active ? 'active' : 'default';
+
+  const indicatorStyle = state === 'active'
+    ? 'bg-purple-primary'
+    : state === 'pending'
+      ? 'bg-purple-primary/50 animate-pulse'
+      : '';
+
+  return (
+    <>
+      {(state === 'active' || state === 'pending') && (
+        <span className={`absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full ${indicatorStyle}`} />
+      )}
+      <span className="flex-1">{item.label}</span>
+      {state === 'pending' && (
+        <span aria-busy="true" className="ml-auto size-1.5 animate-pulse rounded-full bg-purple-primary/60" />
+      )}
+      {state !== 'pending' && item.badge !== undefined && (
+        <span
+          className={`flex shrink-0 items-center justify-center rounded-full ${
+            typeof item.badge === 'number' || typeof item.badge === 'string'
+              ? 'min-w-[18px] bg-purple-primary px-1.5 py-0.5 text-[10px] font-bold text-white'
+              : 'size-2 bg-green-500'
+          }`}
+        >
+          {typeof item.badge === 'number' || typeof item.badge === 'string' ? item.badge : ''}
+        </span>
+      )}
+    </>
+  );
+}
+
 function NavLink({
   item,
   pathname,
@@ -158,21 +192,7 @@ function NavLink({
           : 'text-text-secondary hover:bg-white/[0.03] hover:text-text-primary'
       }`}
     >
-      {active && (
-        <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-purple-primary" />
-      )}
-      <span className="flex-1">{item.label}</span>
-      {item.badge !== undefined && (
-        <span
-          className={`flex shrink-0 items-center justify-center rounded-full ${
-            typeof item.badge === 'number' || typeof item.badge === 'string'
-              ? 'min-w-[18px] bg-purple-primary px-1.5 py-0.5 text-[10px] font-bold text-white'
-              : 'size-2 bg-green-500'
-          }`}
-        >
-          {typeof item.badge === 'number' || typeof item.badge === 'string' ? item.badge : ''}
-        </span>
-      )}
+      <NavLinkContent item={item} active={active} />
     </Link>
   );
 }

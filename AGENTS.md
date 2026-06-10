@@ -19,4 +19,6 @@ Reglas obligatorias para todo el código PickHub. Guía completa en `docs/perfor
 - **RLS nunca se debilita por performance.** No desactivar RLS, no usar service role como atajo.
 - **OpenCode NO ejecuta ni aplica migraciones.** Solo genera o modifica archivos.
 - **`npm run build` obligatorio** antes de terminar cualquier tarea.
+- **Cada ruta con su `loading.tsx`:** skeleton específico que refleje la silueta real de la página.
+- **`useLinkStatus` en nav links:** feedback visual `pending` inmediato con prioridad sobre `active`.
 <!-- END:performance-rules -->

@@ -10,8 +10,6 @@ import { RequestCreatorAccessForm } from './RequestCreatorAccessForm';
 import { perf } from '@/lib/perf';
 
 export default async function InicioPage() {
-  perf.start('[performance:dashboard:total]');
-  perf.mark('[performance:dashboard:total]', 'start');
   const user = await getUser();
   if (!user) {
     console.log('[auth-redirect]', { source: 'inicio', pathname: '/inicio', hasUser: false, userId: null, redirectTarget: '/login', reason: 'no-user' });
@@ -19,11 +17,12 @@ export default async function InicioPage() {
     redirect('/login');
   }
 
-  // Parallelize profile + participations (both depend on user, not on each other)
-  let [profile, participations] = await Promise.all([
-    getCurrentProfile(user),
-    getUserParticipations('all', user),
-  ]);
+  let [profile, participations] = await perf.measure('[performance:dashboard:total]', () =>
+    Promise.all([
+      getCurrentProfile(user),
+      getUserParticipations('all', user),
+    ]),
+  );
 
   if (!profile) {
     const result = await ensureUserProfile(user);
@@ -220,8 +219,9 @@ export default async function InicioPage() {
       )}
     </div>
   );
-  perf.end('[performance:dashboard:total]');
 }
+
+
 
 function ProfileErrorScreen() {
   return (

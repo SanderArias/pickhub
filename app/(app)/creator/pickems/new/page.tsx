@@ -4,6 +4,7 @@ import { isActivityCapabilityEnabled } from '@/activities/registry.server';
 import { createPickem } from '@/activities/pickem/actions';
 import { PageHeader, ActionButton } from '@/components/ui';
 import { ClosureSection } from './ClosureSection';
+import { DescriptionField } from './DescriptionField';
 
 export default async function NewPickemPage() {
   await requireCreator();
@@ -35,18 +36,7 @@ export default async function NewPickemPage() {
           />
         </div>
 
-        <div>
-          <label htmlFor="description" className="mb-1.5 block text-sm font-medium text-text-secondary">
-            Descripción
-          </label>
-          <textarea
-            id="description"
-            name="description"
-            rows={3}
-            placeholder="Describe de qué trata este Pick'em…"
-            className="w-full rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
-          />
-        </div>
+        <DescriptionField />
 
         <ClosureSection />
 

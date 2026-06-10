@@ -1,5 +1,6 @@
 import { EVENT_STATUS_CONFIG } from '@/lib/status-config';
 import type { PublicEventData } from '@/app/actions/participant';
+import { ExpandableDescription } from '@/components/pickem/ExpandableDescription';
 
 function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('es-ES', {
@@ -60,6 +61,14 @@ export function PickemParticipationHero({
               Organizado por {creator.display_name ?? creator.handle}
             </span>
           </div>
+        )}
+
+        {event.description && (
+          <ExpandableDescription
+            description={event.description}
+            collapsedLines={2}
+            className="mt-1"
+          />
         )}
 
         <p className="text-sm text-text-secondary mt-1">

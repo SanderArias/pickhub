@@ -153,6 +153,13 @@ export async function createPickem(formData: FormData) {
 
   const description = (formData.get('description') as string)?.trim() || null;
 
+  if (description !== null && description.length > 300) {
+    throw new Error('La descripción no puede superar los 300 caracteres.');
+  }
+  if (description !== null && description.length > 0 && description.length < 10) {
+    throw new Error('La descripción debe tener al menos 10 caracteres.');
+  }
+
   const closureMode = formData.get('closure_mode') as string;
   const endsAtRaw = formData.get('ends_at') as string;
   const endsAt = closureMode === 'auto' && endsAtRaw ? endsAtRaw : null;
@@ -236,6 +243,14 @@ export async function updatePickemGeneralInfo(eventId: string, _prev: unknown, f
   if (!title) return { error: 'El título es obligatorio.' };
 
   const description = (formData.get('description') as string)?.trim() || null;
+
+  if (description !== null && description.length > 300) {
+    return { error: 'La descripción no puede superar los 300 caracteres.' };
+  }
+  if (description !== null && description.length > 0 && description.length < 10) {
+    return { error: 'La descripción debe tener al menos 10 caracteres.' };
+  }
+
   const closureMode = formData.get('closure_mode') as string;
 
   let endsAt: string | null = null;

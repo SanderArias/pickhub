@@ -329,7 +329,7 @@ function PickemListItem({ pickem }: { pickem: PickemItem }) {
           {pickem.description && (
             <>
               <span className="text-border">·</span>
-              <span className="line-clamp-1">{pickem.description}</span>
+              <span className="line-clamp-1 whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{pickem.description}</span>
             </>
           )}
         </div>

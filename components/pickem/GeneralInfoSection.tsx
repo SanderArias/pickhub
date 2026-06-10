@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useEffect, useActionState, useTransition } from 'react';
+import { useRef, useState, useEffect, useActionState, useTransition, useId } from 'react';
 import { updatePickemGeneralInfo, uploadEventLogo, removeEventLogo } from '@/activities/pickem/actions';
 import { PredictionCloseScheduler } from '@/components/ui/PredictionCloseScheduler';
 import { splitDatetimeForTimezone, detectTimezone } from '@/lib/timezones';
@@ -34,6 +34,8 @@ export function GeneralInfoSection({
     ? splitDatetimeForTimezone(event.ends_at, event.predictions_close_timezone)
     : { date: '', time: '', tz: detectTimezone() };
 
+  const [descDraft, setDescDraft] = useState(event.description ?? '');
+  const descId = useId();
   const [state, formAction, pending] = useActionState(
     updatePickemGeneralInfo.bind(null, eventId),
     { error: null as string | null },
@@ -133,15 +135,22 @@ export function GeneralInfoSection({
                   />
                 </div>
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-text-secondary">
+                  <label htmlFor={descId} className="mb-2 block text-sm font-medium text-text-secondary">
                     Descripción <span className="text-text-muted">(opcional)</span>
                   </label>
                   <textarea
+                    id={descId}
                     name="description"
                     rows={3}
-                    defaultValue={event.description ?? ''}
+                    value={descDraft}
+                    onChange={(e) => setDescDraft(e.target.value)}
                     className="min-h-[104px] w-full resize-y rounded-lg border border-border bg-bg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted"
                   />
+                  <div className="mt-1 flex justify-end">
+                    <span className={`text-xs ${descDraft.length > 300 ? 'text-danger' : 'text-text-muted'}`}>
+                      {descDraft.length}/300
+                    </span>
+                  </div>
                 </div>
               </div>
             </section>

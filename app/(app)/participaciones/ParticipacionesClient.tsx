@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import type { Participation } from '@/app/actions/participant';
+import { ExpandableDescription } from '@/components/pickem/ExpandableDescription';
 
 function FilterTab({
   active,
@@ -75,12 +76,19 @@ export function ParticipacionesClient({
               className="rounded-lg border border-border bg-surface p-4 transition-colors hover:border-border-hover"
             >
               <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium text-text-primary">{p.eventTitle}</p>
                   <p className="mt-0.5 text-xs text-text-muted">
                     {p.creatorDisplayName ?? p.creatorHandle ?? '—'}
                     {p.submittedAt ? ` · ${new Date(p.submittedAt).toLocaleDateString()}` : ''}
                   </p>
+                  {p.eventDescription && (
+                    <ExpandableDescription
+                      description={p.eventDescription}
+                      collapsedLines={2}
+                      className="mt-1"
+                    />
+                  )}
                 </div>
                 <div className="shrink-0 text-right text-xs text-text-muted">
                   <p>{p.answersCount} respuesta{p.answersCount !== 1 ? 's' : ''}</p>

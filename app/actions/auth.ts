@@ -233,9 +233,9 @@ export async function getSession() {
 }
 
 export const getUser = cache(async () => {
-  perf.start('[performance:dashboard:auth]');
-  const supabase = await createServerClient();
-  const { data } = await supabase.auth.getUser();
-  perf.end('[performance:dashboard:auth]');
-  return data.user;
+  return perf.measure('[performance:dashboard:auth]', async () => {
+    const supabase = await createServerClient();
+    const { data } = await supabase.auth.getUser();
+    return data.user;
+  });
 });
