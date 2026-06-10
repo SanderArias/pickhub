@@ -19,9 +19,15 @@ export function AdminUsersPageClient({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initial.error ?? null);
   const mountedRef = useRef(true);
+  const pageClickRef = useRef(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
-    return () => { mountedRef.current = false; };
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, []);
 
   const pageSize = 20;
@@ -31,34 +37,49 @@ export function AdminUsersPageClient({
     setLoading(true);
     setError(null);
 
-    const result = await getAdminUsers(p, pageSize, q);
+    try {
+      const result = await getAdminUsers(p, pageSize, q);
 
-    if (!mountedRef.current) return;
+      if (!mountedRef.current) return;
 
-    if (result.error) {
-      setError(result.error);
-    } else if (result.data) {
-      setUsers(result.data.users);
-      setTotalCount(result.data.totalCount);
+      if (result.error) {
+        setError(result.error);
+      } else if (result.data) {
+        setUsers(result.data.users);
+        setTotalCount(result.data.totalCount);
+      }
+    } catch {
+      if (!mountedRef.current) return;
+      setError('Error al cargar usuarios.');
     }
 
     setLoading(false);
   }, [pageSize]);
 
-  // Debounced search
-  useEffect(() => {
-    const timer = setTimeout(() => {
+  // Debounce: manejador directo, sin pasar por efecto (evita doble mount de StrictMode)
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearch(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
       setPage(1);
-      loadUsers(search, 1);
+      loadUsers(value, 1);
     }, 300);
-    return () => clearTimeout(timer);
-  }, [search, loadUsers]);
+  };
 
-  // Page change
+  // Page change — inmediato. Ignora si el debounce ya reseteó a página 1
   useEffect(() => {
-    if (page === 1 && !search) return; // initial load
+    if (page === 1 && !search) return;
+    if (page === 1 && !pageClickRef.current) return;
+    pageClickRef.current = false;
     loadUsers(search, page);
   }, [page, loadUsers]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage === page) return;
+    pageClickRef.current = true;
+    setPage(newPage);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -67,7 +88,7 @@ export function AdminUsersPageClient({
         <input
           type="text"
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={handleSearchChange}
           placeholder="Buscar por nombre, correo o Twitch..."
           className="w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 pl-9 text-sm text-text-primary placeholder:text-text-muted outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-400/30"
         />
@@ -89,10 +110,10 @@ export function AdminUsersPageClient({
         </div>
       )}
 
-      {/* Loading indicator */}
+      {/* Loading bar (subtle, shown during fetch) */}
       {loading && (
-        <div className="flex items-center justify-center py-8">
-          <div className="size-6 animate-spin rounded-full border-2 border-border border-t-amber-400" />
+        <div className="h-0.5 w-full overflow-hidden rounded-full bg-border">
+          <div className="h-full w-full animate-pulse rounded-full bg-amber-400" style={{ animationDuration: '1.5s' }} />
         </div>
       )}
 
@@ -108,8 +129,8 @@ export function AdminUsersPageClient({
         </div>
       )}
 
-      {/* Table */}
-      {!loading && users.length > 0 && (
+      {/* Table — always visible when users exist (nooculta durante loading) */}
+      {users.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-border bg-surface">
           <table className="w-full text-left">
             <thead>
@@ -179,7 +200,7 @@ export function AdminUsersPageClient({
           </p>
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              onClick={() => handlePageChange(page - 1)}
               disabled={page === 1 || loading}
               className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -189,7 +210,7 @@ export function AdminUsersPageClient({
               {page} / {totalPages}
             </span>
             <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              onClick={() => handlePageChange(page + 1)}
               disabled={page === totalPages || loading}
               className="rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
             >

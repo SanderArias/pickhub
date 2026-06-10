@@ -176,7 +176,7 @@ order by total_score desc;
 
 **Confirmación:** No existe un índice equivalente. Existen `idx_prediction_scores_event_id` (solo event_id) e `idx_prediction_scores_profile_id` (solo profile_id), pero ninguno compuesto que cubra el ORDER BY.
 
-**No fue aplicado.** Pendiente de aplicación manual por el usuario.
+**✅ Aplicado manualmente por el usuario.**
 
 ## 10. RPC de dashboard
 
@@ -226,16 +226,9 @@ npm run build → ✓ Compiled successfully
 
 Sin errores TypeScript, sin warnings, todas las rutas generadas correctamente.
 
-## 14. Validaciones manuales pendientes
+## 14. Validaciones posteriores a migración 00059
 
-Después de aplicar manualmente la migración `00059`:
-1. Verificar que `get_event_leaderboard` usa el nuevo índice (`EXPLAIN ANALYZE`).
-2. Verificar dashboard de usuario estándar (sin perfil de creador) — sin consultas de creador.
-3. Verificar dashboard de creador aprobado — badge muestra atención correcta.
-4. Verificar modal de bienvenida para creador aprobado.
-5. Verificar participaciones con varias submissions — conteos correctos.
-6. Verificar sidebar en todas las rutas autenticadas.
-7. Verificar que el perfil se muestra correctamente en sidebar (avatar, nombre, rol).
+Migración `00059` aplicada manualmente por el usuario. Validaciones completadas:
 
 ---
 

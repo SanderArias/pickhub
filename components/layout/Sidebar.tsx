@@ -207,7 +207,7 @@ function NavGroups({
   onNav?: () => void;
 }) {
   return (
-    <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 pb-4">
+    <nav className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto px-3 pb-4">
       {groups.map((group) => (
         <div key={group.label}>
           <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-muted/50">
@@ -360,7 +360,7 @@ function SidebarContent({
   onNav?: () => void;
 }) {
   return (
-    <div className="flex h-full flex-col bg-[#080808]">
+    <div className="flex h-full flex-col overflow-hidden bg-[#080808]">
       <div className="shrink-0 px-5 pt-7 pb-6">
         <Logo href="/inicio" />
       </div>
@@ -386,7 +386,7 @@ function DesktopSidebar({
   email: string;
 }) {
   return (
-    <aside className="hidden md:flex md:fixed md:left-0 md:top-0 md:h-screen md:w-60 md:flex-col md:border-r md:border-border">
+    <aside className="hidden md:flex md:fixed md:left-0 md:top-0 md:h-dvh md:w-60 md:flex-col md:border-r md:border-border">
       <SidebarContent pathname={pathname} groups={groups} profile={profile} email={email} />
     </aside>
   );
@@ -514,7 +514,7 @@ export function Sidebar({ children, canCreatePickem, initialProfile }: { childre
       )}
 
       {/* Main content */}
-      <div className={`flex min-h-screen flex-col bg-bg ${showUi ? 'md:ml-60 pt-14 md:pt-0' : ''}`}>
+      <div className={`flex min-w-0 flex-1 flex-col bg-bg ${showUi ? 'md:ml-60 pt-14 md:pt-0' : ''}`}>
         <main className="mx-auto w-full max-w-5xl px-4 py-6 md:px-8 md:py-10">
           {children}
         </main>

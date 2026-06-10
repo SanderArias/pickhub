@@ -3,11 +3,13 @@
 import { revalidatePath } from 'next/cache';
 import { createServerClient } from '@/services/supabase';
 import { requireAdmin } from '@/lib/auth';
+import { isRedirectError } from 'next/dist/client/components/redirect-error';
 
 export async function approveCreator(profileId: string): Promise<{ error: string | null }> {
   try {
     await requireAdmin();
-  } catch {
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
     return { error: 'Acceso denegado.' };
   }
 
@@ -430,27 +432,29 @@ export async function getAdminUsers(
 ): Promise<{ data?: GetAdminUsersResult; error?: string }> {
   try {
     await requireAdmin();
-  } catch {
-    return { error: 'Acceso denegado.' };
+
+    const supabase = await createServerClient();
+    const { data, error } = await (supabase.rpc as any)(
+      'get_admin_users',
+      { p_page: page, p_page_size: pageSize, p_search: search },
+    );
+
+    console.info('[admin:users-load]', {
+      page,
+      pageSize,
+      search,
+      data,
+      error: error ? { message: error.message, details: error.details, hint: error.hint } : null,
+    });
+
+    if (error) return { error: `Error al cargar usuarios: ${error.message}` };
+
+    return { data: data as GetAdminUsersResult };
+  } catch (e) {
+    if (isRedirectError(e)) throw e;
+    console.error('[admin:users-load-error]', e);
+    return { error: 'Error al cargar usuarios.' };
   }
-
-  const supabase = await createServerClient();
-  const { data, error } = await (supabase.rpc as any)(
-    'get_admin_users',
-    { p_page: page, p_page_size: pageSize, p_search: search },
-  );
-
-  console.info('[admin:users-load]', {
-    page,
-    pageSize,
-    search,
-    data,
-    error: error ? { message: error.message, details: error.details, hint: error.hint } : null,
-  });
-
-  if (error) return { error: `Error al cargar usuarios: ${error.message}` };
-
-  return { data: data as GetAdminUsersResult };
 }
 
 export async function toggleActivity(activityId: string, enabled: boolean) {
