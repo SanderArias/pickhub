@@ -83,7 +83,7 @@ function Preview({ variant }: { variant: 'classic' | 'gradient' }) {
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ color: s.label, fontWeight: 600, letterSpacing: '0.12em', fontSize: 5, textTransform: 'uppercase' }}>PICK&rsquo;EM</div>
           <div style={{ color: s.title, fontWeight: 800, fontSize: 13, lineHeight: 1.2, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Título</div>
-          <div style={{ color: s.subtitle, fontWeight: 500, letterSpacing: '0.06em', fontSize: 6, textTransform: 'uppercase', marginTop: 1 }}>TOP 8</div>
+          <div style={{ color: s.subtitle, fontWeight: 500, letterSpacing: '0.06em', fontSize: 6, textTransform: 'uppercase', marginTop: 1 }}>FINALISTAS</div>
         </div>
         <div style={{
           width: 56,

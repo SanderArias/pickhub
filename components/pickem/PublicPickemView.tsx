@@ -7,6 +7,7 @@ import { submitPredictions } from '@/app/actions/participant';
 import type { PublicEventData, EventPlayer, PredictionQuestion, Prize, Submission } from '@/app/actions/participant';
 import type { PrizeConfiguration } from '@/activities/pickem/prizes/types';
 import type { ReceiptTemplate } from '@/lib/receipt-templates';
+import { getPredictionSubtitle } from '@/lib/receipt-templates';
 import type { LeaderboardEntry } from '@/app/actions/leaderboard';
 import type { OfficialResultEntry } from '@/activities/pickem/actions/results-data';
 import { ExpandableDescription } from '@/components/pickem/ExpandableDescription';
@@ -154,7 +155,9 @@ export function PublicPickemView({
   const topN = top8Q
     ? ((top8Q.config?.positions as number) ?? top8Q.max_selections ?? top8Q.options.length)
     : 0;
-  const subtitle = topN > 0 ? `TOP ${topN}` : undefined;
+  const subtitle = top8Q
+    ? getPredictionSubtitle(top8Q.template_type, top8Q.config as { positions?: number } | null | undefined, top8Q.max_selections, top8Q.options.length)
+    : undefined;
 
   const rankedPlayers = useMemo(() => {
     const top8Q = predictions.find((q) => q.template_type === 'top8_ordered');
