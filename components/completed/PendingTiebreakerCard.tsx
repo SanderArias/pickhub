@@ -1,6 +1,7 @@
 'use client';
 
 import type { TieGroup } from '@/app/actions/tiebreaker';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 
 interface PendingTiebreakerCardProps {
   group: TieGroup;
@@ -28,9 +29,11 @@ export function PendingTiebreakerCard({ group, onResolve }: PendingTiebreakerCar
               key={p.profile_id}
               className="flex items-center gap-3 rounded-lg border border-border bg-surface px-4 py-2.5"
             >
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-surface-hover text-xs font-bold text-text-muted">
-                {p.display_name ? p.display_name.charAt(0).toUpperCase() : '?'}
-              </span>
+              <UserAvatar
+                name={p.display_name}
+                url={p.avatar_url ?? null}
+                size={28}
+              />
               <span className="text-sm font-medium text-text-primary">
                 {p.display_name ?? 'Participante'}
               </span>

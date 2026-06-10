@@ -347,7 +347,7 @@ export function PublicPickemView({
                 <div className="flex flex-wrap gap-2">
                   <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
                     <span className="font-semibold text-purple-primary">+1</span>
-                    <span className="text-text-secondary">Jugador correcto dentro del Top {activePlayers.length}</span>
+                    <span className="text-text-secondary">Jugador correcto dentro del Top {topN}</span>
                   </span>
                   <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-primary/30 bg-surface px-2 py-1 text-xs">
                     <span className="font-semibold text-purple-primary">+1</span>
@@ -355,7 +355,7 @@ export function PublicPickemView({
                   </span>
                 </div>
                 <p className="text-xs text-text-muted">
-                  Máximo: {activePlayers.length * 2} pts
+                  Máximo: {topN * 2} pts
                 </p>
               </section>
             )}

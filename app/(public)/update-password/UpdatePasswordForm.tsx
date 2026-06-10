@@ -18,28 +18,6 @@ function getGeneralError(state: AuthActionResult): string | undefined {
 export function UpdatePasswordForm() {
   const [state, action, pending] = useActionState(updatePassword, null);
 
-  if (state?.success) {
-    return (
-      <div className="rounded-xl border border-success-border bg-success/5 p-8 text-center">
-        <div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-full bg-success/10">
-          <svg className="size-6 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M20 6L9 17l-5-5" />
-          </svg>
-        </div>
-        <p className="text-base font-semibold text-white">Contraseña actualizada</p>
-        <p className="mt-1 text-sm text-text-muted">
-          Ya puedes iniciar sesión con tu nueva contraseña.
-        </p>
-        <a
-          href="/login"
-          className="mt-4 inline-block rounded-lg bg-purple-primary px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-purple-600"
-        >
-          Ir a iniciar sesión
-        </a>
-      </div>
-    );
-  }
-
   return (
     <form action={action} className="flex flex-col gap-4">
       <PasswordField

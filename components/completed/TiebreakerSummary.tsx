@@ -47,7 +47,7 @@ export function TiebreakerSummary({ summary }: { summary: CompletedSummary }) {
                   <UserAvatar
                     key={p.profile_id}
                     name={p.display_name}
-                    url={null}
+                    url={p.avatar_url ?? null}
                     size={28}
                   />
                 ))}
@@ -105,7 +105,12 @@ export function TiebreakerSummary({ summary }: { summary: CompletedSummary }) {
                       >
                         {i + 1}
                       </span>
-                      <span className={`flex-1 text-xs ${i === 0 ? 'font-medium text-green-400' : 'text-text-primary'}`}>
+                      <UserAvatar
+                        name={p.display_name}
+                        url={p.avatar_url ?? null}
+                        size={28}
+                      />
+                      <span className={`min-w-0 flex-1 truncate text-xs ${i === 0 ? 'font-medium text-green-400' : 'text-text-primary'}`}>
                         {p.display_name ?? 'Participante'}
                       </span>
                       {i === 0 && (

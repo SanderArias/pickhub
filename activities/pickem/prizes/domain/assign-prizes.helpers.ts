@@ -103,8 +103,8 @@ export async function analyzeTieGroups(
 
     const profileIds = particIds.map((pid) => pidByPartic.get(pid) ?? '').filter(Boolean);
 
-    const firstProfile = profileIds[0];
-    const tiedAtRank = profileRankMap.get(firstProfile) ?? 1;
+    const ranks = profileIds.map((pid) => profileRankMap.get(pid)).filter((r): r is number => r !== undefined);
+    const tiedAtRank = ranks.length > 0 ? Math.min(...ranks) : 1;
     const affectedRanks = getAffectedRanksForTieGroup(tiedAtRank, profileIds.length);
 
     const affectsGeneralPrize = doesTieAffectGeneralPrizes(affectedRanks, generalRewardedRanks);

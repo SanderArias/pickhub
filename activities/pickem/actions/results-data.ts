@@ -61,12 +61,12 @@ export interface CompletedSummary {
   totalPrizeDefinitions: number;
   tiebreakerGroups: Array<{
     score: number;
-    participants: Array<{ profile_id: string; display_name: string | null }>;
+    participants: Array<{ profile_id: string; display_name: string | null; avatar_url: string | null }>;
     draws: Array<{ profile_id: string; draw_order: number }>;
   }>;
   pendingManualTiebreakers: Array<{
     score: number;
-    participants: Array<{ profile_id: string; display_name: string | null }>;
+    participants: Array<{ profile_id: string; display_name: string | null; avatar_url: string | null }>;
     draws: Array<{ profile_id: string; draw_order: number }>;
   }>;
   pendingTiebreakerCount: number;
@@ -381,10 +381,13 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
   const allNameIds = [...new Set([...tiedProfileIds, ...profileIds])];
   const { data: allProfiles } = await supabase
     .from('profiles')
-    .select('id, display_name')
+    .select('id, display_name, avatar_url')
     .in('id', allNameIds);
 
   const fullNameMap = new Map((allProfiles ?? []).map((p) => [p.id, p.display_name]));
+  const fullAvatarMap = new Map(
+    (allProfiles ?? []).map((p) => [p.id, p.avatar_url ?? null]),
+  );
   const drawMap2 = new Map((tiebreakerDraws ?? []).map((d) => [d.profile_id, d.draw_order]));
 
   const tiebreakerGroups = tiedScores
@@ -396,6 +399,7 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
         participants: uniquePids.map((pid) => ({
           profile_id: pid,
           display_name: fullNameMap.get(pid) ?? null,
+          avatar_url: fullAvatarMap.get(pid) ?? null,
         })),
         draws: uniquePids
           .filter((pid) => drawMap2.has(pid))

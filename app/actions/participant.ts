@@ -911,7 +911,20 @@ export async function getParticipantResultSummary(
     sort_order: d.sortOrder,
   }));
 
-  // 2. Prize awards via SECURITY DEFINER RPC (bypasses RLS)
+  // 2. Event status — guard awards loading for non-relevant states
+  let eventStatus: string;
+  let shouldLoadAwards: boolean;
+  {
+    const { data: ev } = await supabase
+      .from('events')
+      .select('status')
+      .eq('id', eventId)
+      .maybeSingle();
+    eventStatus = ev?.status ?? 'unknown';
+    shouldLoadAwards = eventStatus === 'completed' || eventStatus === 'tiebreaker_pending';
+  }
+
+  // 3. Prize awards via SECURITY DEFINER RPC (bypasses RLS)
   const defIds: string[] = prizeDefs.map((p: any) => p.id);
   let myAwardDefIds = new Set<string>();
   let noEligibleWinnerDefIds = new Set<string>();
@@ -924,7 +937,7 @@ export async function getParticipantResultSummary(
     subscriber_rank: number | null;
   }> = [];
 
-  if (defIds.length > 0) {
+  if (defIds.length > 0 && shouldLoadAwards) {
     const { data: rpcAwards, error: rpcErr } = await (supabase.rpc as any)(
       'get_pickem_prize_awards',
       { p_event_id: eventId },
@@ -956,7 +969,7 @@ export async function getParticipantResultSummary(
     }
   }
 
-  // 3. Leaderboard + score
+  // 4. Leaderboard + score
   const { data: lb } = await supabase.rpc('get_event_leaderboard', { p_event_id: eventId });
   let leaderboard = (lb ?? []) as Array<{
     rank: number;
@@ -995,15 +1008,6 @@ export async function getParticipantResultSummary(
   }
 
   const myEntry = leaderboard.find((e) => e.profile_id === profileId) ?? null;
-
-  // 4. Event status
-  const { data: event } = await supabase
-    .from('events')
-    .select('status')
-    .eq('id', eventId)
-    .maybeSingle();
-
-  const eventStatus = event?.status ?? 'unknown';
 
   const drawProfileIds = new Set((draws ?? []).map((d) => d.profile_id));
 
@@ -1077,7 +1081,7 @@ export async function getParticipantResultSummary(
       ? participantTieGroup!.tiedAtRank
       : null;
 
-  // 7. Determine result status
+  // 6. Determine result status
   let resultStatus: ParticipantResultStatus;
   let isFinalWinner = false;
 
@@ -1099,7 +1103,7 @@ export async function getParticipantResultSummary(
     resultStatus = 'pending';
   }
 
-  // 8. Build prize view models
+  // 7. Build prize view models
   interface ParticipantResultViewModelResult {
     rank: number | null;
     sharedRank: number | null;

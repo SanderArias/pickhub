@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { performTiebreaker } from '@/app/actions/tiebreaker';
 import type { TieGroup, TiebreakerDraw, TiebreakerFinalizationResult } from '@/app/actions/tiebreaker';
+import { UserAvatar } from '@/components/ui/UserAvatar';
 
 interface TiebreakerModalProps {
   group: TieGroup;
@@ -173,8 +174,14 @@ export function TiebreakerModal({ group, eventId, onClose, onDone }: TiebreakerM
                   {phase === 'done' ? finalPos : '?'}
                 </span>
 
+                <UserAvatar
+                  name={p.display_name}
+                  url={p.avatar_url ?? null}
+                  size={28}
+                />
+
                 <span
-                  className={`flex-1 font-medium ${
+                  className={`min-w-0 flex-1 truncate font-medium ${
                     phase === 'done' && finalPos === 1
                       ? 'text-green-400'
                       : isActive && phase === 'rolling'
@@ -206,9 +213,16 @@ export function TiebreakerModal({ group, eventId, onClose, onDone }: TiebreakerM
         {phase === 'done' && winner && (
           <div className="mt-5 rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3 text-center">
             <p className="text-xs text-text-muted">Ganador del desempate</p>
-            <p className="mt-0.5 text-lg font-bold text-green-400">
-              {'\uD83C\uDFC6'} {winner.display_name ?? 'Participante'}
-            </p>
+            <div className="mt-1 flex items-center justify-center gap-2">
+              <UserAvatar
+                name={winner.display_name}
+                url={winner.avatar_url ?? null}
+                size={32}
+              />
+              <p className="text-lg font-bold text-green-400">
+                {'\uD83C\uDFC6'} {winner.display_name ?? 'Participante'}
+              </p>
+            </div>
           </div>
         )}
 

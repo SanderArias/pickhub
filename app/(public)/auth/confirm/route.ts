@@ -7,6 +7,9 @@ function validateNext(next: string | null, fallback: string): string {
 }
 
 function recoveryErrorCode(error: { code?: string; message: string }): string {
+  const code = error.code;
+  if (code === 'otp_expired' || code === 'flow_state_expired') return 'recovery_expired';
+  if (code === 'invalid_token') return 'recovery_invalid';
   const lower = error.message.toLowerCase();
   if (lower.includes('expired')) return 'recovery_expired';
   if (lower.includes('invalid link') || lower.includes('invalid')) return 'recovery_invalid';

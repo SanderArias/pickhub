@@ -223,7 +223,7 @@ export async function updatePassword(_prev: unknown, formData: FormData): Promis
 
   await supabase.auth.signOut();
 
-  return { success: true, message: 'Tu contraseña fue actualizada correctamente.' };
+  redirect('/update-password?success=1');
 }
 
 export async function getSession() {

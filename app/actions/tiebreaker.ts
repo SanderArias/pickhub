@@ -9,6 +9,7 @@ export interface TieGroup {
   participants: {
     profile_id: string;
     display_name: string | null;
+    avatar_url: string | null;
   }[];
 }
 
@@ -57,10 +58,13 @@ export async function getTieGroups(eventId: string): Promise<TieGroup[]> {
 
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id, display_name')
+    .select('id, display_name, avatar_url')
     .in('id', profileIds);
 
   const profileNameMap = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
+  const profileAvatarMap = new Map(
+    (profiles ?? []).map((p) => [p.id, p.avatar_url ?? null]),
+  );
   const participantProfileMap = new Map((participants ?? []).map((p) => [p.id, p.profile_id]));
 
   return tieGroups.map((g) => ({
@@ -70,6 +74,7 @@ export async function getTieGroups(eventId: string): Promise<TieGroup[]> {
       return {
         profile_id: profId,
         display_name: profileNameMap.get(profId) ?? null,
+        avatar_url: profileAvatarMap.get(profId) ?? null,
       };
     }),
   }));

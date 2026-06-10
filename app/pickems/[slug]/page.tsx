@@ -90,10 +90,15 @@ export default async function PickemPublicPage({
     }));
   }
 
+  const shouldLoadResultSummary =
+    event.status === 'tiebreaker_pending' || event.status === 'completed';
+
   const [leaderboard, myScore, participantSummary] = await Promise.all([
     getLeaderboard(event.id),
     getMyScore(event.id),
-    user ? getParticipantResultSummary(event.id, user.id) : Promise.resolve(null),
+    user && shouldLoadResultSummary
+      ? getParticipantResultSummary(event.id, user.id)
+      : Promise.resolve(null),
   ]);
 
   // Derive won prize IDs and prize statuses from participantSummary

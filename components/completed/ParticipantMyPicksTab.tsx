@@ -93,7 +93,7 @@ export function ParticipantMyPicksTab({ picks }: ParticipantMyPicksTabProps) {
       {hasScoring && (
         <div className="rounded-lg border border-border bg-surface px-4 py-3">
           <p className="text-xs text-text-muted">
-            <span className="font-medium text-purple-primary">+1</span> Jugador correcto dentro del Top 8{' · '}
+            <span className="font-medium text-purple-primary">+1</span> Jugador correcto dentro del Top {picks.length}{' · '}
             <span className="font-medium text-purple-primary">+1</span> Posición exacta
           </p>
         </div>

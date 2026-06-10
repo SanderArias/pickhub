@@ -85,7 +85,7 @@ function useGroups(profile: ProfileData | null, pathname: string) {
     label: 'General',
     items: [
       { label: 'Inicio', href: '/inicio', exact: true },
-      { label: 'Explorar', href: '#', placeholder: true },
+      { label: 'Explorar', href: '/explorar' },
     ],
   });
 
