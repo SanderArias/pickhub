@@ -436,6 +436,17 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     }
   }
 
+  // Correct tieResolved for podium entries: a tie is resolved if
+  // the event is completed AND (draws exist OR the tie doesn't affect prizes).
+  // Non-prize ties are resolved deterministically without draws.
+  if (isEffectivelyCompleted) {
+    for (const entry of podium) {
+      if (entry.tiedScore && !entry.tieResolved) {
+        entry.tieResolved = hasDraws || !manualScoreSet.has(entry.total_score);
+      }
+    }
+  }
+
   const prizeAwards: PrizeAwardEntry[] = (prizeDefs ?? []).map((d: any) => {
     const award = awardByDefId.get(d.id);
     const isGeneral = d.category === 'general_rank';
