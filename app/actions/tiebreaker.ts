@@ -228,3 +228,57 @@ export async function performTiebreaker(
   }
   return { success: true as const, status: 'tiebreaker_pending' as const, remainingTiebreakers: finalResult.remainingTiebreakers, draws };
 }
+
+/**
+ * Returns the count of prize-affecting tie groups that don't have full draws yet.
+ * Non-prize ties are excluded — they are resolved deterministically.
+ */
+export async function getPendingPrizeTiebreakerCount(
+  eventId: string,
+  prizeRanks: number[],
+  hasSubscriberBenefits: boolean,
+): Promise<number> {
+  const supabase = await createServerClient();
+
+  const [drawsResult, lbResult] = await Promise.all([
+    supabase.from('tiebreaker_draws').select('profile_id').eq('event_id', eventId),
+    supabase.rpc('get_event_leaderboard', { p_event_id: eventId }),
+  ]);
+
+  const drawnProfileIds = new Set((drawsResult.data ?? []).map((d: any) => d.profile_id));
+  const lb = (lbResult.data ?? []) as Array<{ profile_id: string; total_score: number; rank: number }>;
+
+  if (lb.length === 0) return 0;
+
+  const prizeRankSet = new Set(prizeRanks);
+  const scoreGroups = new Map<number, { profileIds: string[]; ranks: number[] }>();
+  for (const e of lb) {
+    const g = scoreGroups.get(e.total_score) ?? { profileIds: [], ranks: [] };
+    g.profileIds.push(e.profile_id);
+    g.ranks.push(e.rank);
+    scoreGroups.set(e.total_score, g);
+  }
+
+  let pendingCount = 0;
+
+  for (const [, group] of scoreGroups) {
+    if (group.profileIds.length < 2) continue;
+
+    if (group.profileIds.every((pid) => drawnProfileIds.has(pid))) continue;
+
+    const firstTiedRank = Math.min(...group.ranks);
+    const affectedRanks = Array.from(
+      { length: group.profileIds.length },
+      (_, i) => firstTiedRank + i,
+    );
+
+    const affectsGeneralPrize = affectedRanks.some((r) => prizeRankSet.has(r));
+    const affectsSubBenefit = hasSubscriberBenefits;
+
+    if (affectsGeneralPrize || affectsSubBenefit) {
+      pendingCount++;
+    }
+  }
+
+  return pendingCount;
+}

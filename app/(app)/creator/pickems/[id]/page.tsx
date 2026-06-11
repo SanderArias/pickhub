@@ -3,7 +3,7 @@ import { getCreatorPickemById } from '@/activities/pickem/actions';
 import { getPrizeConfiguration } from '@/activities/pickem/prizes/actions/get-prize-configuration';
 import { getCreatorTwitchVerificationStatus } from '@/app/actions/twitch-status';
 import { getActivityCapabilities } from '@/activities/registry.server';
-import { getTiebreakerDraws, getTieGroups } from '@/app/actions/tiebreaker';
+import { getPendingPrizeTiebreakerCount } from '@/app/actions/tiebreaker';
 import { getPredictionConfigurationSummary } from '@/lib/summary';
 import {
   PageHeader,
@@ -58,12 +58,14 @@ export default async function PickemDashboardPage({
 
   const { status: twitchStatus } = await getCreatorTwitchVerificationStatus();
 
-  // Load tiebreaker data for non-draft events (including completed, to detect pending ties)
-  const drawsMap = !isDraft ? await getTiebreakerDraws(id) : {};
-  const tieGroups = !isDraft ? await getTieGroups(id) : [];
-  const pendingTiebreakerCount = tieGroups.filter(
-    (g) => !g.participants.every((p) => p.profile_id in drawsMap),
-  ).length;
+  // Compute prize-aware pending tiebreaker count
+  const prizeRanks = prizeConfig.generalPrizes
+    .map((p: { rankPosition: number | null }) => p.rankPosition)
+    .filter((r: number | null): r is number => r !== null);
+  const hasSubscriberBenefits = prizeConfig.subscriberBenefits.length > 0;
+  const pendingTiebreakerCount = !isDraft
+    ? await getPendingPrizeTiebreakerCount(id, prizeRanks, hasSubscriberBenefits)
+    : 0;
 
   const canPublish =
     isDraft &&

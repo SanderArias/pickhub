@@ -421,8 +421,11 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
   const manualScoreSet = new Set(
     tieAnalysis.filter((g) => g.requiresManualTiebreaker).map((g) => g.score),
   );
-  const pendingManualTiebreakers = tiebreakerGroups.filter(
-    (g) => manualScoreSet.has(g.score) && g.participants.length !== g.draws.length,
+  const prizeTiebreakerGroups = tiebreakerGroups.filter(
+    (g) => manualScoreSet.has(g.score),
+  );
+  const pendingManualTiebreakers = prizeTiebreakerGroups.filter(
+    (g) => g.participants.length !== g.draws.length,
   );
   const pendingTiebreakerCount = pendingManualTiebreakers.length;
 
@@ -532,9 +535,9 @@ export async function getCompletedSummary(eventId: string): Promise<CompletedSum
     predictionCount: predictionCount ?? 0,
     podium,
     prizeAwards,
-    hasTiebreakers: tiebreakerGroups.length > 0,
+    hasTiebreakers: prizeTiebreakerGroups.length > 0,
     totalPrizeDefinitions: (prizeDefs ?? []).length,
-    tiebreakerGroups,
+    tiebreakerGroups: prizeTiebreakerGroups,
     pendingManualTiebreakers,
     pendingTiebreakerCount,
     maxScore,
